@@ -22,6 +22,7 @@ it's told ("hey, go get that"), with local LFM models on the Pi and Claude (Opus
 - Bus servos 1–16 respond; 17/18 absent (no grippers). Per-servo read ≈ 2.8 ms; **all 16 positions in 33 ms (~30 Hz)**.
   EEPROM offsets match `config/robot.yaml` deviations. Angle limits 0–1000 on all. torque_state=1 when holding.
 - Torque on/off: vendor uses 0x0B for both "enable" and "unload" — **unverified which is which**. Test on one arm servo with the robot lying down, reading 0x0D after each.
+- Buzzer: `AA 55 02` `<HHHH` freq, on_ms, off_ms, repeat. **off_ms=0 = stays on forever**; `Board.beep` clamps it, `Board.buzzer_off()` sends all zeros.
 - Head PWM: ch1 tilt (1500 centre, 1081 look-down), ch2 pan (1466 centre). Readback works.
 - Camera: UVC `/dev/video0`, YUYV 640×480 only, ≤30 fps; intrinsics in `data/camera_calibration.npz`.
 - Audio: USB "PnP Audio Device" (JMTek 0c76:161f) speaker + mic. WonderEcho voice module on CH340 `/dev/ttyUSB0` (optional).

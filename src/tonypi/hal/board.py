@@ -198,8 +198,12 @@ class Board:
 
     # ---- peripherals ------------------------------------------------------------
 
-    def beep(self, freq_hz: int = 1900, on_ms: int = 100, off_ms: int = 0, repeat: int = 1) -> None:
-        self.send(Func.BUZZER, proto.buzzer(freq_hz, on_ms, off_ms, repeat))
+    def beep(self, freq_hz: int = 1900, on_ms: int = 100, off_ms: int = 100, repeat: int = 1) -> None:
+        # off_ms=0 leaves the buzzer on continuously (found 2026-10-28); always give it an off phase
+        self.send(Func.BUZZER, proto.buzzer(freq_hz, on_ms, max(off_ms, 50), repeat))
+
+    def buzzer_off(self) -> None:
+        self.send(Func.BUZZER, proto.buzzer(0, 0, 0, 0))
 
     def rgb(self, pixels: list[tuple[int, int, int, int]]) -> None:
         self.send(Func.RGB, proto.rgb(pixels))
