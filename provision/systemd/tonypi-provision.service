@@ -1,0 +1,14 @@
+[Unit]
+Description=TonyPi first-boot provisioning
+Wants=network-online.target
+After=network-online.target cloud-final.service
+ConditionPathExists=!/var/lib/tonypi/provisioned
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c '/opt/tonypi-seed/provision/provision.sh >> /var/log/tonypi-provision.log 2>&1'
+TimeoutStartSec=0
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

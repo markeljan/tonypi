@@ -1,0 +1,4 @@
+# STM32 controller board UART: owned by the dialout group, stable name /dev/tonypi-board
+KERNEL=="ttyAMA0", GROUP="dialout", MODE="0660", SYMLINK+="tonypi-board"
+# WonderEcho voice module (CH340)
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", GROUP="dialout", MODE="0660", SYMLINK+="tonypi-voice"

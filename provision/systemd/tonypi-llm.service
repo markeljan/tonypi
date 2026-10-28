@@ -1,0 +1,16 @@
+[Unit]
+Description=TonyPi local LLM (llama-server, LFM2.5-1.2B-Instruct, OpenAI-compatible on :8080)
+After=network.target
+
+[Service]
+User=pi
+ExecStart=/usr/local/bin/llama-server -m /home/pi/models/LFM2.5-1.2B-Instruct-Q4_K_M.gguf --jinja -t 3 -c 8192 \
+  --host 127.0.0.1 --port 8080 --alias lfm2.5-1.2b --temp 0.1 --top-k 50 --repeat-penalty 1.05
+Restart=on-failure
+RestartSec=5
+StartLimitIntervalSec=300
+StartLimitBurst=5
+Nice=5
+
+[Install]
+WantedBy=multi-user.target

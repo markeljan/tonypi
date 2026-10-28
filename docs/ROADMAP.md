@@ -1,0 +1,39 @@
+# Roadmap
+
+Status markers: [x] done · [~] in progress · [ ] todo
+
+## 0. Clean OS (2026-10-29)
+- [x] Audit of the old Hiwonder image (users, services, hardware, protocol)
+- [x] Motion library converted to JSON (`data/motions`, 83 motions)
+- [x] New HAL (`src/tonypi/hal`) tested live: IMU 102 Hz, battery, 16 servos, head PWM
+- [~] Reflash to Raspberry Pi OS Lite 64-bit (trixie 2026-10-06) with cloud-init: user `pi`, same SSH host keys, Wi-Fi, this repo in `/home/pi/tonypi`
+- [ ] First-boot provisioning (`provision/provision.sh`): packages, groups, udev, journald cap, uv, llama.cpp, LFM models, systemd units
+
+## 1. Local models (first priority)
+- [ ] llama.cpp built natively (NEON/KleidiAI), `llama-bench` numbers for LFM2.5-350M / 1.2B-Instruct / VL-1.6B on this Pi
+- [ ] `tonypi-llm.service`: llama-server on 127.0.0.1 with LFM2.5-1.2B-Instruct (tool calling, `--jinja`)
+- [ ] `tonypi-vlm.service`: LFM2.5-VL-1.6B + mmproj, snapshot → description latency
+- [ ] Same prompts against the Mac's OpenAI-compatible endpoint (LM Studio) for comparison
+
+## 2. Body runtime (`tonyd`)
+- [ ] Daemon owning the board: 100 Hz IMU → orientation filter (Mahony), battery + servo temp polling, key events
+- [ ] Verify torque on/off command (0x0B vs 0x0C) with the robot lying down
+- [ ] Fall detection (tilt + gyro) → protective pose → classify face-up/face-down → `stand_up_back` / `stand_up_front`
+- [ ] Walk state machine (start → loop → end), turn, side-step; head look-at
+- [ ] Thermal / low-battery watchdog (unload or sit when idle)
+- [ ] Local IPC (Unix socket JSON or zenoh) for other processes
+
+## 3. Senses
+- [ ] Camera service: continuous capture, latest frame + JPEG snapshot, simple detectors (color/AprilTag/person)
+- [ ] Audio: always-on mic → VAD → wake word → STT → events; TTS → speaker with barge-in
+
+## 4. Brain
+- [ ] Robot MCP server (Streamable HTTP): walk, turn, look, snapshot, play_motion, say, get_status, stop
+- [ ] Local fast loop on LFM2.5-1.2B (few tools, ≤4 steps), offline-capable
+- [ ] `escalate(task)` → Claude Opus via Claude Agent SDK (tools=[], robot MCP, PreToolUse gate)
+- [ ] "Go get that": VLM target → head tracking → walk-to (visual servoing) loop
+- [ ] Optional: Hermes Agent attached to the same MCP server (Telegram / chat)
+
+## 5. Better motion
+- [ ] Auto-calibration: pose capture, IMU-refined standing offsets (bounded search, harnessed)
+- [ ] MuJoCo model + system ID from logs → learned walking policy (ONNX, 50 Hz)
