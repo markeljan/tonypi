@@ -10,10 +10,10 @@ it's told ("hey, go get that"), with local LFM models on the Pi and Claude (Opus
 - Motion only through the supervisor/motion layer. LLMs call skill-level tools (walk, turn, look, play_motion, say, stop), never raw joint writes.
 - `stop` and fall recovery never depend on an LLM.
 - Before commanding motion, assume the robot may be standing on a table: start slow, prefer `stand_slow`, keep a hand near it the first time.
-- Servo **temperature**: limit is 85 °C (servo self-protects). Measured 61–76 °C on legs/arms after ~1 h of holding a pose on 2026-10-29. Unload or sit/lie the robot when idle; add a thermal watchdog.
+- Servo **temperature**: limit is 85 °C (servo self-protects). Measured up to 80 °C after ~1 h of holding a pose on 2026-10-28 (elbows 6/14 hottest at 78–80, right leg 66–76). Unload or sit/lie the robot when idle; add a thermal watchdog.
 - No `sudo chmod 777` hacks. Access is via groups (dialout, gpio, i2c, video, audio) + `provision/files/99-tonypi.rules`.
 
-## Hardware facts (verified live 2026-10-29 with `tools/bench.py`)
+## Hardware facts (verified live 2026-10-28 with `tools/bench.py`)
 - Controller: STM32 board on `/dev/ttyAMA0` @ 1,000,000 8N1 (needs `dtparam=uart0=on`; no serial console).
 - Frame: `AA 55 FUNC LEN DATA CRC8` — CRC-8/MAXIM over FUNC,LEN,DATA. FUNC: 0 SYS, 1 LED, 2 BUZZER, 4 PWM servo, 5 bus servo, 6 KEY, 7 IMU, 11 RGB. See `src/tonypi/hal/proto.py`.
 - IMU: streamed automatically at **~102 Hz** (dt p50 9.8 ms), `<6f` = accel in **g** (|a|≈0.975), gyro probably **deg/s** (bias ≈ -1.05, 0.14, -0.37).

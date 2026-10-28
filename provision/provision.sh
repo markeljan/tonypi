@@ -72,12 +72,17 @@ add_cfg "usb_max_current_enable=1"
 sed -i -E 's/console=(serial0|ttyAMA0),[0-9]+ ?//g' /boot/firmware/cmdline.txt
 systemctl disable --now serial-getty@ttyAMA0.service 2>/dev/null || true
 grep -qxF i2c-dev /etc/modules || echo i2c-dev >> /etc/modules
+modprobe i2c-dev && udevadm trigger --subsystem-match=i2c-dev --action=add || true   # usable now, not only after reboot
 
 # ---------------------------------------------------------------------------
 if ! step_done uv; then
   log "uv"
   as_user sh -c 'curl -LsSf https://astral.sh/uv/install.sh | sh' && mark uv
 fi
+# on PATH for non-login shells and services too, not only via ~/.profile
+for b in uv uvx; do
+  [[ -x $HOME_DIR/.local/bin/$b ]] && ln -sf "$HOME_DIR/.local/bin/$b" /usr/local/bin/$b
+done
 
 # ---------------------------------------------------------------------------
 if ! step_done llama; then

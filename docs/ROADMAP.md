@@ -2,16 +2,17 @@
 
 Status markers: [x] done · [~] in progress · [ ] todo
 
-## 0. Clean OS (2026-10-29)
+## 0. Clean OS (2026-10-28)
 - [x] Audit of the old Hiwonder image (users, services, hardware, protocol)
 - [x] Motion library converted to JSON (`data/motions`, 83 motions)
 - [x] New HAL (`src/tonypi/hal`) tested live: IMU 102 Hz, battery, 16 servos, head PWM
-- [~] Reflash to Raspberry Pi OS Lite 64-bit (trixie 2026-10-06) with cloud-init: user `pi`, same SSH host keys, Wi-Fi, this repo in `/home/pi/tonypi`
-- [ ] First-boot provisioning (`provision/provision.sh`): packages, groups, udev, journald cap, uv, llama.cpp, LFM models, systemd units
+- [x] Reflash to Raspberry Pi OS Lite 64-bit (trixie 2026-10-06) with cloud-init: user `pi`, same SSH host keys, Wi-Fi, this repo in `/home/pi/tonypi`
+- [x] First-boot provisioning (`provision/provision.sh`): packages, groups, udev, journald cap, uv, llama.cpp, LFM models, systemd units
+  (ran clean 2026-10-28; `tools/bench.py` passes on the new OS, I2C-1 still empty)
 
 ## 1. Local models (first priority)
-- [ ] llama.cpp built natively (NEON/KleidiAI), `llama-bench` numbers for LFM2.5-350M / 1.2B-Instruct / VL-1.6B on this Pi
-- [ ] `tonypi-llm.service`: llama-server on 127.0.0.1 with LFM2.5-1.2B-Instruct (tool calling, `--jinja`)
+- [~] llama.cpp built natively (NEON/KleidiAI) — built; still to do: `llama-bench` numbers for LFM2.5-350M / 1.2B-Instruct / VL-1.6B on this Pi
+- [x] `tonypi-llm.service`: llama-server on 127.0.0.1 with LFM2.5-1.2B-Instruct (tool calling, `--jinja`) — first check ~58 tok/s prompt, ~14 tok/s gen
 - [ ] `tonypi-vlm.service`: LFM2.5-VL-1.6B + mmproj, snapshot → description latency
 - [ ] Same prompts against the Mac's OpenAI-compatible endpoint (LM Studio) for comparison
 
