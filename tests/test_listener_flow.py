@@ -10,7 +10,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tonypi.agent import speech
+pytest.importorskip("piper", reason="needs the voice extra: uv sync --all-extras")
+pytest.importorskip("sherpa_onnx", reason="needs the voice extra: uv sync --all-extras")
+
+from tonypi.agent import speech  # noqa: E402
 
 pytestmark = pytest.mark.skipif(not (speech.ASR_DIR.exists() and speech.KWS_DIR.exists() and speech.VOICE.exists()),
                                 reason="speech models not installed")
