@@ -42,6 +42,7 @@ class Tool:
     required: list[str] = field(default_factory=list)
     moves: bool = False  # acts on the world (motion): not started while new words from the user are pending
     read_only: bool = False  # safe to run in parallel with anything
+    ordered: bool = False  # touches the world (body, head, camera): runs one at a time, in the order called
 
     def schema(self) -> dict:
         return {"type": "object", "properties": self.params, "required": self.required}

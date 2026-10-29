@@ -76,6 +76,7 @@ class Harness:
         self.backend = None
         self.pending: list[str] = []
         self.active: set[threading.Event] = set()  # ctx.steer of each running tool call
+        self.world = asyncio.Lock()  # Tool.ordered: one at a time, FIFO (look, then the photo)
         self.tools_running = 0
         self.stopped = False
 
@@ -248,7 +249,11 @@ class Harness:
         self.active.add(steer)
         t = time.monotonic()
         try:
-            res = await asyncio.to_thread(tool.handler, args, Ctx(steer, self.emit))
+            if tool.ordered:
+                async with self.world:
+                    res = await asyncio.to_thread(tool.handler, args, Ctx(steer, self.emit))
+            else:
+                res = await asyncio.to_thread(tool.handler, args, Ctx(steer, self.emit))
         except Exception as e:
             log.exception("tool %s failed", name)
             res = Result(f"error: {e}", error=True)

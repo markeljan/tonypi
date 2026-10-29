@@ -276,7 +276,7 @@ def test_codex_tool_loop_and_speech(tonyd, fake_codex):
         await until(lambda: any(e["type"] == "done" for e in events), 10)
         assert ("wave", 1) in d.body.ran
         assert [e["text"] for e in events if e["type"] == "say"] == ["Hi! wave: done"]
-        assert any(e["type"] == "usage" and e["input"] == 100 for e in events)
+        assert any(e["type"] == "usage" and e["input"] == 50 and e["cache_read"] == 50 for e in events)
         await h.submit("look")
         await until(lambda: sum(e["type"] == "done" for e in events) == 2, 10)
         assert [e["text"] for e in events if e["type"] == "say"][-1] == "1 image"

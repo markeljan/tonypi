@@ -45,6 +45,14 @@ OFF = ["shell_tool", "unified_exec", "unified_exec_tty", "shell_snapshot", "apps
 CONFIG = ['web_search="disabled"', "project_doc_max_bytes=0",
           'cli_auth_credentials_store="file"', "check_for_update_on_startup=false"]
 FATAL_HTTP = {401, 402, 403}
+# Codex reaches these tools only from its JavaScript `exec` tool; without this, the model guesses the result
+# shape, prints a photo as base64 text (~15k tokens) and calls snapshot again
+EXEC_NOTE = """
+
+Calling tools: inside exec, `const r = await tools.snapshot({})` (any tool) returns
+{success, contentItems: [{type: "inputText", text}, {type: "inputImage", imageUrl}]}. Show text with text(item.text)
+and look at a photo with image(item.imageUrl). Never print image data as text. Call tools one after another (await
+each) when order matters, e.g. look, then snapshot."""
 TRACE = int(os.environ.get("TONYPI_CODEX_TRACE", "0"))  # log raw incoming lines, cut to this many chars
 
 
@@ -140,7 +148,8 @@ class CodexBackend:
                 raise BrainUnavailable(f"not logged in (CODEX_HOME={CODEX_HOME})")
             tools = [{"type": "function", "name": t.name, "description": t.description, "inputSchema": t.schema()}
                      for t in self.h.tools.values()]
-            params = {"dynamicTools": tools, "baseInstructions": self.h.system_prompt(), "approvalPolicy": "never",
+            params = {"dynamicTools": tools, "baseInstructions": self.h.system_prompt() + EXEC_NOTE,
+                      "approvalPolicy": "never",
                       "sandbox": "read-only", "ephemeral": True, "cwd": str(STATE_DIR)}
             if MODEL:
                 params["model"] = MODEL
@@ -230,8 +239,10 @@ class CodexBackend:
                 self.first.set()
         elif method == "thread/tokenUsage/updated":
             last = (p.get("tokenUsage") or {}).get("last") or {}
-            self.h.emit("usage", brain="codex", input=last.get("inputTokens"), output=last.get("outputTokens"),
-                        cache_read=last.get("cachedInputTokens"), reasoning=last.get("reasoningOutputTokens"))
+            cached = last.get("cachedInputTokens") or 0  # OpenAI counts cached tokens inside inputTokens
+            self.h.emit("usage", brain="codex", input=(last.get("inputTokens") or 0) - cached,
+                        output=last.get("outputTokens"), cache_read=cached,
+                        reasoning=last.get("reasoningOutputTokens"))
         elif method == "turn/completed":
             self.turn = p.get("turn") or {}
             self.h.emit("info", text=f"codex turn {self.turn.get('status')} in {self.turn.get('durationMs')} ms")

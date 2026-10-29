@@ -37,10 +37,11 @@ class CameraPeripheral(Peripheral):
 
     def tools(self) -> list[Tool]:
         return [
-            Tool("snapshot", "Take a photo with the head camera right now (640x480 JPEG).", self.snapshot),
+            Tool("snapshot", "Take a photo with the head camera right now (640x480 JPEG).", self.snapshot,
+                 ordered=True),
             Tool("watch", "Short video: `frames` photos (2-6, 320x240) spread over `seconds` (1-5).", self.watch,
                  {"seconds": {"type": "number", "minimum": 1, "maximum": 5},
-                  "frames": {"type": "integer", "minimum": 2, "maximum": MAX_FRAMES}}),
+                  "frames": {"type": "integer", "minimum": 2, "maximum": MAX_FRAMES}}, ordered=True),
         ]
 
     def grab(self) -> tuple[bytes, dict]:
