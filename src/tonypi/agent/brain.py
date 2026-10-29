@@ -8,6 +8,7 @@ vision questions always use the camera, and a move named outright in the request
 from __future__ import annotations
 
 import json
+import os
 import re
 import urllib.request
 from dataclasses import dataclass, field
@@ -129,7 +130,7 @@ def postprocess(request: str, plan: Plan) -> Plan:
         if name not in ACTIONS:
             continue
         count = max(1, min(5, int(count)))
-        if acts and acts[-1][0] == name:  # the 1.2B model likes to repeat the same move
+        if acts and acts[-1][0] == name:  # small models like to repeat the same move
             continue
         acts.append((name, count))
     names = {a for a, _ in acts}
@@ -151,7 +152,8 @@ def postprocess(request: str, plan: Plan) -> Plan:
 
 
 class Brain:
-    def __init__(self, url: str = "http://127.0.0.1:8080/v1/chat/completions", history_turns: int = 3) -> None:
+    def __init__(self, url: str = os.environ.get("TONYPI_BRAIN_URL", "http://127.0.0.1:8080/v1/chat/completions"),
+                 history_turns: int = 3) -> None:
         self.url = url
         self.history: list[dict] = []
         self.history_turns = history_turns
@@ -180,6 +182,7 @@ class Brain:
             "temperature": 0.1,
             "cache_prompt": True,
             "response_format": {"type": "json_schema", "json_schema": {"name": "plan", "schema": SCHEMA}},
+            "chat_template_kwargs": {"enable_thinking": False},  # LFM3 thinks by default: ~50 s instead of ~3 s
         }
         req = urllib.request.Request(self.url, json.dumps(body).encode(), {"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=60) as r:

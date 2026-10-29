@@ -45,12 +45,12 @@ Played by `tonypi.motion.library.Player` (one batched frame per keyframe, interr
 ```
 tonyd (hal + 100 Hz state: IMU filter, battery, servo temps, keys)  ← only process on ttyAMA0
   └ control: motion player, walk state machine, fall detect → get-up, thermal/battery watchdog, e-stop
-perception: camera loop (OpenCV) + on-demand VLM (LFM2.5-VL via llama-server --mmproj)
+perception: camera loop (OpenCV) + image questions to LFM3-Omni-2B (same llama-server, --mmproj)
 audio: mic → VAD → STT → text events; TTS → speaker (barge-in)
 mcp: robot MCP server (Streamable HTTP, localhost/LAN) — the stable interface for every brain
-brain: thin local loop (LFM2.5-1.2B, few tools, fast, offline) + escalate() to Claude Opus via Claude Agent SDK
+brain: thin local loop (LFM3-Omni-2B, few tools, fast, offline) + escalate() to Claude Opus via Claude Agent SDK
 ```
-Hermes Agent (Nous) can attach to the same MCP server later (it needs ≥64K context, so not for the local 1.2B tier).
+Hermes Agent (Nous) can attach to the same MCP server later (it needs ≥64K context, so not for the local 2B tier).
 
 ## Agent (live: `tonypi-agent.service`, since 2026-10-28)
 `src/tonypi/agent/` — the always-on process. **It owns `/dev/ttyAMA0`**: `sudo systemctl stop tonypi-agent` before
@@ -58,16 +58,21 @@ Hermes Agent (Nous) can attach to the same MCP server later (it needs ≥64K con
 - Input: terminal (`tonypi-chat` → `/run/tonypi/agent.sock`, JSON lines) and voice ("hey Tony …": sherpa-onnx KWS
   gigaspeech 3.3M → streaming zipformer en-2023-06-26 with hotwords; mic gain at max). Newest command preempts;
   `stop` never reaches the LLM.
-- `brain.py`: LFM2.5-1.2B via llama-server, `response_format` json_schema with an action **enum** (it can't invent
+- Models: **LFM3 only** (no LFM2.5). One `tonypi-llm.service` = LFM3-Omni-2B Q4_0 + Q4_0 mmproj on :8080 does the brain,
+  vision and speech-to-text (~3.1 GB RSS). Evidence and rejected options: `docs/MODELS.md`; rerun `tools/brain_eval.py`.
+- `brain.py`: LFM3-Omni via llama-server, `response_format` json_schema with an action **enum** (it can't invent
   moves) + rules (stop, vision, status questions, a named move is never dropped). ~2–4 s per command.
-  llama-server needs `-ub 64 -cms 64`: LFM2 is hybrid, prompt cache resumes only from a checkpoint at len-ubatch.
+  `chat_template_kwargs.enable_thinking=false` (LFM3 thinks by default: ~50 s). llama-server needs `--swa-full`
+  (LFM3 sliding-window layers: else no prompt reuse, ~17 s/command) and `-ub 64 -cms 64` (checkpoint at len-ubatch).
 - `sleep` ("go to sleep", "power down"): lie down, check tilt >60°, unload all servos, RGB off; still listens.
   "wake up" or any body move while lying → `stand_up_back`/`front` → stand. `/status` shows torque on N/16.
 - `body.py`: actions → motion sequences; servo temp checked before (≥81 °C skip) and during (≥83 °C stop + torque off)
   every motion; `relax()` (all torque off) after every command and at startup, and the 20 s idle watchdog re-unloads
   anything left on; fall guard tilt >70° for 0.3 s (dances lean past 50° on purpose); idle low-battery warning at 10.5 V.
 - `speech.py`: Piper (lessac medium) out; the wake phrase is removed from the transcript by token timestamps
-  (ASR writes it as "hey tony", "haytony", "athony", "eight only"…). `vision.py`: snapshot + LFM2.5-VL-1.6B (~25 s).
+  (ASR writes it as "hey tony", "haytony", "athony", "eight only"…). After end of speech the clip is re-transcribed by
+  LFM3-Omni (`lfm_transcribe`, ~2 s; 0% vs 18% word errors on the stock mic), streaming text is the fallback.
+  `vision.py`: `describe()` posts the image to LFM3-Omni on :8080 (~15 s).
 - Far-field voice is weak with the stock USB mic (works at ~1 m); a mic array would be the real fix.
 
 ## Status / next steps

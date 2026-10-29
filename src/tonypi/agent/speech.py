@@ -2,15 +2,21 @@
 
 from __future__ import annotations
 
+import base64
 import collections
+import io
+import json
 import logging
 import math
+import os
 import re
 import struct
 import subprocess
 import tempfile
 import threading
 import time
+import urllib.request
+import wave
 from pathlib import Path
 from typing import Callable
 
@@ -30,6 +36,9 @@ PREROLL_S = 2.5  # the spotter fires ~0.3-1 s after "Tony", so the transcriber g
 _TONY = re.compile(r"\w*(t|th)(ony|oni|onie|oney|onya|iny|one)|\w*(only|pony|tommy)", re.I)
 _HEY = re.compile(r"(hey|hay|hi|a|eight|ok|okay|hello)", re.I)
 # biases the transcriber toward Tony's vocabulary
+ASR_URL = os.environ.get("TONYPI_ASR_URL", "http://127.0.0.1:8080/v1/chat/completions")  # LFM3-Omni; "" = streaming only
+# in an LFM3 transcript of the pre-roll + command: everything up to the wake phrase ("..., hey Tony, dance")
+_WAKE_TEXT = re.compile(r"^.*?\b(?:(?:hey|hi|hay|okay|ok|a)[\s,]+)?(?:tony|toni|tonie|toney)\b[\s,.!?]*", re.I | re.S)
 HOTWORDS = ["TONY", "KUNG FU", "DANCE", "WAVE", "BOW", "SQUAT", "TWIST", "NOD", "WALK FORWARD", "WALK BACKWARD",
             "TURN LEFT", "TURN RIGHT", "LIE DOWN", "GET UP", "WHAT DO YOU SEE", "STOP"]
 
@@ -49,6 +58,39 @@ def command_from_words(words: list[tuple[str, float]], wake_t: float | None) -> 
             while words and (_HEY.fullmatch(words[0][0]) or _TONY.fullmatch(words[0][0])) and words[0][1] < wake_t:
                 words = words[1:]
     return " ".join(w for w, _ in words).lower().strip()
+
+
+def lfm_transcribe(audio: np.ndarray, fallback: str, has_preroll: bool) -> str:
+    """Re-transcribe a finished command with LFM3 (0% vs 18% word errors on the stock mic; ~2.5 s for 3 s).
+
+    The streaming zipformer still does wake word timing and end-of-speech; its text is the fallback."""
+    if not ASR_URL or len(audio) < RATE // 4:
+        return fallback
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1), w.setsampwidth(2), w.setframerate(RATE)
+        w.writeframes((np.clip(audio, -1, 1) * 32767).astype(np.int16).tobytes())
+    body = {"messages": [{"role": "system", "content": "Perform ASR in English."},
+                         {"role": "user", "content": [{"type": "input_audio", "input_audio": {
+                             "data": base64.b64encode(buf.getvalue()).decode(), "format": "wav"}}]}],
+            "max_tokens": 80, "temperature": 0, "cache_prompt": False,
+            "chat_template_kwargs": {"enable_thinking": False}}
+    try:
+        req = urllib.request.Request(ASR_URL, json.dumps(body).encode(), {"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            text = (json.load(r)["choices"][0]["message"].get("content") or "").strip()
+    except Exception as e:
+        log.warning("LFM3 ASR failed (%s); using streaming transcript", e)
+        return fallback
+    if has_preroll:
+        m = _WAKE_TEXT.match(text)
+        if not m:  # can't tell where the command starts
+            log.info("LFM3 transcript without wake phrase %r; using streaming transcript", text)
+            return fallback
+        text = text[m.end():]
+    text = text.strip().rstrip(".")
+    log.info("transcripts: streaming=%r lfm3=%r", fallback, text)
+    return text or fallback
 
 
 class Speaker:
@@ -132,12 +174,14 @@ class Listener:
     """
 
     def __init__(self, speaker: Speaker, on_wake: Callable[[], None], on_command: Callable[[str], None],
-                 kws_threshold: float = 0.1, kws_score: float = 2.5) -> None:
+                 kws_threshold: float = 0.1, kws_score: float = 2.5,
+                 transcribe: Callable[[np.ndarray, str, bool], str] | None = lfm_transcribe) -> None:
         import sherpa_onnx
 
         self.speaker = speaker
         self.on_wake = on_wake
         self.on_command = on_command
+        self.transcribe = transcribe
         self.kws = sherpa_onnx.KeywordSpotter(
             tokens=str(KWS_DIR / "tokens.txt"),
             encoder=str(KWS_DIR / "encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx"),
@@ -173,7 +217,7 @@ class Listener:
     # feed() is separate from the mic loop so it can be tested with recorded/synthesised audio
     def new_state(self) -> dict:
         return {"kws": self.kws.create_stream(), "asr": None, "t_wake": 0.0, "wake_t": None, "retry": False,
-                "ring": collections.deque(maxlen=int(PREROLL_S * 10) + 1)}
+                "ring": collections.deque(maxlen=int(PREROLL_S * 10) + 1), "audio": []}
 
     def feed(self, st: dict, samples: np.ndarray) -> None:
         if st["asr"] is None:
@@ -187,6 +231,7 @@ class Listener:
                     st["ring"].clear()
                     st["asr"] = self.asr.create_stream()
                     st["asr"].accept_waveform(RATE, pre)
+                    st["audio"] = [pre]
                     st["wake_t"] = len(pre) / RATE  # detection time within this transcript
                     st["retry"] = False
                     st["t_wake"] = time.monotonic()
@@ -196,6 +241,7 @@ class Listener:
         else:
             s = st["asr"]
             s.accept_waveform(RATE, samples)
+            st["audio"].append(samples)
             while self.asr.is_ready(s):
                 self.asr.decode_stream(s)
             timed_out = time.monotonic() - st["t_wake"] > 15
@@ -203,7 +249,7 @@ class Listener:
                 text = self._command_text(s, st["wake_t"])
                 if not text and not st["retry"] and not timed_out:
                     # "Hey Tony ... <pause> ... dance": the pause ended the first segment; listen once more
-                    st["asr"], st["wake_t"], st["retry"] = self.asr.create_stream(), None, True
+                    st["asr"], st["wake_t"], st["retry"], st["audio"] = self.asr.create_stream(), None, True, []
                     return
                 self._done(st, text)
 
@@ -216,10 +262,20 @@ class Listener:
             self._done(st, self._command_text(st["asr"], st["wake_t"]))
 
     def _done(self, st: dict, text: str) -> None:
-        st["asr"] = None
+        audio, has_preroll = np.concatenate(st["audio"] or [np.zeros(0, np.float32)]), st["wake_t"] is not None
+        st["asr"], st["audio"] = None, []
         st["kws"] = self.kws.create_stream()
-        log.info("heard command: %r", text)
-        self.on_command(text)
+        if self.transcribe is None:
+            log.info("heard command: %r", text)
+            self.on_command(text)
+            return
+
+        def second_pass() -> None:  # off the mic thread, so audio keeps flowing
+            final = self.transcribe(audio, text, has_preroll)
+            log.info("heard command: %r", final)
+            self.on_command(final)
+
+        threading.Thread(target=second_pass, name="asr-2nd-pass", daemon=True).start()
 
     def _command_text(self, s, wake_t: float | None) -> str:
         r = self.asr.get_result_all(s)

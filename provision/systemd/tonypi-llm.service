@@ -1,15 +1,19 @@
 [Unit]
-Description=TonyPi local LLM (llama-server, LFM2.5-1.2B-Instruct, OpenAI-compatible on :8080)
+Description=TonyPi local model (llama-server, LFM3-Omni-2B: brain + vision + speech-to-text, OpenAI-compatible on :8080)
 After=network.target
 StartLimitIntervalSec=300
 StartLimitBurst=5
 
 [Service]
 User=pi
-# LFM2 is hybrid (conv+attn): the prompt cache only resumes from a checkpoint saved at (prompt_len - ubatch),
-# so a small -ub lets the long system prompt be reused (~1 s per command instead of ~8 s)
-ExecStart=/usr/local/bin/llama-server -m /home/pi/models/LFM2.5-1.2B-Instruct-Q4_K_M.gguf --jinja -t 3 -c 8192 -np 2 -ub 64 -cms 64 \
-  --host 127.0.0.1 --port 8080 --alias lfm2.5-1.2b --temp 0.1 --top-k 50 --repeat-penalty 1.05
+# One LFM3-Omni-2B server does the agent's planning (JSON), image description and speech-to-text (see docs/MODELS.md).
+# Q4_0 weights + Q4_0 projector: fastest on the Pi 5's Arm CPU. -t 3 generates fastest, -tb 4 reads prompts fastest.
+# -np 2: a vision or transcription request doesn't block the next command. Prompt reuse: LFM3 has sliding-window
+# attention, so the cached system prompt is only kept with --swa-full; -ub 64 -cms 64 put a checkpoint just before
+# each new request. Without them every command re-reads ~700 tokens (~17 s instead of ~3 s).
+ExecStart=/usr/local/bin/llama-server -m /home/pi/models/LFM3-Omni-2B-Q4_0.gguf \
+  --mmproj /home/pi/models/mmproj-LFM3-Omni-2B-Q4_0.gguf --jinja -t 3 -tb 4 -c 16384 -np 2 \
+  -ub 64 -cms 64 --swa-full --host 127.0.0.1 --port 8080 --alias lfm3-omni-2b --temp 0
 Restart=on-failure
 RestartSec=5
 Nice=5

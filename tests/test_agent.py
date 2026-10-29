@@ -124,3 +124,27 @@ def test_stand_while_lying_gets_up_first():
     assert body.player.played == ["stand_up_back", "stand_slow"]
     body.player.played.clear()
     assert body.run("stand", 1, lambda s: None) and body.player.played == ["stand_slow"]  # already upright
+
+
+def test_lfm_second_pass(monkeypatch):
+    import io, json
+    import numpy as np
+    from tonypi.agent import speech
+
+    def fake_urlopen(reply):
+        class R(io.BytesIO):
+            def __enter__(self): return self
+            def __exit__(self, *a): pass
+        return lambda req, timeout=0: R(json.dumps({"choices": [{"message": {"content": reply}}]}).encode())
+
+    audio = np.zeros(16000, np.float32)
+    monkeypatch.setattr(speech.urllib.request, "urlopen", fake_urlopen("We ate. Hey Tony, show me some kung fu."))
+    assert speech.lfm_transcribe(audio, "show me some confoo", True) == "show me some kung fu"
+    monkeypatch.setattr(speech.urllib.request, "urlopen", fake_urlopen("Dance for us."))
+    assert speech.lfm_transcribe(audio, "dense for us", False) == "Dance for us"   # second segment: no wake phrase
+    assert speech.lfm_transcribe(audio, "dense for us", True) == "dense for us"    # wake phrase missing: fallback
+
+    def down(req, timeout=0):
+        raise OSError("connection refused")
+    monkeypatch.setattr(speech.urllib.request, "urlopen", down)
+    assert speech.lfm_transcribe(audio, "wave", True) == "wave"

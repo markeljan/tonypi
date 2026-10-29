@@ -11,9 +11,11 @@ Status markers: [x] done · [~] in progress · [ ] todo
   (ran clean 2026-10-28; `tools/bench.py` passes on the new OS, I2C-1 still empty)
 
 ## 1. Local models (first priority)
-- [~] llama.cpp built natively (NEON/KleidiAI) — built; still to do: `llama-bench` numbers for LFM2.5-350M / 1.2B-Instruct / VL-1.6B on this Pi
-- [x] `tonypi-llm.service`: llama-server on 127.0.0.1 with LFM2.5-1.2B-Instruct (tool calling, `--jinja`) — first check ~58 tok/s prompt, ~14 tok/s gen
-- [ ] `tonypi-vlm.service`: LFM2.5-VL-1.6B + mmproj, snapshot → description latency
+- [x] llama.cpp built natively (NEON/KleidiAI); `llama-bench` + task benchmarks on this Pi → `docs/MODELS.md` (2026-10-29)
+- [x] `tonypi-llm.service`: llama-server on 127.0.0.1:8080 with **LFM3-Omni-2B** (brain + vision + speech-to-text), ~2 s per command (2026-10-29; replaced LFM2.5-1.2B)
+- [x] Vision: same LFM3-Omni server (no separate VLM service), ~15 s per image
+- [x] Speech-to-text second pass with LFM3-Omni: 0% word errors on the robot mic vs 18% streaming-only
+- [ ] Speak directly to the brain (audio in → JSON plan in one Omni call, skipping transcription)
 - [ ] Same prompts against the Mac's OpenAI-compatible endpoint (LM Studio) for comparison
 
 ## 2. Body runtime (`tonyd`)
@@ -32,7 +34,7 @@ Status markers: [x] done · [~] in progress · [ ] todo
 
 ## 4. Brain
 - [ ] Robot MCP server (Streamable HTTP): walk, turn, look, snapshot, play_motion, say, get_status, stop
-- [x] Local fast loop on LFM2.5-1.2B: JSON-schema plan (say + ≤6 enum actions), offline, ~2–4 s (`tonypi-agent`, 2026-10-28)
+- [x] Local fast loop: JSON-schema plan (say + ≤6 enum actions), offline, ~2–4 s (`tonypi-agent`, 2026-10-28; LFM3-Omni since 2026-10-29)
 - [ ] `escalate(task)` → Claude Opus via Claude Agent SDK (tools=[], robot MCP, PreToolUse gate)
 - [ ] "Go get that": VLM target → head tracking → walk-to (visual servoing) loop
 - [ ] Optional: Hermes Agent attached to the same MCP server (Telegram / chat)
