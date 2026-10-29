@@ -12,6 +12,8 @@ RuntimeDirectoryPreserve=yes
 Environment=PYTHONUNBUFFERED=1
 ExecStart=/home/pi/tonypi/.venv/bin/tonyd
 Restart=on-failure
+# the body (safety, stop) is the last thing to kill under memory pressure
+OOMScoreAdjust=-900
 RestartSec=3
 # the body's safety loop must not starve behind LLM inference
 Nice=-5

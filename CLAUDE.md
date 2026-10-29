@@ -11,6 +11,10 @@ it's told ("hey, go get that"), with local LFM models on the Pi and Claude (Opus
 - `stop` and fall recovery never depend on an LLM.
 - Before commanding motion, assume the robot may be standing on a table: start slow, prefer `stand_slow`, keep a hand near it the first time.
 - Servo **temperature**: limit is 85 °C (servo self-protects). Measured up to 80 °C after ~1 h of holding a pose on 2026-10-28 (elbows 6/14 hottest at 78–80, right leg 66–76). **Torque is off whenever idle** (any pose, standing included: it carries no load and holds the pose limp); a thermal stop unloads instead of standing.
+- **Memory** (8 GB, 2 GB zram, no PSI): the Pi froze once (2026-10-29) with llama-server + several Claude Code sessions
+  + harness Node/Hermes jobs. `earlyoom` (`provision/files/earlyoom.default`) kills dev/harness jobs first, then the
+  largest process (llama-server, `Restart=always`); tonyd (OOMScoreAdjust −900), agent and MCP (−500) are never chosen.
+  Check `free -m` before anything big (second llama-server, builds) and run it under `flock /run/lock/tonypi-robot.lock`.
 - No `sudo chmod 777` hacks. Access is via groups (dialout, gpio, i2c, video, audio) + `provision/files/99-tonypi.rules`.
 
 ## Hardware facts (verified live 2026-10-28 with `tools/bench.py`)

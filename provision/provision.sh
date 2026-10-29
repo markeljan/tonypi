@@ -60,8 +60,14 @@ install -m 0644 "$REPO/provision/files/99-tonypi.rules" /etc/udev/rules.d/99-ton
 udevadm control --reload-rules && udevadm trigger || true
 
 mkdir -p /etc/systemd/journald.conf.d
-printf '[Journal]\nSystemMaxUse=200M\nRuntimeMaxUse=64M\n' > /etc/systemd/journald.conf.d/tonypi.conf
+# persistent: a freeze leaves logs behind (2026-10-29)
+printf '[Journal]\nStorage=persistent\nSystemMaxUse=200M\nRuntimeMaxUse=64M\n' > /etc/systemd/journald.conf.d/tonypi.conf
 systemctl restart systemd-journald || true
+
+log "earlyoom (kill optional jobs before RAM runs out; robot core protected)"
+dpkg -s earlyoom >/dev/null 2>&1 || apt-get -y install earlyoom || log "  apt: could not install earlyoom"
+install -m 0644 "$REPO/provision/files/earlyoom.default" /etc/default/earlyoom
+systemctl enable earlyoom >/dev/null 2>&1 && systemctl restart earlyoom || true
 
 CFG=/boot/firmware/config.txt
 add_cfg() { grep -qxF "$1" "$CFG" || echo "$1" >> "$CFG"; }
