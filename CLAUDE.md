@@ -72,8 +72,11 @@ Hermes Agent (Nous) can attach to the same MCP server later (it needs ≥64K con
 - `speech.py`: Piper (lessac medium) out; the wake phrase is removed from the transcript by token timestamps
   (ASR writes it as "hey tony", "haytony", "athony", "ain'toni", "eight only"…). After end of speech (0.7 s) the clip
   is re-transcribed by LFM3-Omni (`lfm_transcribe`, ~2 s; 0% vs 18% word errors), streaming text is the fallback
-  (`TONYPI_VOICE`: transcribe | direct | stream). After answering a voice command it listens 6 s for a follow-up
-  without the wake phrase. Cues: rising tone = listening, falling = stopped.
+  (`TONYPI_VOICE`: transcribe | direct | stream; `reconcile()` drops LFM3 hallucinations like "Thank you" and keeps a
+  move only the draft heard). Timing: after "hey Tony" 3 s to *start* the command, after each spoken answer 6 s to
+  start a follow-up without the wake phrase; a command always ends 0.7 s after you stop. The recogniser's own
+  silence "endpoints" are ignored until real words arrive. Cues: rising tone = listening, falling = stopped.
+  `tests/test_listener_flow.py` checks all of this with the real models in simulated time.
 - Latency: no conversation history unless the request is a follow-up ("again", "that"…; history costs ~1.7 s, never
   cached); `Brain.plan_stream` hands moves to `_execute` as they stream, run one at a time. Typed: first move ~1.5 s.
   `vision.py`: `describe()` posts the image to LFM3-Omni on :8080 (~15 s).

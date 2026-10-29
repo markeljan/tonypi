@@ -93,8 +93,11 @@ From the end of a spoken command to Tony moving: **~7.3 s → ~3.5 s** (typed co
 `direct` is ~1.3 s faster but picked wrong moves live ("take a bow" → wave): the keyword rules only see the rough
 streaming text there. Correct moves beat 1.3 s, so `transcribe` is the default.
 
-Follow-up window: after Tony answers a voice command he listens 6 s for another one without "hey Tony"
-(`TONYPI_FOLLOWUP_S`). Rising tone = listening, falling tone = stopped. A lone "hey Tony" inside the window acts as a wake.
+Listening timing: after "hey Tony" the command must start within 3 s; after Tony answers a voice command he waits
+6 s for a follow-up to start without "hey Tony" (`TONYPI_FOLLOWUP_S`); either way the command ends 0.7 s after you
+stop. Rising tone = listening, falling tone = stopped (Tony's own tone is muted from the mic). A lone "hey Tony"
+inside the window acts as a wake. Silence/noise never goes to LFM3 (it invents "Thank you"); known hallucinations
+are dropped and a move only the streaming draft heard is passed along ("not your head (or: nodd your head)").
 
 ## Always listening? (addressee detection, `tools/addressee_eval.py`)
 

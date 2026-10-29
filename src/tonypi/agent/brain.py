@@ -78,7 +78,8 @@ SYSTEM = (
     '"say" is what you speak (one or two short sentences, plain words, no emojis; may be empty). '
     "Only use these actions:\n"
     + "\n".join(f"- {k}: {v}" for k, v in ACTIONS.items())
-    + "\nDo exactly what was asked: no extra moves. If asked something you can't do, say so briefly.\n"
+    + "\nDo exactly what was asked: no extra moves. If asked something you can't do, say so briefly. "
+    "Never say 'Hey Tony' yourself.\n"
     "Examples:\n"
     'dance -> {"actions":[{"action":"dance","count":1}],"say":"Let\'s dance!"}\n'
     'wave at us -> {"actions":[{"action":"wave","count":1}],"say":"Hello everyone!"}\n'
@@ -106,7 +107,7 @@ KEYWORDS = [
     (re.compile(r"\bbow\b", re.I), "bow"),
     (re.compile(r"\b[kc][aou](ng|n|me)? ?f(u|ood|oo)\b|\bkarate\b", re.I), "kung_fu"),  # ASR: "confoo", "come foo"
     (re.compile(r"\bsquat\b", re.I), "squat"),
-    (re.compile(r"\bnod\b", re.I), "nod"),
+    (re.compile(r"\bnodd?(ing)?\b", re.I), "nod"),  # ASR: "nodd your head"
     (re.compile(r"\bshake your head\b", re.I), "shake_head"),
     (re.compile(r"\btwist\b", re.I), "twist"),
     (re.compile(r"\b(go to |time to )?sleep\b|\bpower (down|off)\b|\bshut down\b|\bnap\b", re.I), "sleep"),

@@ -42,7 +42,8 @@ _HEY = re.compile(r"(hey|hay|hi|a|eight|ok|okay|hello)", re.I)
 VOICE_MODE = os.environ.get("TONYPI_VOICE", "transcribe")
 # after a voice command, listen this long for a follow-up without "hey Tony" (0 = off). Always-on addressee detection
 # from audio alone was ~50/50 on real speech (docs/MODELS.md), so the follow-up window is the "no wake word" path.
-FOLLOWUP_S = float(os.environ.get("TONYPI_FOLLOWUP_S", "6"))  # seconds of silence before it closes
+FOLLOWUP_S = float(os.environ.get("TONYPI_FOLLOWUP_S", "6"))  # seconds to START a follow-up before it closes
+WAKE_START_S = 3.0  # seconds to start the command after "hey Tony" (end of speech is always 0.7 s of silence)
 _FILLER = {"", "the", "a", "uh", "um", "oh", "eh", "huh", "hmm", "ah", "and", "i"}
 ASR_URL = os.environ.get("TONYPI_ASR_URL", "http://127.0.0.1:8080/v1/chat/completions")  # LFM3-Omni; "" = streaming only
 # in an LFM3 transcript of the pre-roll + command: everything up to the wake phrase ("..., hey Tony, dance")
@@ -66,6 +67,10 @@ def command_from_words(words: list[tuple[str, float]], wake_t: float | None) -> 
             while words and (_HEY.fullmatch(words[0][0]) or _TONY.fullmatch(words[0][0])) and words[0][1] < wake_t:
                 words = words[1:]
     return " ".join(w for w, _ in words).lower().strip()
+
+
+def _has_words(text: str) -> bool:
+    return any(w not in _FILLER and len(w) > 1 for w in text.lower().split())
 
 
 def to_wav(audio: np.ndarray) -> bytes:
@@ -102,7 +107,26 @@ def lfm_transcribe(audio: np.ndarray, fallback: str, has_preroll: bool) -> str:
         text = text[m.end():]
     text = text.strip().rstrip(".")
     log.info("transcripts: streaming=%r lfm3=%r", fallback, text)
-    return text or fallback
+    return reconcile(text, fallback)
+
+
+# what speech models "hear" in near-silence or noise
+_HALLUCINATIONS = {"thank you", "thanks", "thank you very much", "bye", "bye bye", "goodbye", "you", "okay", "ok"}
+
+
+def reconcile(lfm3: str, streaming: str) -> str:
+    """LFM3's transcript, unless it's a typical hallucination the streaming draft doesn't support. If the draft names a
+    move LFM3 lost ("nodd your head" vs "not your head"), keep both for the brain to choose from."""
+    from tonypi.agent.brain import KEYWORDS
+
+    norm = re.sub(r"[^a-z' ]", "", lfm3.lower()).strip()
+    if norm in _HALLUCINATIONS and not any(w in streaming.lower() for w in ("thank", "bye", "okay")):
+        log.info("dropping LFM3 %r (no support in %r)", lfm3, streaming)
+        return streaming
+    lost = [name for rx, name in KEYWORDS if rx.search(streaming) and not rx.search(lfm3)]
+    if lfm3 and lost:
+        return f"{lfm3} (or: {streaming})"
+    return lfm3 or streaming
 
 
 class Speaker:
@@ -219,13 +243,14 @@ class Listener:
             num_threads=2, sample_rate=RATE, enable_endpoint_detection=True,
             decoding_method="modified_beam_search", hotwords_score=1.5,
             hotwords_file=_tmp(HOTWORDS), modeling_unit="bpe", bpe_vocab=_bpe_vocab(ASR_DIR / "bpe.model"),
-            rule1_min_trailing_silence=FOLLOWUP_S or 3.0,  # nothing said after the wake phrase / in the follow-up window
+            rule1_min_trailing_silence=30.0,  # off: "nothing said yet" timeouts are WAKE_START_S / FOLLOWUP_S below
             rule2_min_trailing_silence=0.7,   # pause after speaking = end of command (0.9 felt sluggish)
             rule3_min_utterance_length=15.0)
         self._running = False
         self._thread: threading.Thread | None = None
         self._proc: subprocess.Popen | None = None
         self._followup = False
+        self.clock = time.monotonic  # tests replace it to simulate time
 
     def _cue(self, kind: str) -> None:
         if hasattr(self.speaker, "cue"):
@@ -249,14 +274,20 @@ class Listener:
     # feed() is separate from the mic loop so it can be tested with recorded/synthesised audio
     def new_state(self) -> dict:
         return {"kws": self.kws.create_stream(), "asr": None, "deadline": 0.0, "wake_t": None, "retry": False,
-                "ring": collections.deque(maxlen=int(PREROLL_S * 10) + 1), "audio": [], "followup": False}
+                "ring": collections.deque(maxlen=int(PREROLL_S * 10) + 1), "audio": [], "followup": False,
+                "started": False, "start_by": 0.0}
+
+    def _open(self, st: dict, start_s: float, followup: bool = False, retry: bool = True) -> None:
+        """Start transcribing a command: it must start within start_s, ends after 0.7 s of silence (max 15 s)."""
+        now = self.clock()
+        st.update(asr=self.asr.create_stream(), audio=[], wake_t=None, retry=retry, followup=followup,
+                  started=False, start_by=now + start_s, deadline=now + 15)
 
     def feed(self, st: dict, samples: np.ndarray) -> None:
         if st["asr"] is None and self._followup:
             # follow-up window: transcribe straight away, no wake phrase; silence (rule 1) closes it quietly
             self._followup = False
-            st.update(asr=self.asr.create_stream(), audio=[], wake_t=None, retry=True, followup=True,
-                      deadline=time.monotonic() + 15)
+            self._open(st, FOLLOWUP_S, followup=True)
             log.info("listening for a follow-up")
             self._cue("listen")
         if st["asr"] is None:
@@ -268,34 +299,45 @@ class Listener:
                     self.kws.reset_stream(st["kws"])
                     pre = np.concatenate(st["ring"])
                     st["ring"].clear()
-                    st["asr"] = self.asr.create_stream()
+                    self._open(st, WAKE_START_S, retry=False)
                     st["asr"].accept_waveform(RATE, pre)
                     st["audio"] = [pre]
                     st["wake_t"] = len(pre) / RATE  # detection time within this transcript
-                    st["retry"] = False
-                    st["deadline"] = time.monotonic() + 15
                     log.info("wake phrase heard")
                     self.on_wake()
                     return
         else:
             s = st["asr"]
+            if st["followup"] and not st["started"] and (
+                    self.speaker.speaking.is_set() or self.clock() < self.speaker.quiet_until):
+                samples = np.zeros_like(samples)  # don't hear our own "listening" tone as speech
             s.accept_waveform(RATE, samples)
             st["audio"].append(samples)
             while self.asr.is_ready(s):
                 self.asr.decode_stream(s)
-            timed_out = time.monotonic() > st["deadline"]
+            now = self.clock()
+            if not st["started"]:
+                st["started"] = _has_words(self.asr.get_result(s))
+                if not st["started"]:
+                    if now > st["start_by"]:  # nobody started talking
+                        self._done(st, "")
+                    elif self.asr.is_endpoint(s):  # the recogniser "ends" silence after ~1.5 s: keep waiting
+                        self.asr.reset(s)
+                        if not st["wake_t"]:
+                            st["audio"] = []
+                    return
+            timed_out = now > st["deadline"]
             if self.asr.is_endpoint(s) or timed_out:
                 text = self._command_text(s, st["wake_t"])
                 if st["followup"] and text and not command_from_words([(w, 0.0) for w in text.split()], 1.0):
                     # "hey Tony" said inside the follow-up window: it's a wake phrase, the command comes next
                     log.info("wake phrase in the follow-up window")
                     self.on_wake()
-                    st.update(asr=self.asr.create_stream(), audio=[], wake_t=None, retry=True, followup=False,
-                              deadline=time.monotonic() + 15)
+                    self._open(st, WAKE_START_S)
                     return
                 if not text and not st["retry"] and not timed_out:
                     # "Hey Tony ... <pause> ... dance": the pause ended the first segment; listen once more
-                    st["asr"], st["wake_t"], st["retry"], st["audio"] = self.asr.create_stream(), None, True, []
+                    self._open(st, WAKE_START_S)
                     return
                 self._done(st, text)
 
@@ -309,12 +351,18 @@ class Listener:
 
     def _done(self, st: dict, text: str) -> None:
         audio, has_preroll = np.concatenate(st["audio"] or [np.zeros(0, np.float32)]), st["wake_t"] is not None
+        if has_preroll:  # keep from just before the wake phrase: less to transcribe, no chatter from before it
+            audio = audio[max(0, int((st["wake_t"] - 2.0) * RATE)):]
         followup = st["followup"]
         st["asr"], st["audio"], st["followup"] = None, [], False
         st["kws"] = self.kws.create_stream()
         self._cue("done")
-        if followup and text.strip().lower() in _FILLER:
-            log.info("follow-up window closed (%r)", text)
+        if not _has_words(text):  # silence or noise ("ah", "h"): never send it to LFM3, which invents "Thank you"
+            if followup:
+                log.info("follow-up window closed (%r)", text)
+                return
+            log.info("nothing heard after the wake phrase (%r)", text)
+            self.on_command("")
             return
         if self.mode == "direct" and text and len(audio) >= RATE // 4:
             log.info("heard command (rough): %r; planning from the audio", text)
