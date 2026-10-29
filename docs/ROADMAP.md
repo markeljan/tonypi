@@ -18,7 +18,7 @@ Status markers: [x] done · [~] in progress · [ ] todo
 
 ## 2. Body runtime (`tonyd`)
 - [ ] Daemon owning the board: 100 Hz IMU → orientation filter (Mahony), battery + servo temp polling, key events
-- [ ] Verify torque on/off command (0x0B vs 0x0C) with the robot lying down
+- [x] Verify torque on/off: 0x0B unload, 0x0C load (2026-10-28); agent `sleep` = lie down + unload, wakes on any move
 - [~] Fall detection: tilt guard stops motions (agent); still todo: gyro, protective pose, auto get-up (`get_up` action exists, unverified on hardware)
 - [ ] Fall detection (tilt + gyro) → protective pose → classify face-up/face-down → `stand_up_back` / `stand_up_front`
 - [ ] Walk state machine (start → loop → end), turn, side-step; head look-at

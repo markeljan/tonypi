@@ -60,6 +60,7 @@ class Body:
         self.cancelled = threading.Event()
         self._abort_reason: str | None = None
         self._last_dance: str | None = None
+        self.asleep = False
         time.sleep(0.3)
 
     def close(self) -> None:
@@ -90,6 +91,8 @@ class Body:
         return {
             "tilt_deg": None if tilt is None else round(tilt, 1),
             "lying": self.lying(),
+            "asleep": self.asleep,
+            "torque_on": sum(self.board.bus_read(i, BusCmd.READ_TORQUE) == 1 for i in range(1, 17)),
             "battery_mv": self.board.battery_mv,
             "temps": temps,
             "hottest": None if hottest is None else (hottest, JOINT_NAMES[hottest], known[hottest]),
@@ -105,6 +108,12 @@ class Body:
         """Run one non-speech action. Returns False if it was refused, cancelled or aborted by a guard."""
         if self.cancelled.is_set():
             return False
+        if action == "sleep":
+            return self.sleep(say)
+        if self.asleep and action not in HEAD_POSES and action not in ("nod", "shake_head"):
+            self.asleep = False
+            if action != "get_up" and not self.run("get_up", 1, say):  # moving re-enables torque
+                return False
         if action in HEAD_POSES:
             self.board.head(500, HEAD_POSES[action])
             return self._sleep(0.6)
@@ -129,8 +138,7 @@ class Body:
             self._last_dance = name
             return self._motions([name], say)
         if action in SEQUENCES:
-            if action in NEEDS_UPRIGHT and self.lying():
-                say("I need to get up first.")
+            if action in NEEDS_UPRIGHT and self.lying() and not self.run("get_up", 1, say):
                 return False
             names = []
             for n in SEQUENCES[action]:
@@ -139,9 +147,23 @@ class Body:
         log.warning("unknown action %s", action)
         return False
 
+    def sleep(self, say: Callable[[str], None]) -> bool:
+        """Lie down, then switch all servo torque off (they cool down; the agent keeps listening)."""
+        if not self.lying() and not self._motions(["lie_down"], say, guard_fall=False):
+            return False
+        time.sleep(0.5)
+        if not self.lying():  # never go limp while standing
+            say("I couldn't lie down safely, so I'll stay powered.")
+            return False
+        self.board.torque(range(1, 17), on=False)
+        self.board.rgb([(i, 0, 0, 0) for i in (1, 2)])
+        self.asleep = True
+        log.info("asleep: servo torque off")
+        return True
+
     def settle(self) -> None:
         """Back to a neutral stand after body motions (not when lying or cancelled)."""
-        if not self.cancelled.is_set() and not self.lying():
+        if not self.cancelled.is_set() and not self.lying() and not self.asleep:
             self.player.play(load("stand_slow"))
 
     # ---- internals --------------------------------------------------------------------------------------------

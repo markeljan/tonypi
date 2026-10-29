@@ -37,3 +37,66 @@ def test_postprocess_adds_named_moves_and_vision():
 def test_status_questions_use_real_sensors():
     p = postprocess("how's your battery?", Plan([], "My battery is full."))
     assert p.actions == [("report_status", 1)] and p.say == ""
+
+
+def test_sleep_and_wake_words():
+    assert ("sleep", 1) in postprocess("go to sleep", Plan()).actions
+    assert ("sleep", 1) in postprocess("power down for a while", Plan()).actions
+    assert ("get_up", 1) in postprocess("wake up", Plan()).actions
+    assert ("lie_down", 1) in postprocess("lie down", Plan()).actions
+
+
+class _Imu:
+    def __init__(self, accel):
+        self.accel = accel
+
+
+class _FakeBoard:
+    def __init__(self, lying):
+        self.imu = _Imu((0.0, 0.0, -0.97) if lying else (-0.97, 0.0, 0.0))
+        self.battery_mv, self.calls = 11500, []
+
+    def head(self, ms, pulses): self.calls.append(("head", pulses))
+    def torque(self, ids, on): self.calls.append(("torque", on))
+    def rgb(self, pixels): self.calls.append(("rgb",))
+    def bus_read(self, sid, cmd): return 40
+
+
+class _FakePlayer:
+    def __init__(self, board): self.board, self.played = board, []
+    def play(self, motion, speed=1.0):
+        self.played.append(motion.name)
+        if motion.name.startswith("stand_up") or motion.name == "stand_slow":
+            self.board.imu = _Imu((-0.97, 0.0, 0.0))  # now upright
+        if motion.name == "lie_down":
+            self.board.imu = _Imu((0.0, 0.0, -0.97))
+        return True
+    def stop(self): pass
+
+
+def _body(lying, asleep=False):
+    import threading
+    from tonypi.agent.body import Body
+    b = Body.__new__(Body)
+    b.board, b.cancelled, b._abort_reason, b._last_dance, b.asleep = _FakeBoard(lying), threading.Event(), None, None, asleep
+    b.player = _FakePlayer(b.board)
+    return b
+
+
+def test_every_action_routes_without_error():
+    from tonypi.agent.brain import ACTIONS
+    for name in ACTIONS:
+        if name in ("describe_view", "report_status", "stop"):
+            continue  # handled by the daemon, not Body.run
+        for lying, asleep in ((False, False), (True, False), (True, True)):
+            body = _body(lying, asleep)
+            body._sleep = lambda s: True
+            assert body.run(name, 2, lambda s: None) in (True, False), name
+
+
+def test_sleep_and_wake():
+    body = _body(lying=True)
+    assert body.run("sleep", 1, lambda s: None) and body.asleep
+    assert ("torque", False) in body.board.calls
+    assert body.run("wave", 1, lambda s: None) and not body.asleep
+    assert body.player.played == ["stand_up_back", "stand_slow", "wave"]

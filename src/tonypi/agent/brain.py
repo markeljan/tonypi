@@ -43,7 +43,8 @@ ACTIONS: dict[str, str] = {
     "describe_view": "look through the camera and describe what you see",
     "report_status": "tell your battery level, posture and joint temperatures",
     "lie_down": "lie down",
-    "get_up": "get up from lying",
+    "sleep": "go to sleep: lie down and switch the motors off (you still hear 'hey Tony')",
+    "get_up": "get up from lying, or wake up from sleep",
     "stand": "stand up straight",
     "stop": "stop moving",
 }
@@ -85,7 +86,9 @@ SYSTEM = (
     'look around -> {"actions":[{"action":"look_left","count":1},{"action":"look_right","count":1},'
     '{"action":"look_center","count":1}],"say":""}\n'
     'do you agree -> {"actions":[{"action":"nod","count":1}],"say":"Yes, I do."}\n'
-    'how is your battery -> {"actions":[{"action":"report_status","count":1}],"say":""}'
+    'how is your battery -> {"actions":[{"action":"report_status","count":1}],"say":""}\n'
+    'go to sleep -> {"actions":[{"action":"sleep","count":1}],"say":"Good night!"}\n'
+    'wake up -> {"actions":[{"action":"get_up","count":1}],"say":"Good morning!"}'
 )
 
 STOP_RE = re.compile(r"^\W*(stop|halt|freeze|stay|enough|cancel|quiet|be quiet|shut up)\b", re.I)
@@ -103,8 +106,9 @@ KEYWORDS = [
     (re.compile(r"\bnod\b", re.I), "nod"),
     (re.compile(r"\bshake your head\b", re.I), "shake_head"),
     (re.compile(r"\btwist\b", re.I), "twist"),
-    (re.compile(r"\blie down\b|\bgo to sleep\b", re.I), "lie_down"),
-    (re.compile(r"\bget up\b|\bstand up\b", re.I), "get_up"),
+    (re.compile(r"\b(go to |time to )?sleep\b|\bpower (down|off)\b|\bshut down\b|\bnap\b", re.I), "sleep"),
+    (re.compile(r"\blie down\b", re.I), "lie_down"),
+    (re.compile(r"\bget up\b|\bstand up\b|\bwake up\b", re.I), "get_up"),
 ]
 
 

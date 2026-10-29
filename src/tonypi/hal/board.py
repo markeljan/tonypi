@@ -168,9 +168,10 @@ class Board:
     def stop(self, ids) -> None:
         self.send(Func.BUS_SERVO, proto.bus_stop(list(ids)))
 
-    def torque_cmd(self, sid: int, cmd: BusCmd) -> None:
-        """Raw 0x0B / 0x0C. Which one means 'on' is not yet verified on this firmware."""
-        self.send(Func.BUS_SERVO, proto.bus_simple(cmd, sid))
+    def torque(self, ids, on: bool) -> None:
+        """Torque on/off. Off = the joint goes limp: only with the robot lying down. Any move() turns it back on."""
+        for sid in ids:
+            self.send(Func.BUS_SERVO, proto.bus_simple(BusCmd.LOAD if on else BusCmd.UNLOAD, sid))
 
     def set_offset(self, sid: int, offset: int, save: bool = False) -> None:
         offset = max(-125, min(125, int(offset)))

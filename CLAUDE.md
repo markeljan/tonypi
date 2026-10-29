@@ -21,7 +21,9 @@ it's told ("hey, go get that"), with local LFM models on the Pi and Claude (Opus
 - Battery: board pushes SYS frames (~10 Hz), 11.56 V measured (3S LiPo, ~12.6 V full; set low-voltage stop ≈ 10.5 V, verify).
 - Bus servos 1–16 respond; 17/18 absent (no grippers). Per-servo read ≈ 2.8 ms; **all 16 positions in 33 ms (~30 Hz)**.
   EEPROM offsets match `config/robot.yaml` deviations. Angle limits 0–1000 on all. torque_state=1 when holding.
-- Torque on/off: vendor uses 0x0B for both "enable" and "unload" — **unverified which is which**. Test on one arm servo with the robot lying down, reading 0x0D after each.
+- Torque: **0x0B = unload (off), 0x0C = load (on)**, READ 0x0D reports 0/1 (verified on servo 7, 2026-10-28). Any MOVE re-enables torque. `Board.torque(ids, on)`.
+- Lying orientation: on its back ⇒ az ≈ -0.97 g (`stand_up_back`), verified 2026-10-28; face-down assumed az > 0.
+- Lights: RGB pixels via FUNC 11 can be set off; a red and a blue LED stay lit (power/status, not switchable).
 - Buzzer: `AA 55 02` `<HHHH` freq, on_ms, off_ms, repeat. **off_ms=0 = stays on forever**; `Board.beep` clamps it, `Board.buzzer_off()` sends all zeros.
 - Head PWM: ch1 tilt (1500 centre, 1081 look-down), ch2 pan (1466 centre). Readback works.
 - Camera: UVC `/dev/video0`, YUYV 640×480 only, ≤30 fps; intrinsics in `data/camera_calibration.npz`.
@@ -59,6 +61,8 @@ Hermes Agent (Nous) can attach to the same MCP server later (it needs ≥64K con
 - `brain.py`: LFM2.5-1.2B via llama-server, `response_format` json_schema with an action **enum** (it can't invent
   moves) + rules (stop, vision, status questions, a named move is never dropped). ~2–4 s per command.
   llama-server needs `-ub 64 -cms 64`: LFM2 is hybrid, prompt cache resumes only from a checkpoint at len-ubatch.
+- `sleep` ("go to sleep", "power down"): lie down, check tilt >60°, unload all servos, RGB off; still listens.
+  "wake up" or any body move while lying → `stand_up_back`/`front` → stand. `/status` shows torque on N/16.
 - `body.py`: actions → motion sequences; servo temp checked before (≥81 °C skip) and during (≥83 °C stop + stand)
   every motion; fall guard tilt >70° for 0.3 s (dances lean past 50° on purpose); idle warning at 80 °C / 10.5 V.
 - `speech.py`: Piper (lessac medium) out; the wake phrase is removed from the transcript by token timestamps

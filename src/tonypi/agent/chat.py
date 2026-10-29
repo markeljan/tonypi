@@ -38,6 +38,7 @@ def fmt(ev: dict) -> str | None:
         temps = " ".join(f"{k}:{v}" for k, v in ev["temps"].items())
         bat = f"{ev['battery_mv'] / 1000:.2f} V" if ev.get("battery_mv") else "?"
         return (f"  battery {bat} · tilt {ev['tilt_deg']}° {'(lying)' if ev['lying'] else ''} · "
+                f"{'asleep · ' if ev.get('asleep') else ''}torque on {ev.get('torque_on', '?')}/16 · "
                 f"busy {ev['busy']}\n  temps °C {temps}")
     return None
 

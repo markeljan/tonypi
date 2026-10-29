@@ -171,7 +171,7 @@ class Agent:
                 log.exception("status failed")
                 continue
             msg = None
-            if st["hottest"] and st["hottest"][2] >= IDLE_HOT_C:
+            if st["hottest"] and st["hottest"][2] >= IDLE_HOT_C and not self.body.asleep:
                 _, joint, temp = st["hottest"]
                 msg = (f"My {joint} is at {temp} degrees from holding this pose. "
                        "Please lay me down or switch off my servos for a while.")
