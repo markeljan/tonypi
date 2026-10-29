@@ -1,0 +1,32 @@
+{
+  "$schema": "https://pi.dev/schemas/models.schema.json",
+  "providers": {
+    "local": {
+      "name": "Onboard LFM3 (llama-server :8080)",
+      "baseUrl": "http://127.0.0.1:8080/v1",
+      "api": "openai-completions",
+      "apiKey": "none",
+      "compat": {
+        "supportsDeveloperRole": false,
+        "supportsReasoningEffort": false,
+        "supportsStore": false,
+        "maxTokensField": "max_tokens",
+        "thinkingFormat": "chat-template",
+        "chatTemplateKwargs": {"enable_thinking": false}
+      },
+      "models": [
+        {
+          "id": "lfm3-omni-2b",
+          "name": "LFM3-Omni-2B (onboard)",
+          "input": ["text", "image"],
+          "inputLimits": {"images": {"resize": {"maxWidth": 512, "maxHeight": 384}, "maxPerRequest": 4}},
+          "contextWindow": 8192,
+          "maxTokens": 400,
+          "reasoning": false,
+          "samplingParams": {"temperature": 0, "cache_prompt": true},
+          "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0}
+        }
+      ]
+    }
+  }
+}
