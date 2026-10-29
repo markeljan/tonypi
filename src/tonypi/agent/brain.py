@@ -186,10 +186,11 @@ class Brain:
         return self.plan_stream(request, audio_wav)
 
     def plan_stream(self, request: str, audio_wav: bytes | None = None,
-                    on_action: Callable[[str, int], None] | None = None) -> Plan:
+                    on_action: Callable[[str, int], None] | None = None, cancel=None) -> Plan:
         """Plan for a typed request, or for spoken audio (`request` is then the rough streaming transcript, used
         for the rules). on_action(name, count) fires as soon as each move is generated (~0.9 s before the end);
-        the returned plan holds every action, including those already handed out."""
+        the returned plan holds every action, including those already handed out. cancel: a threading.Event that
+        aborts the request (frees llama-server for the next one)."""
         request = request.strip()
         if STOP_RE.match(request):
             return Plan([("stop", 1)], "", "rule")
@@ -206,7 +207,7 @@ class Brain:
                 on_action(name, count)
 
         try:
-            raw = self._llm(request, audio_wav, early_action if on_action else None)
+            raw = self._llm(request, audio_wav, early_action if on_action else None, cancel)
             data = json.loads(raw)
             plan = Plan([(a["action"], a.get("count", 1)) for a in data.get("actions", [])], data.get("say", ""),
                         "llm+audio" if audio_wav else "llm")
@@ -225,7 +226,7 @@ class Brain:
             plan.say = "Sorry, I didn't understand that."
         return plan
 
-    def _llm(self, request: str, audio_wav: bytes | None, on_action) -> str:
+    def _llm(self, request: str, audio_wav: bytes | None, on_action, cancel=None) -> str:
         if audio_wav:
             system, user = SYSTEM + AUDIO_NOTE, [{"type": "input_audio", "input_audio": {
                 "data": base64.b64encode(audio_wav).decode(), "format": "wav"}}]
@@ -247,6 +248,8 @@ class Brain:
                 return json.load(r)["choices"][0]["message"]["content"]
             out, seen = "", 0
             for line in r:
+                if cancel is not None and cancel.is_set():
+                    raise TimeoutError("cancelled")
                 line = line.decode().strip()
                 if not line.startswith("data: ") or line == "data: [DONE]":
                     continue

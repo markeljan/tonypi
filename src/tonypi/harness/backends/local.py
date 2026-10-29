@@ -25,7 +25,7 @@ class LocalBackend:
 
     def __init__(self) -> None:
         self.brain = Brain()
-        self.cancel = threading.Event()
+        self.cancel = threading.Event()  # this run's; a fresh one per run
         self.h = None
 
     def configured(self) -> bool:
@@ -38,8 +38,8 @@ class LocalBackend:
         self.h = harness
 
     async def run(self, text: str, source: str) -> None:
-        self.cancel.clear()
-        await asyncio.to_thread(self._execute, text)
+        self.cancel = threading.Event()
+        await asyncio.to_thread(self._execute, text, self.cancel)
 
     async def cut(self) -> None:
         self.cancel.set()
@@ -47,19 +47,21 @@ class LocalBackend:
     def followup_text(self, msgs: list[str]) -> str:
         return msgs[-1]
 
-    def _stopping(self) -> bool:
-        return self.cancel.is_set() or self.h.stopped
-
-    def _execute(self, text: str) -> None:
+    def _execute(self, text: str, cancel: threading.Event) -> None:
         h, t = self.h, time.monotonic()
         todo: queue.Queue = queue.Queue()
 
+        def stopping() -> bool:
+            return cancel.is_set() or h.stopped
+
         def planner() -> None:
             try:
-                plan = self.brain.plan_stream(text, on_action=lambda n, c: todo.put((n, c)))
+                plan = self.brain.plan_stream(text, on_action=lambda n, c: todo.put((n, c)), cancel=cancel)
+                if stopping():
+                    return
                 h.emit("plan", actions=plan.actions, say=plan.say, source=f"local {plan.source}",
                        seconds=round(time.monotonic() - t, 1))
-                if plan.say and not self._stopping():
+                if plan.say:
                     h.say(plan.say)
                 for a in plan.actions[plan.early:]:
                     todo.put(a)
@@ -67,20 +69,26 @@ class LocalBackend:
                 todo.put(None)
 
         threading.Thread(target=planner, name="local-planner", daemon=True).start()
-        while (item := todo.get()) is not None:
-            if self._stopping():
-                continue  # drain
+        while True:
+            try:
+                item = todo.get(timeout=0.05)
+            except queue.Empty:
+                item = ()
+            if stopping() or item is None:
+                return  # cut: the planner finishes (or aborts) on its own; nothing more of this plan runs
+            if not item:
+                continue
             name, count = item
             if name == "stop":
                 continue
             if name == "describe_view":
-                self._describe()
+                self._describe(cancel)
             elif name == "report_status":
                 self._status()
             else:
                 h.call_tool_sync("run_skill", {"skill": name, "count": count})
 
-    def _describe(self) -> None:
+    def _describe(self, cancel: threading.Event) -> None:
         res = self.h.call_tool_sync("snapshot", {})
         if not res.images:
             self.h.say("My camera isn't working right now.")
@@ -88,8 +96,8 @@ class LocalBackend:
         with tempfile.NamedTemporaryFile(suffix=".jpg") as f:
             f.write(res.images[0])
             f.flush()
-            desc = vision.describe(f.name, self.cancel)
-        if desc and not self._stopping():
+            desc = vision.describe(f.name, cancel)
+        if desc and not (cancel.is_set() or self.h.stopped):
             self.h.say(desc)
 
     def _status(self) -> None:
