@@ -44,8 +44,8 @@ class Agent:
         self.last_warn = 0.0
         self.debug = False  # "enable debug mode": play back what was heard and narrate every step
         self.listener = Listener(self.speaker, self._on_wake,
-                                 lambda t, a=None, recording=None: self.submit(t, "voice", a, recording=recording),
-                                 on_state=self._on_mic_state) if voice else None
+                                 lambda t, a=None, recording=None: self.submit(t, "voice", a, recording=recording)
+                                 ) if voice else None
 
     # ---- events -----------------------------------------------------------------------------------------------
 
@@ -102,10 +102,6 @@ class Agent:
         self.emit("info", text=f"[debug] {text}")
         threading.Thread(target=self.speaker.say, args=(text,), daemon=True).start()
 
-    def _on_mic_state(self, state: str) -> None:
-        if self.debug and state == "followup_closed":
-            self._announce("Follow-up listening finished.")
-
     def _worker(self) -> None:
         while True:
             rid, text, audio, voice, recording = self.jobs.get()
@@ -133,12 +129,8 @@ class Agent:
                 self.emit("info", id=rid, text=f"[debug] {s}")
                 self.speaker.say(s)
 
-        if debug and voice:
-            if recording:
-                narrate("Playing back audio.")
-                self.speaker.play_wav(recording)
-            narrate(f"Audio processed as: {text}" if audio is None else
-                    f"Planning straight from the audio. The rough transcript was: {text}")
+        if debug and voice and recording:
+            self.speaker.play_wav(recording)  # what Tony heard; how he understood it shows in what he does next
         t = time.monotonic()
         self.emit("thinking", id=rid)
         todo: queue.Queue = queue.Queue()
@@ -198,8 +190,6 @@ class Agent:
             self.body.settle()
         speech.join()
         if voice and self.listener and not self.body.cancelled.is_set():
-            if debug:
-                narrate("Listening for a follow-up.")  # said before the window opens, so it's not heard as a command
             self.listener.followup()  # spoken command answered: the next words need no "hey Tony"
 
     def _describe(self, rid: int, say, speech: threading.Thread) -> None:

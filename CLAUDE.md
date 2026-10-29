@@ -81,8 +81,8 @@ Hermes Agent (Nous) can attach to the same MCP server later (it needs ≥64K con
   cached); `Brain.plan_stream` hands moves to `_execute` as they stream, run one at a time. Typed: first move ~1.5 s.
   `vision.py`: `describe()` posts the image to LFM3-Omni on :8080 (~15 s).
 - Debug mode ("enable/disable debug mode", spoken or typed; checked before `stop`, off again after a restart): each voice
-  command is played back, then "Audio processed as: …", the reply, "Starting X" / "X finished" per move (no streamed
-  early moves), "Listening for a follow-up" and "Follow-up listening finished". `tests/test_debug_mode.py`.
+  command's recording is played back, then the reply, then "Starting X" / "X finished" around each move (no
+  streamed early moves). `tests/test_debug_mode.py`.
 - Far-field voice is weak with the stock USB mic (works at ~1 m); a mic array would be the real fix.
 
 ## Status / next steps

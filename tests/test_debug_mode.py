@@ -65,8 +65,8 @@ def _agent(debug):
 def test_debug_narrates_in_order():
     a, log = _agent(debug=True)
     a._execute(1, "dance for us", None, voice=True, recording=b"RIFF....")
-    assert log == [("say", "Playing back audio."), ("play", 8), ("say", "Audio processed as: dance for us"),
-                   ("say", "Let's dance!"), ("say", "Starting dance."), ("run", "dance"), ("say", "Dance finished.")]
+    assert log == [("play", 8), ("say", "Let's dance!"), ("say", "Starting dance."), ("run", "dance"),
+                   ("say", "Dance finished.")]
     assert a.brain.streamed is False  # whole plan first, so the narration can't race the moves
 
 
