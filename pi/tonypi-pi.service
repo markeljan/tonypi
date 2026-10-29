@@ -1,0 +1,22 @@
+# Bake-off option 3 front end (pi brain). Not installed by provision: it replaces tonypi-agent (both want the mic and
+# speaker), so only one of the two may run.  sudo cp pi/tonypi-pi.service /etc/systemd/system/ && \
+#   sudo systemctl disable --now tonypi-agent && sudo systemctl enable --now tonypi-pi
+[Unit]
+Description=TonyPi front end with the pi agent as the brain
+After=tonypi-tonyd.service tonypi-llm.service sound.target
+Wants=tonypi-tonyd.service tonypi-llm.service
+Conflicts=tonypi-agent.service
+
+[Service]
+User=pi
+Group=pi
+SupplementaryGroups=audio
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+WorkingDirectory=/home/pi/tonypi
+ExecStart=/home/pi/tonypi/.venv/bin/tonypi-pi
+Restart=on-failure
+RestartSec=5
+MemoryMax=900M
+
+[Install]
+WantedBy=multi-user.target
