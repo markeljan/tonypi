@@ -1,5 +1,5 @@
-// Camera + head peripheral: snapshot (one photo), look (point the head, then a photo), watch (a short burst of
-// frames: the "video" tool). Images go back to the model as tool-result image content; pi forwards them
+// Camera + head peripheral: snapshot (one photo), look (point the head, then a photo), video (a short burst of
+// frames). Images go back to the model as tool-result image content; pi forwards them
 // (Responses API: input_image in the tool output; chat completions: a user message right after the tool result).
 
 import { readFile } from "node:fs/promises";
@@ -50,8 +50,8 @@ export default function camera(pi: ExtensionAPI) {
   }));
 
   pi.registerTool(defineTool({
-    name: "watch",
-    label: "Watch",
+    name: "video",
+    label: "Video",
     description: "Short video: a burst of 2-6 photos over up to 5 s, oldest first. Use it to see motion or change.",
     parameters: Type.Object({
       frames: Type.Optional(Type.Integer({ minimum: 2, maximum: 6, description: "default 3" })),

@@ -6,6 +6,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import body from "./peripherals/body.ts";
 import camera from "./peripherals/camera.ts";
+import context from "./context.ts";
 import iphone from "./peripherals/iphone.ts";
 import sensors from "./peripherals/sensors.ts";
 import speech from "./peripherals/speech.ts";
@@ -19,4 +20,5 @@ export default function tonypi(pi: ExtensionAPI) {
     if (!only || only.includes(name)) register(pi);
   }
   router(pi);
+  context(pi);
 }

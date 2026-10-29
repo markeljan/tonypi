@@ -35,6 +35,7 @@ def main() -> None:
     s.connect(SOCK)
     t0 = time.monotonic()
     ids: list[int] = []
+    done: set[int] = set()
     last_done = threading.Event()
     n_cmds = sum(1 for x in args.script if not x.startswith("@"))
 
@@ -44,11 +45,15 @@ def main() -> None:
             t = ev.pop("type")
             if t == "accepted":
                 ids.append(ev["id"])
+                if len(ids) == n_cmds and ids[-1] in done:  # "done" can arrive before "accepted" (stop)
+                    last_done.set()
                 continue
             if t == "heard" and args.voice and ev.get("source") == "voice":
                 ids.append(ev["id"])
             ev.pop("t", None)
             print(f"{time.monotonic() - t0:7.2f}  {t:7s} {json.dumps(ev)[:240]}", flush=True)
+            if t == "done":
+                done.add(ev.get("id"))
             if t == "done" and len(ids) == n_cmds and ev.get("id") == ids[-1]:
                 last_done.set()
 

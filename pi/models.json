@@ -3,6 +3,7 @@
   "providers": {
     "local": {
       "name": "Onboard LFM3 (llama-server :8080)",
+      "//": "contextWindow: the real slot is 8192, but pi estimates ~2000 tokens per image (LFM3 uses ~450) and caps max_tokens by its estimate, so 8192 leaves no room to answer after a 3-photo burst",
       "baseUrl": "http://127.0.0.1:8080/v1",
       "api": "openai-completions",
       "apiKey": "none",
@@ -20,7 +21,7 @@
           "name": "LFM3-Omni-2B (onboard)",
           "input": ["text", "image"],
           "inputLimits": {"images": {"resize": {"maxWidth": 512, "maxHeight": 384}, "maxPerRequest": 4}},
-          "contextWindow": 8192,
+          "contextWindow": 16384,
           "maxTokens": 400,
           "reasoning": false,
           "samplingParams": {"temperature": 0, "cache_prompt": true},
