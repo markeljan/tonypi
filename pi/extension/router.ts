@@ -9,7 +9,7 @@
 import type { Api, Model } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-const CLOUD = (process.env.TONYPI_CLOUD ?? "openai/gpt-6.1-sol,openai-codex/gpt-6.1-sol")
+const CLOUD = (process.env.TONYPI_CLOUD ?? "openai-codex/gpt-6.1-sol,openai/gpt-6.1-sol")
   .split(",").map((s) => s.trim()).filter(Boolean);
 const LOCAL = process.env.TONYPI_LOCAL ?? "local/lfm3-omni-2b";
 const COOLDOWN_MS = Number(process.env.TONYPI_CLOUD_COOLDOWN_S ?? 120) * 1000;

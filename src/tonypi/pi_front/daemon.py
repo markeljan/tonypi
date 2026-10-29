@@ -271,6 +271,8 @@ class Front:
     # ---- tonyd ----------------------------------------------------------------------------------------------
 
     def _on_tonyd(self, ev: dict) -> None:
+        if ev.get("event") == "job" and ev.get("state") in ("done", "failed", "cancelled"):
+            self.emit("body", job=ev.get("id"), skill=ev.get("skill"), state=ev.get("state"))
         if ev.get("event") == "warn":  # overheating / low battery: no model needed
             self.emit("info", text=ev.get("text", ""))
             if not self.running:

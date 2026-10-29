@@ -37,6 +37,12 @@ case $MODE in
     b V-T4 --voice "walk forward 3 steps, then turn left" "@6" "actually, turn right instead"
     b V-T8 --voice "find the door and walk toward it" "@30" "stop"
     ;;
+  steer)
+    start_front TONYPI_X=1
+    b T4b "walk forward 3 steps, then turn left" "@7" "actually, turn right instead"
+    b T8b "walk forward 5 steps" "@7" "stop"
+    b T8c "dance" "@8" "stop"
+    ;;
   deadcloud)
     start_front TONYPI_CLOUD=deadcloud/gpt TONYPI_PI_EXTRA_EXT=tests/pi_dead_cloud.ts
     b T7a "wave"
