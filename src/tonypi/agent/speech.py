@@ -145,6 +145,12 @@ class Speaker:
             return
         self._play((c.audio_int16_bytes for c in self.voice.synthesize(text)), self.rate)  # per sentence
 
+    def play_wav(self, wav: bytes) -> None:
+        """Blocking playback of a WAV recording (debug mode plays back what Tony heard)."""
+        with wave.open(io.BytesIO(wav)) as w:
+            rate, pcm = w.getframerate(), w.readframes(w.getnframes())
+        self._play([pcm], rate)
+
     def stop(self) -> None:
         with self._lock:
             if self._proc and self._proc.poll() is None:
@@ -204,13 +210,14 @@ class Listener:
 
     def __init__(self, speaker: Speaker, on_wake: Callable[[], None], on_command: Callable[[str], None],
                  kws_threshold: float = 0.1, kws_score: float = 2.5,
-                 mode: str = VOICE_MODE) -> None:
+                 mode: str = VOICE_MODE, on_state: Callable[[str], None] | None = None) -> None:
         import sherpa_onnx
 
         self.speaker = speaker
         self.on_wake = on_wake
         self.on_command = on_command
         self.mode = mode  # see VOICE_MODE
+        self.on_state = on_state  # "listening" | "stopped" | "followup_closed" (see _mark)
         self.kws = sherpa_onnx.KeywordSpotter(
             tokens=str(KWS_DIR / "tokens.txt"),
             encoder=str(KWS_DIR / "encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx"),
@@ -236,8 +243,10 @@ class Listener:
         self.clock = time.monotonic  # tests replace it to simulate time
 
     def _mark(self, state: str) -> None:
-        """'listening' / 'stopped': the mic is open for a command or closed again (no sound; tests hook this)."""
+        """'listening': follow-up window open. 'stopped': mic closed again. 'followup_closed': the window ended unused."""
         log.debug("mic %s", state)
+        if self.on_state:
+            self.on_state(state)
 
     def followup(self) -> None:
         """Call when Tony has finished answering a voice command: the next words need no wake phrase."""
@@ -340,23 +349,25 @@ class Listener:
         if not _has_words(text):  # silence or noise ("ah", "h"): never send it to LFM3, which invents "Thank you"
             if followup:
                 log.info("follow-up window closed (%r)", text)
+                self._mark("followup_closed")
                 return
             log.info("nothing heard after the wake phrase (%r)", text)
             self.on_command("")
             return
-        if self.mode == "direct" and text and len(audio) >= RATE // 4:
+        wav = to_wav(audio)  # handed on with every command: debug mode plays it back
+        if self.mode == "direct" and len(audio) >= RATE // 4:
             log.info("heard command (rough): %r; planning from the audio", text)
-            self.on_command(text, to_wav(audio))
+            self.on_command(text, wav, recording=wav)
             return
         if self.mode != "transcribe":
             log.info("heard command: %r", text)
-            self.on_command(text)
+            self.on_command(text, recording=wav)
             return
 
         def second_pass() -> None:  # off the mic thread, so audio keeps flowing
             final = lfm_transcribe(audio, text, has_preroll)
             log.info("heard command: %r", final)
-            self.on_command(final)
+            self.on_command(final, recording=wav)
 
         threading.Thread(target=second_pass, name="asr-2nd-pass", daemon=True).start()
 

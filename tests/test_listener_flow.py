@@ -37,7 +37,7 @@ def rig():
 
     events, clock = [], [0.0]
     lis = speech.Listener(Quiet(), lambda: events.append(("wake", clock[0])),
-                          lambda text, audio=None: events.append((text, clock[0])), mode="stream")
+                          lambda text, audio=None, recording=None: events.append((text, clock[0])), mode="stream")
     lis._mark = lambda state: events.append((state, clock[0]))
     lis.clock = lambda: clock[0]
 
@@ -58,7 +58,7 @@ def rig():
 
 
 def commands(events):
-    return [e for e, _ in events if e not in ("wake", "listening", "stopped")]
+    return [e for e, _ in events if e not in ("wake", "listening", "stopped", "followup_closed")]
 
 
 def waved(events):  # the streaming model's exact wording varies a little ("wave at us" / "wavered us")

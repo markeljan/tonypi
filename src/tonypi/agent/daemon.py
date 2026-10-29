@@ -20,7 +20,7 @@ from pathlib import Path
 
 from tonypi.agent import vision
 from tonypi.agent.body import LOW_BATTERY_MV, Body
-from tonypi.agent.brain import STOP_RE, Brain
+from tonypi.agent.brain import STOP_RE, Brain, debug_command
 from tonypi.agent.speech import Listener, Speaker
 
 log = logging.getLogger("tonypi.agent")
@@ -30,6 +30,7 @@ IDLE_HOT_C = 80
 
 
 class Agent:
+    debug = False  # see __init__
     def __init__(self, voice: bool = True) -> None:
         self.body = Body()
         self.speaker = Speaker()
@@ -41,7 +42,10 @@ class Agent:
         self.busy = threading.Event()
         self.body_lock = threading.Lock()  # held by the worker while a command runs
         self.last_warn = 0.0
-        self.listener = Listener(self.speaker, self._on_wake, lambda t, a=None: self.submit(t, "voice", a)) if voice else None
+        self.debug = False  # "enable debug mode": play back what was heard and narrate every step
+        self.listener = Listener(self.speaker, self._on_wake,
+                                 lambda t, a=None, recording=None: self.submit(t, "voice", a, recording=recording),
+                                 on_state=self._on_mic_state) if voice else None
 
     # ---- events -----------------------------------------------------------------------------------------------
 
@@ -58,13 +62,22 @@ class Agent:
 
     # ---- commands ---------------------------------------------------------------------------------------------
 
-    def submit(self, text: str, source: str, audio: bytes | None = None) -> int:
-        """audio: the spoken command as WAV (voice), planned from directly; text is then the rough transcript."""
+    def submit(self, text: str, source: str, audio: bytes | None = None, recording: bytes | None = None) -> int:
+        """audio: the spoken command as WAV, planned from directly (TONYPI_VOICE=direct); text is then the rough
+        transcript. recording: what the mic captured, played back in debug mode."""
         rid = next(self.ids)
         text = text.strip()
         self.emit("heard", id=rid, source=source, text=text)
         if not text:
             self.emit("info", id=rid, text="didn't catch a command after the wake phrase")
+            if self.debug:
+                self._announce("I heard the wake phrase, but no command.")
+            self.emit("done", id=rid)
+            return rid
+        if (on := debug_command(text)) is not None:  # before STOP_RE: "stop debug mode" mustn't stop the robot
+            self.debug = on
+            self.emit("info", id=rid, text=f"debug mode {'on' if on else 'off'}")
+            self._announce(f"Debug mode {'on' if on else 'off'}.")
             self.emit("done", id=rid)
             return rid
         # anything new interrupts what's running; "stop" does nothing else
@@ -78,20 +91,29 @@ class Agent:
             self.jobs.get_nowait()  # drop a queued, not-yet-started command
         except queue.Empty:
             pass
-        self.jobs.put((rid, text, audio, source == "voice"))
+        self.jobs.put((rid, text, audio, source == "voice", recording))
         return rid
 
     def _on_wake(self) -> None:
         self.emit("wake")
 
+    def _announce(self, text: str) -> None:
+        """Debug narration, spoken in the background (never while the mic is open for a command)."""
+        self.emit("info", text=f"[debug] {text}")
+        threading.Thread(target=self.speaker.say, args=(text,), daemon=True).start()
+
+    def _on_mic_state(self, state: str) -> None:
+        if self.debug and state == "followup_closed":
+            self._announce("Follow-up listening finished.")
+
     def _worker(self) -> None:
         while True:
-            rid, text, audio, voice = self.jobs.get()
+            rid, text, audio, voice, recording = self.jobs.get()
             with self.body_lock:
                 self.busy.set()
                 self.body.cancelled.clear()
                 try:
-                    self._execute(rid, text, audio, voice)
+                    self._execute(rid, text, audio, voice, recording)
                 except Exception as e:
                     log.exception("command failed")
                     self.emit("info", id=rid, text=f"error: {e}")
@@ -100,9 +122,23 @@ class Agent:
                     self.busy.clear()
                     self.emit("done", id=rid)
 
-    def _execute(self, rid: int, text: str, audio: bytes | None = None, voice: bool = False) -> None:
+    def _execute(self, rid: int, text: str, audio: bytes | None = None, voice: bool = False,
+                 recording: bytes | None = None) -> None:
         """Moves start as soon as the streamed plan contains them (~0.9 s before it's complete), one after another in
         this thread (a new body.run preempts the running one); the reply is spoken as soon as it's known."""
+        debug = self.debug
+
+        def narrate(s: str) -> None:  # debug: spoken in order, blocking
+            if not self.body.cancelled.is_set():
+                self.emit("info", id=rid, text=f"[debug] {s}")
+                self.speaker.say(s)
+
+        if debug and voice:
+            if recording:
+                narrate("Playing back audio.")
+                self.speaker.play_wav(recording)
+            narrate(f"Audio processed as: {text}" if audio is None else
+                    f"Planning straight from the audio. The rough transcript was: {text}")
         t = time.monotonic()
         self.emit("thinking", id=rid)
         todo: queue.Queue = queue.Queue()
@@ -123,7 +159,8 @@ class Agent:
         def planner() -> None:
             reply = ""
             try:
-                plan = self.brain.plan_stream(text, audio, on_action=lambda n, c: todo.put((n, c)))
+                plan = self.brain.plan_stream(text, audio,  # debug: whole plan first, then step by step
+                                              on_action=None if debug else lambda n, c: todo.put((n, c)))
                 self.emit("plan", id=rid, actions=plan.actions, say=plan.say, source=plan.source,
                           seconds=round(time.monotonic() - t, 1))
                 reply = plan.say
@@ -141,6 +178,10 @@ class Agent:
             if stopped or self.body.cancelled.is_set():
                 continue  # drain
             name, count = item
+            label = name.replace("_", " ") + ("" if count == 1 else f" {count} times")
+            if debug:
+                speech.join()  # the reply first, then each step announced in order
+                narrate(f"Starting {label}.")
             self.emit("action", id=rid, name=name, count=count)
             if name == "describe_view":
                 self._describe(rid, say, speech)
@@ -151,10 +192,14 @@ class Agent:
                 ok = self.body.run(name, count, lambda s: (speech.join(), say(s)))
                 moved = moved or not name.startswith(("look_", "nod", "shake"))
                 stopped = not ok
+            if debug:
+                narrate(f"{label.capitalize()} {'finished' if not stopped else 'stopped'}.")
         if moved:
             self.body.settle()
         speech.join()
         if voice and self.listener and not self.body.cancelled.is_set():
+            if debug:
+                narrate("Listening for a follow-up.")  # said before the window opens, so it's not heard as a command
             self.listener.followup()  # spoken command answered: the next words need no "hey Tony"
 
     def _describe(self, rid: int, say, speech: threading.Thread) -> None:

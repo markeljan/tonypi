@@ -95,6 +95,21 @@ SYSTEM = (
     'wake up -> {"actions":[{"action":"get_up","count":1}],"say":"Good morning!"}'
 )
 
+# "enable debug mode" / "debug off" ... (checked before STOP_RE: "stop debug mode" must not stop the robot)
+_DEBUG = r"de-?\s?bug(ging)?"
+DEBUG_ON_RE = re.compile(rf"\b(enable|turn on|switch on|start|activate|enter)\b.{{0,20}}\b{_DEBUG}|\b{_DEBUG}( mode)? (on|enabled?)\b", re.I)
+DEBUG_OFF_RE = re.compile(rf"\b(disable|turn off|switch off|stop|deactivate|exit|leave|end)\b.{{0,20}}\b{_DEBUG}|\b{_DEBUG}( mode)? (off|disabled?)\b", re.I)
+
+
+def debug_command(text: str) -> bool | None:
+    """True/False to switch debug mode on/off, None if the request isn't about debug mode."""
+    if DEBUG_OFF_RE.search(text):
+        return False
+    if DEBUG_ON_RE.search(text):
+        return True
+    return None
+
+
 STOP_RE = re.compile(r"^\W*(stop|halt|freeze|stay|enough|cancel|quiet|be quiet|shut up)\b", re.I)
 VISION_RE = re.compile(r"\b(what (do|can) you see|what'?s in front|describe (what|the)|look at (this|that|me)|"
                        r"who'?s (here|there)|what is (this|that))\b", re.I)
