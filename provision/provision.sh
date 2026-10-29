@@ -130,7 +130,10 @@ for unit in "$REPO"/provision/systemd/*.service; do
   install -m 0644 "$unit" /etc/systemd/system/
 done
 systemctl daemon-reload
-for u in tonypi-llm.service; do
+ln -sf "$REPO/.venv/bin/tonypi-chat" /usr/local/bin/tonypi-chat
+# USB mic gain to max (default ~82%): the robot's mic is weak at a distance
+amixer -c 0 -q cset name='Mic Capture Volume' 496 && alsactl store || log "  could not set mic gain"
+for u in tonypi-llm.service tonypi-agent.service; do
   [[ -f /etc/systemd/system/$u ]] && systemctl enable --now "$u" || true
 done
 

@@ -1,0 +1,19 @@
+[Unit]
+Description=TonyPi agent (owns the board; terminal + "hey Tony" voice commands -> speech and motion)
+After=tonypi-llm.service sound.target
+Wants=tonypi-llm.service
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+User=pi
+# /run/tonypi/agent.sock is how tonypi-chat talks to it
+RuntimeDirectory=tonypi
+RuntimeDirectoryMode=0755
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/pi/tonypi/.venv/bin/tonypi-agent
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

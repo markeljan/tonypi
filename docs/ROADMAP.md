@@ -19,18 +19,20 @@ Status markers: [x] done · [~] in progress · [ ] todo
 ## 2. Body runtime (`tonyd`)
 - [ ] Daemon owning the board: 100 Hz IMU → orientation filter (Mahony), battery + servo temp polling, key events
 - [ ] Verify torque on/off command (0x0B vs 0x0C) with the robot lying down
+- [~] Fall detection: tilt guard stops motions (agent); still todo: gyro, protective pose, auto get-up (`get_up` action exists, unverified on hardware)
 - [ ] Fall detection (tilt + gyro) → protective pose → classify face-up/face-down → `stand_up_back` / `stand_up_front`
 - [ ] Walk state machine (start → loop → end), turn, side-step; head look-at
-- [ ] Thermal / low-battery watchdog (unload or sit when idle)
-- [ ] Local IPC (Unix socket JSON or zenoh) for other processes
+- [~] Thermal / low-battery watchdog: agent skips/stops hot motions, warns when idle; still todo: unload or sit when idle
+- [~] Local IPC: agent Unix socket `/run/tonypi/agent.sock` (JSON lines, used by `tonypi-chat`)
 
 ## 3. Senses
 - [ ] Camera service: continuous capture, latest frame + JPEG snapshot, simple detectors (color/AprilTag/person)
-- [ ] Audio: always-on mic → VAD → wake word → STT → events; TTS → speaker with barge-in
+- [x] Audio: always-on mic → "hey Tony" wake word → streaming STT → command; Piper TTS → speaker (2026-10-28)
+- [ ] Barge-in while speaking; better far-field mic
 
 ## 4. Brain
 - [ ] Robot MCP server (Streamable HTTP): walk, turn, look, snapshot, play_motion, say, get_status, stop
-- [ ] Local fast loop on LFM2.5-1.2B (few tools, ≤4 steps), offline-capable
+- [x] Local fast loop on LFM2.5-1.2B: JSON-schema plan (say + ≤6 enum actions), offline, ~2–4 s (`tonypi-agent`, 2026-10-28)
 - [ ] `escalate(task)` → Claude Opus via Claude Agent SDK (tools=[], robot MCP, PreToolUse gate)
 - [ ] "Go get that": VLM target → head tracking → walk-to (visual servoing) loop
 - [ ] Optional: Hermes Agent attached to the same MCP server (Telegram / chat)

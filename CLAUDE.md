@@ -50,11 +50,26 @@ brain: thin local loop (LFM2.5-1.2B, few tools, fast, offline) + escalate() to C
 ```
 Hermes Agent (Nous) can attach to the same MCP server later (it needs ≥64K context, so not for the local 1.2B tier).
 
+## Agent (live: `tonypi-agent.service`, since 2026-10-28)
+`src/tonypi/agent/` — the always-on process. **It owns `/dev/ttyAMA0`**: `sudo systemctl stop tonypi-agent` before
+`tools/bench.py` or any script that opens the board, and start it again after.
+- Input: terminal (`tonypi-chat` → `/run/tonypi/agent.sock`, JSON lines) and voice ("hey Tony …": sherpa-onnx KWS
+  gigaspeech 3.3M → streaming zipformer en-2023-06-26 with hotwords; mic gain at max). Newest command preempts;
+  `stop` never reaches the LLM.
+- `brain.py`: LFM2.5-1.2B via llama-server, `response_format` json_schema with an action **enum** (it can't invent
+  moves) + rules (stop, vision, status questions, a named move is never dropped). ~2–4 s per command.
+  llama-server needs `-ub 64 -cms 64`: LFM2 is hybrid, prompt cache resumes only from a checkpoint at len-ubatch.
+- `body.py`: actions → motion sequences; servo temp checked before (≥81 °C skip) and during (≥83 °C stop + stand)
+  every motion; fall guard tilt >70° for 0.3 s (dances lean past 50° on purpose); idle warning at 80 °C / 10.5 V.
+- `speech.py`: Piper (lessac medium) out; the wake phrase is removed from the transcript by token timestamps
+  (ASR writes it as "hey tony", "haytony", "athony", "eight only"…). `vision.py`: snapshot + LFM2.5-VL-1.6B (~25 s).
+- Far-field voice is weak with the stock USB mic (works at ~1 m); a mic array would be the real fix.
+
 ## Status / next steps
 See `docs/ROADMAP.md`. Provisioning: `sudo provision/provision.sh` (idempotent; runs once automatically on first boot via
 `tonypi-provision.service`, log in `/var/log/tonypi-provision.log`).
 
 ## Dev
 - `uv sync` then `uv run pytest`. Python package lives in `src/tonypi`.
-- `uv run python tools/bench.py` — read-only hardware check (stop `tonyd` first if running).
+- `uv run python tools/bench.py` — read-only hardware check (`sudo systemctl stop tonypi-agent` first).
 - Use absolute paths in shell commands.
