@@ -1,15 +1,15 @@
-// The brain as one pi model, "tony/brain": the owner's cloud subscription when logged in and reachable, else the
+// The brain as one pi model, "tony/brain": the owner's ChatGPT subscription when logged in and reachable, else the
 // onboard LFM3-Omni-2B (llama-server :8080, provider "local" in pi/models.json).
 //
 // - user turns go to the first cloud model in TONYPI_CLOUD that has credentials (pi /login), unless the cloud
-//   failed in the last COOLDOWN_MS;
+//   failed in the last COOLDOWN_MS (any pi provider works here, e.g. anthropic/..., but the owner chose ChatGPT);
 // - a failed cloud request is retried by pi; the retry is routed to LFM3 and the cloud is skipped for a while;
 // - tool follow-ups stay on the model that answered the turn (keeps prompt caches valid).
 
 import type { Api, Model } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-const CLOUD = (process.env.TONYPI_CLOUD ?? "openai/gpt-6.1-sol,openai-codex/gpt-6.1-sol,anthropic/claude-sonnet-5-5")
+const CLOUD = (process.env.TONYPI_CLOUD ?? "openai/gpt-6.1-sol,openai-codex/gpt-6.1-sol")
   .split(",").map((s) => s.trim()).filter(Boolean);
 const LOCAL = process.env.TONYPI_LOCAL ?? "local/lfm3-omni-2b";
 const COOLDOWN_MS = Number(process.env.TONYPI_CLOUD_COOLDOWN_S ?? 120) * 1000;

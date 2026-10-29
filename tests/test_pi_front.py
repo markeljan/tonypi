@@ -6,6 +6,8 @@ from __future__ import annotations
 import threading
 import time
 
+import pytest
+
 from tonypi.pi_front import daemon
 
 
@@ -33,6 +35,11 @@ class FakeTonyd:
 
     def stop(self) -> None:
         self.stops += 1
+
+
+@pytest.fixture(autouse=True)
+def _log(tmp_path, monkeypatch):
+    monkeypatch.setattr(daemon, "LOG", tmp_path / "pi-front.jsonl")
 
 
 def front() -> daemon.Front:

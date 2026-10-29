@@ -20,12 +20,12 @@ ln -sf "$HERE/models.json" ~/.pi/agent/models.json      # provider "local": LFM3
 ln -sf "$HERE/settings.json" ~/.pi/agent/settings.json  # fast retries, so a dead cloud falls back to LFM3 quickly
 
 echo "pi $(pi --version) on node $(node --version)."
-for p in openai anthropic; do echo "  $p: $(pi auth check --provider $p </dev/null 2>&1)"; done
+for p in openai; do echo "  $p: $(pi auth check --provider $p </dev/null 2>&1)"; done
 cat <<'EOF'
-Cloud brain (optional; without it Tony uses the onboard LFM3):
+Cloud brain = the owner's ChatGPT subscription (without it Tony uses the onboard LFM3):
   pi            then  /login  → "OpenAI (ChatGPT subscription)" → "Sign in with ChatGPT"
                 (open the URL on any device; if it ends on a localhost page that doesn't load, paste that URL back)
-                and/or /login → Anthropic (Claude Pro/Max; billed as extra usage).   /quit when done.
+                then /quit.
 Run:  tonypi-pi            (front end: voice + /run/tonypi/pi.sock; stop tonypi-agent first, it owns the mic)
       tonypi-pi-chat "wave"
 EOF

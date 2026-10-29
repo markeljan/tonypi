@@ -1,5 +1,5 @@
 {
   "$schema": "https://pi.dev/schemas/settings.schema.json",
-  "retry": {"enabled": true, "maxRetries": 2, "baseDelayMs": 300, "provider": {"timeoutMs": 30000, "maxRetries": 0}},
+  "retry": {"enabled": true, "maxRetries": 2, "baseDelayMs": 300, "provider": {"timeoutMs": 120000, "maxRetries": 0}},
   "quietStartup": true
 }
