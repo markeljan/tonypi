@@ -4,7 +4,7 @@ Flow for each utterance (typed, spoken, later from the iPhone app):
   - "stop" (and friends): body, speech and brain halt at once. No LLM is involved, ever.
   - idle: a new task starts on the best available backend (Claude, else the local LFM3 planner).
   - busy: it steers the running task. The words go to a pending slot and `steer` is raised:
-      * a tool that is running sees `ctx.steer`, stops at a safe point (walking: after the current step) and its
+      * a tool that is running sees its `ctx.steer`, stops at a safe point (walking: after the current step) and its
         result carries the new words to the brain ("[While this ran, the user said: ...]");
       * a motion tool that is about to start is held back and returns the new words instead;
       * if no tool picks them up within STEER_GRACE_S (the model is mid-thought), the backend is cut
@@ -70,7 +70,7 @@ class Harness:
         self.task_ids: list[int] = []
         self.backend = None
         self.pending: list[str] = []
-        self.steer = threading.Event()  # pending words exist (tools watch this)
+        self.active: set[threading.Event] = set()  # ctx.steer of each running tool call
         self.tools_running = 0
         self.stopped = False
 
@@ -128,6 +128,7 @@ class Harness:
         t = time.monotonic()
         self.stopped = True
         self.take_pending()
+        self._signal_tools()
         for p in self.peripherals.values():
             p.stop()
         self.emit("action", id=rid, name="stop", count=1, ms=round((time.monotonic() - t) * 1000))
@@ -142,7 +143,7 @@ class Harness:
     async def _steer(self, rid: int, text: str) -> None:
         self.task_ids.append(rid)
         self.pending.append(text)
-        self.steer.set()
+        self._signal_tools()
         voice = self.peripherals.get("voice")
         if voice:
             voice.stop()  # they're talking: don't talk over them
@@ -159,13 +160,19 @@ class Harness:
 
     def take_pending(self) -> list[str]:
         msgs, self.pending = self.pending, []
-        self.steer.clear()
         return msgs
+
+    def _signal_tools(self) -> None:
+        """Running tools stop at their next safe point. Stays set for that call, even after the words are taken."""
+        for ev in list(self.active):
+            ev.set()
 
     # ---- task -------------------------------------------------------------------------------------------------
 
-    async def _pick(self):
+    async def _pick(self, failed: set[str] = frozenset()):
         for b in self.backends:
+            if b.name in failed:
+                continue
             if b.configured() and await asyncio.to_thread(b.available):
                 return b
             if b is not self.backends[-1] and b.configured():
@@ -177,9 +184,10 @@ class Harness:
         t0 = time.monotonic()
         self.emit("thinking")
         msg: str | None = text
+        failed: set[str] = set()
         try:
             while msg is not None and not self.stopped:
-                backend = self.backend = await self._pick()
+                backend = self.backend = await self._pick(failed)
                 self.emit("info", text=f"brain: {backend.name}")
                 try:
                     await backend.run(msg, source)
@@ -187,7 +195,8 @@ class Harness:
                     if backend is self.backends[-1]:
                         raise
                     self.emit("info", text=f"{backend.name} failed ({e}); falling back")
-                    continue  # same words, next backend (it now reports unavailable)
+                    failed.add(backend.name)
+                    continue  # same words, next backend
                 msgs = self.take_pending()
                 msg = backend.followup_text(msgs) if msgs and not self.stopped else None
         except Exception as e:
@@ -222,14 +231,19 @@ class Harness:
             return Result(f"NOT done: before it started, the user said: {_quote(msgs)}. "
                           "Follow the newest instruction.", error=True)
         self.tools_running += 1
+        steer = threading.Event()
+        if self.pending:
+            steer.set()
+        self.active.add(steer)
         t = time.monotonic()
         try:
-            res = await asyncio.to_thread(tool.handler, args, Ctx(self.steer, self.emit))
+            res = await asyncio.to_thread(tool.handler, args, Ctx(steer, self.emit))
         except Exception as e:
             log.exception("tool %s failed", name)
             res = Result(f"error: {e}", error=True)
         finally:
             self.tools_running -= 1
+            self.active.discard(steer)
         self.emit("tool_result", name=name, text=res.text[:300], images=len(res.images),
                   seconds=round(time.monotonic() - t, 2))
         if inject and self.pending:

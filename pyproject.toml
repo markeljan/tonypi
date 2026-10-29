@@ -14,6 +14,8 @@ tonypi-agent = "tonypi.agent.daemon:main"
 tonypi-chat = "tonypi.agent.chat:main"
 tonyd = "tonypi.tonyd.server:main"
 tonypi-mcp = "tonypi.mcp_server:main"
+tonypi-harness = "tonypi.harness.server:main"
+tonypi-harness-chat = "tonypi.harness.server:chat"
 
 [project.optional-dependencies]
 vision = ["opencv-python-headless>=4.10"]
