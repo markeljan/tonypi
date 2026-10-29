@@ -116,3 +116,11 @@ def test_thermal_stop_relaxes_instead_of_standing():
     assert not body.run("wave", 1, said.append)
     assert body.board.calls[-1] == ("torque", False)
     assert body.player.played == [] and "motors off" in said[0]
+
+
+def test_stand_while_lying_gets_up_first():
+    body = _body(lying=True)
+    assert body.run("stand", 1, lambda s: None)
+    assert body.player.played == ["stand_up_back", "stand_slow"]
+    body.player.played.clear()
+    assert body.run("stand", 1, lambda s: None) and body.player.played == ["stand_slow"]  # already upright

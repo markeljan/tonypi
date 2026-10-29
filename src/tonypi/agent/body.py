@@ -129,7 +129,7 @@ class Body:
                         return False
             self.board.head(250, {ch: HEAD_CENTRE[ch]})
             return self._sleep(0.3)
-        if action == "get_up":
+        if action == "get_up" or (action == "stand" and self.lying()):  # stand_slow alone fails from the floor
             if not self.lying():
                 return self._motions(["stand_slow"], say, guard_fall=False)
             s = self.board.imu
