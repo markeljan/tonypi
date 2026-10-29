@@ -7,10 +7,8 @@ import collections
 import io
 import json
 import logging
-import math
 import os
 import re
-import struct
 import subprocess
 import tempfile
 import threading
@@ -147,21 +145,6 @@ class Speaker:
             return
         self._play((c.audio_int16_bytes for c in self.voice.synthesize(text)), self.rate)  # per sentence
 
-    @staticmethod
-    def _tones(freqs: tuple[int, ...], ms: int = 60, amp: int = 6000) -> bytes:
-        n, fade = int(ms / 1000 * RATE), int(0.012 * RATE)  # 12 ms fades: no clicks
-        return b"".join(struct.pack("<h", int(amp * math.sin(2 * math.pi * f * i / RATE) * min(1, i / fade, (n - i) / fade)))
-                        for f in freqs for i in range(n))
-
-    def cue(self, kind: str) -> None:
-        """'listen': soft rising tone, the mic is open for a command. 'done': falling tone, it's closed."""
-        if not hasattr(self, "_cues"):
-            self._cues = {"listen": self._tones((660, 990)), "done": self._tones((990, 660), amp=4500)}
-        self._play([self._cues[kind]], RATE)
-
-    def chirp(self) -> None:
-        self.cue("listen")
-
     def stop(self) -> None:
         with self._lock:
             if self._proc and self._proc.poll() is None:
@@ -252,9 +235,9 @@ class Listener:
         self._followup = False
         self.clock = time.monotonic  # tests replace it to simulate time
 
-    def _cue(self, kind: str) -> None:
-        if hasattr(self.speaker, "cue"):
-            threading.Thread(target=self.speaker.cue, args=(kind,), daemon=True).start()
+    def _mark(self, state: str) -> None:
+        """'listening' / 'stopped': the mic is open for a command or closed again (no sound; tests hook this)."""
+        log.debug("mic %s", state)
 
     def followup(self) -> None:
         """Call when Tony has finished answering a voice command: the next words need no wake phrase."""
@@ -289,7 +272,7 @@ class Listener:
             self._followup = False
             self._open(st, FOLLOWUP_S, followup=True)
             log.info("listening for a follow-up")
-            self._cue("listen")
+            self._mark("listening")
         if st["asr"] is None:
             st["ring"].append(samples)
             st["kws"].accept_waveform(RATE, samples)
@@ -308,9 +291,6 @@ class Listener:
                     return
         else:
             s = st["asr"]
-            if st["followup"] and not st["started"] and (
-                    self.speaker.speaking.is_set() or self.clock() < self.speaker.quiet_until):
-                samples = np.zeros_like(samples)  # don't hear our own "listening" tone as speech
             s.accept_waveform(RATE, samples)
             st["audio"].append(samples)
             while self.asr.is_ready(s):
@@ -356,7 +336,7 @@ class Listener:
         followup = st["followup"]
         st["asr"], st["audio"], st["followup"] = None, [], False
         st["kws"] = self.kws.create_stream()
-        self._cue("done")
+        self._mark("stopped")
         if not _has_words(text):  # silence or noise ("ah", "h"): never send it to LFM3, which invents "Thank you"
             if followup:
                 log.info("follow-up window closed (%r)", text)

@@ -83,7 +83,6 @@ class Agent:
 
     def _on_wake(self) -> None:
         self.emit("wake")
-        threading.Thread(target=self.speaker.chirp, daemon=True).start()
 
     def _worker(self) -> None:
         while True:

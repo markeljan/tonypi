@@ -16,7 +16,7 @@ Status markers: [x] done · [~] in progress · [ ] todo
 - [x] Vision: same LFM3-Omni server (no separate VLM service), ~15 s per image
 - [x] Speech-to-text second pass with LFM3-Omni: 0% word errors on the robot mic vs 18% streaming-only
 - [x] Tested audio straight into the plan (1.3 s faster, less accurate: kept as `TONYPI_VOICE=direct`); end-to-end voice latency 7.3 s → ~3.5 s (2026-10-29)
-- [x] Follow-up window: 6 s without the wake phrase after each answer; listening/stopped cues
+- [x] Follow-up window: 6 s to start a follow-up without the wake phrase after each answer (no tones)
 - [ ] Always-on listening: audio-only addressee detection was 5–8/12 on real speech (docs/MODELS.md); try name-anywhere + d1, or a visual "facing me" cue
 - [ ] Same prompts against the Mac's OpenAI-compatible endpoint (LM Studio) for comparison
 

@@ -38,7 +38,7 @@ def rig():
     events, clock = [], [0.0]
     lis = speech.Listener(Quiet(), lambda: events.append(("wake", clock[0])),
                           lambda text, audio=None: events.append((text, clock[0])), mode="stream")
-    lis._cue = lambda kind: events.append((kind, clock[0]))
+    lis._mark = lambda state: events.append((state, clock[0]))
     lis.clock = lambda: clock[0]
 
     def play(*parts, followup=False):
@@ -58,7 +58,7 @@ def rig():
 
 
 def commands(events):
-    return [e for e, _ in events if e not in ("wake", "listen", "done")]
+    return [e for e, _ in events if e not in ("wake", "listening", "stopped")]
 
 
 def waved(events):  # the streaming model's exact wording varies a little ("wave at us" / "wavered us")
@@ -88,7 +88,7 @@ def test_followup_window(rig):
     synth, play = rig
     assert waved(play(4.0, synth("Wave at us."), 2.0, followup=True))                     # no wake phrase
     ev = play(8.0, followup=True)                                                          # silence: closes quietly
-    assert commands(ev) == [] and next(t for e, t in ev if e == "done") >= speech.FOLLOWUP_S
+    assert commands(ev) == [] and next(t for e, t in ev if e == "stopped") >= speech.FOLLOWUP_S
     assert commands(play(speech.FOLLOWUP_S + 1, synth("Wave at us."), 2.0, followup=True)) == []  # too late
 
 

@@ -95,7 +95,7 @@ streaming text there. Correct moves beat 1.3 s, so `transcribe` is the default.
 
 Listening timing: after "hey Tony" the command must start within 3 s; after Tony answers a voice command he waits
 6 s for a follow-up to start without "hey Tony" (`TONYPI_FOLLOWUP_S`); either way the command ends 0.7 s after you
-stop. Rising tone = listening, falling tone = stopped (Tony's own tone is muted from the mic). A lone "hey Tony"
+stop. No listening tones (removed: the user found them unnecessary). A lone "hey Tony"
 inside the window acts as a wake. Silence/noise never goes to LFM3 (it invents "Thank you"); known hallucinations
 are dropped and a move only the streaming draft heard is passed along ("not your head (or: nodd your head)").
 
