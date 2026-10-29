@@ -15,6 +15,11 @@ it's told ("hey, go get that"), with local LFM models on the Pi and Claude (Opus
   + harness Node/Hermes jobs. `earlyoom` (`provision/files/earlyoom.default`) kills dev/harness jobs first, then the
   largest process (llama-server, `Restart=always`); tonyd (OOMScoreAdjust −900), agent and MCP (−500) are never chosen.
   Check `free -m` before anything big (second llama-server, builds) and run it under `flock /run/lock/tonypi-robot.lock`.
+- **Hang recovery**: the `watchdog` daemon (`provision/files/watchdog.conf`, real-time, owns `/dev/watchdog`; systemd's
+  RuntimeWatchdog is off) reboots the Pi if sshd stops answering for 3 min, and the hardware resets it 15 s after the
+  daemon itself stalls. `tonypi-bootcheck.service` makes Tony say "System booted from a failure." when the last boot
+  didn't end cleanly and saves the end of that boot's log to `/var/log/tonypi/crash-*.log`. Journal is persistent;
+  earlyoom logs memory every minute; `psi=1` enables `/proc/pressure`.
 - No `sudo chmod 777` hacks. Access is via groups (dialout, gpio, i2c, video, audio) + `provision/files/99-tonypi.rules`.
 
 ## Hardware facts (verified live 2026-10-28 with `tools/bench.py`)

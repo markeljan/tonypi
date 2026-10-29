@@ -69,6 +69,21 @@ dpkg -s earlyoom >/dev/null 2>&1 || apt-get -y install earlyoom || log "  apt: c
 install -m 0644 "$REPO/provision/files/earlyoom.default" /etc/default/earlyoom
 systemctl enable earlyoom >/dev/null 2>&1 && systemctl restart earlyoom || true
 
+log "watchdog (reboot by itself when userspace hangs) + crash check"
+dpkg -s watchdog >/dev/null 2>&1 || apt-get -y install watchdog || log "  apt: could not install watchdog"
+install -d /usr/local/lib/tonypi /etc/systemd/system.conf.d
+install -m 0755 "$REPO/provision/files/tonypi-health-check" /usr/local/lib/tonypi/health-check
+install -m 0755 "$REPO/provision/files/tonypi-bootcheck" /usr/local/lib/tonypi/bootcheck
+install -m 0644 "$REPO/provision/files/watchdog.conf" /etc/watchdog.conf
+install -m 0644 "$REPO/provision/files/tonypi-watchdog.conf" /etc/systemd/system.conf.d/tonypi-watchdog.conf
+systemctl daemon-reexec   # systemd lets go of /dev/watchdog (RuntimeWatchdogSec=off) so the daemon can own it
+systemctl enable watchdog >/dev/null 2>&1 && systemctl restart watchdog || true
+mkdir -p /var/lib/tonypi
+[[ -e /var/lib/tonypi/clean-shutdown ]] || date -Is > /var/lib/tonypi/clean-shutdown  # provisioning isn't a crash
+# memory pressure stats (/proc/pressure) for diagnosing hangs; takes effect on the next boot
+CMDLINE=/boot/firmware/cmdline.txt
+grep -qw 'psi=1' "$CMDLINE" || sed -i '1 s/$/ psi=1/' "$CMDLINE"
+
 CFG=/boot/firmware/config.txt
 add_cfg() { grep -qxF "$1" "$CFG" || echo "$1" >> "$CFG"; }
 add_cfg "dtparam=uart0=on"
@@ -139,7 +154,7 @@ systemctl daemon-reload
 ln -sf "$REPO/.venv/bin/tonypi-chat" /usr/local/bin/tonypi-chat
 # USB mic gain to max (default ~82%): the robot's mic is weak at a distance
 amixer -c 0 -q cset name='Mic Capture Volume' 496 && alsactl store || log "  could not set mic gain"
-for u in tonypi-llm.service tonypi-tonyd.service tonypi-agent.service tonypi-mcp.service; do
+for u in tonypi-llm.service tonypi-tonyd.service tonypi-agent.service tonypi-mcp.service tonypi-bootcheck.service; do
   [[ -f /etc/systemd/system/$u ]] && systemctl enable --now "$u" || true
 done
 
