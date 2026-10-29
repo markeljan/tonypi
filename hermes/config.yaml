@@ -35,15 +35,18 @@ compression:
 
 # The robot is the only toolset: no terminal, files, browser, web, code execution or delegation.
 platform_toolsets:
-  cli: [tonypi, memory, skills]
-  api_server: [tonypi, memory, skills]
-  telegram: [tonypi, memory, skills]
+  cli: [mcp-tonypi, memory, skills]
+  api_server: [mcp-tonypi, memory, skills]
+  telegram: [mcp-tonypi, memory, skills]
 
 mcp_servers:
   tonypi:
     url: http://127.0.0.1:8765/mcp
     timeout: 200          # run_skill(wait=True) can take a while (dance ~60 s)
     connect_timeout: 10
+    tools:
+      resources: false   # no resource/prompt wrapper tools: every tool schema costs local-model context
+      prompts: false
 
 skills:
   creation_nudge_interval: 15
@@ -76,3 +79,8 @@ tools:
     enabled: "off"
   connectors:
     enabled: false
+
+gateway:
+  # Tony's gateway is its own process (API server :8642 for the voice front end, Telegram later), not folded into
+  # the default profile's multiplexer, so it can run as a systemd unit beside the robot services.
+  standalone: true
