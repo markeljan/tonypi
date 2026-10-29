@@ -143,8 +143,70 @@ def test_lfm_second_pass(monkeypatch):
     monkeypatch.setattr(speech.urllib.request, "urlopen", fake_urlopen("Dance for us."))
     assert speech.lfm_transcribe(audio, "dense for us", False) == "Dance for us"   # second segment: no wake phrase
     assert speech.lfm_transcribe(audio, "dense for us", True) == "dense for us"    # wake phrase missing: fallback
+    monkeypatch.setattr(speech.urllib.request, "urlopen", fake_urlopen("Hey Tony, dance for us."))
+    assert speech.lfm_transcribe(audio, "dance for us", False) == "dance for us"   # wake phrase in the follow-up window
 
     def down(req, timeout=0):
         raise OSError("connection refused")
     monkeypatch.setattr(speech.urllib.request, "urlopen", down)
     assert speech.lfm_transcribe(audio, "wave", True) == "wave"
+
+
+def _sse(text):
+    import io, json
+    chunks = [text[i:i + 7] for i in range(0, len(text), 7)]
+    lines = [("data: " + json.dumps({"choices": [{"delta": {"content": c}}]}) + "\n").encode() for c in chunks]
+
+    class R(io.BytesIO):
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+    return lambda req, timeout=0: R(b"".join(lines) + b"data: [DONE]\n")
+
+
+def test_plan_stream_hands_out_moves_early(monkeypatch):
+    from tonypi.agent import brain
+    raw = '{"actions":[{"action":"kung_fu","count":1},{"action":"kung_fu","count":1},{"action":"bow","count":1}],"say":"Hi"}'
+    monkeypatch.setattr(brain.urllib.request, "urlopen", _sse(raw))
+    got = []
+    p = brain.Brain().plan_stream("show me kung fu then bow", on_action=lambda n, c: got.append(n))
+    assert got == ["kung_fu", "bow"]                       # repeat dropped, both handed out while streaming
+    assert p.actions == [("kung_fu", 1), ("bow", 1)] and p.early == 2 and p.say == "Hi"
+
+
+def test_plan_stream_vision_rule_overrides_looks(monkeypatch):
+    from tonypi.agent import brain
+    monkeypatch.setattr(brain.urllib.request, "urlopen", _sse('{"actions":[{"action":"look_left","count":1}],"say":"x"}'))
+    got = []
+    p = brain.Brain().plan_stream("what do you see?", on_action=lambda n, c: got.append(n))
+    assert got == [] and p.actions == [("describe_view", 1)]
+
+
+def test_execute_runs_moves_one_at_a_time_in_order():
+    import queue, threading, time
+    from tonypi.agent.brain import Plan
+    from tonypi.agent.daemon import Agent
+
+    log, running = [], []
+
+    class Body:
+        cancelled = threading.Event()
+        def run(self, name, count, say):
+            assert not running, "two moves at once"
+            running.append(name); time.sleep(0.05); running.pop(); log.append(name)
+            return True
+        def settle(self): log.append("settle")
+
+    class Brain:
+        def plan_stream(self, text, audio, on_action):
+            on_action("wave", 1); time.sleep(0.02); on_action("bow", 1)
+            p = Plan([("wave", 1), ("bow", 1), ("nod", 1)], "hello"); p.early = 2
+            return p
+
+    class Speaker:
+        def say(self, s): log.append("say:" + s)
+
+    a = Agent.__new__(Agent)
+    a.body, a.brain, a.speaker, a.emit = Body(), Brain(), Speaker(), lambda *x, **k: None
+    a._execute(1, "wave then bow")
+    assert [x for x in log if not x.startswith("say")] == ["wave", "bow", "nod", "settle"]
+    assert "say:hello" in log

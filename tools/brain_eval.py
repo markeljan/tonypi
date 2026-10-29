@@ -16,8 +16,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from tonypi.agent.brain import SCHEMA, SYSTEM  # noqa: E402
 
-URL, LABEL = sys.argv[1], sys.argv[2]
-THINK = "--think" in sys.argv
 A = lambda *x: list(x)  # noqa: E731
 # (request, acceptable action-name sequences, regex the spoken reply must match, {action: min count})
 CASES = [
@@ -55,38 +53,44 @@ CASES = [
 ]
 
 
-def ask(q: str):
+def ask(q: str, url: str, think: bool):
     body = {"messages": [{"role": "system", "content": SYSTEM}, {"role": "user", "content": q}],
-            "max_tokens": 800 if THINK else 200, "temperature": 0.1, "cache_prompt": True,
+            "max_tokens": 800 if think else 200, "temperature": 0.1, "cache_prompt": True,
             "response_format": {"type": "json_schema", "json_schema": {"name": "plan", "schema": SCHEMA}},
-            "chat_template_kwargs": {"enable_thinking": THINK}}
+            "chat_template_kwargs": {"enable_thinking": think}}
     t = time.monotonic()
-    req = urllib.request.Request(URL, json.dumps(body).encode(), {"Content-Type": "application/json"})
+    req = urllib.request.Request(url, json.dumps(body).encode(), {"Content-Type": "application/json"})
     r = json.load(urllib.request.urlopen(req, timeout=600))
     return time.monotonic() - t, r["choices"][0]["message"]["content"]
 
 
-ask("hello")  # warm the prompt cache
-ok, times, misses = 0, [], []
-for q, accept, say_re, counts in CASES:
-    try:
-        dt, raw = ask(q)
-    except Exception as e:  # e.g. llama.cpp issue 31328: HTTP 500 with thinking off + response_format
-        dt, raw = 0.0, f"ERROR {e}"
-    times.append(dt)
-    try:
-        d = json.loads(raw)
-        acts = [(a["action"], a.get("count", 1)) for a in d.get("actions", [])]
-        say = d.get("say", "")
-    except Exception:
-        acts, say = None, raw
-    names = None if acts is None else [a for a, _ in acts]
-    good = (names in accept and (say_re is None or re.search(say_re, say or "", re.I))
-            and all(dict(acts or []).get(k, 0) >= v for k, v in counts.items()))
-    ok += bool(good)
-    if not good:
-        misses.append(f"    x {q!r}: {acts} say={say!r}")
-times.sort()
-print(f"{LABEL}: {ok}/{len(CASES)} correct | latency median {times[len(times) // 2]:.1f}s, "
-      f"p90 {times[int(len(times) * 0.9)]:.1f}s, max {times[-1]:.1f}s", flush=True)
-print("\n".join(misses), flush=True)
+def main() -> None:
+    url, label, think = sys.argv[1], sys.argv[2], "--think" in sys.argv
+    ask("hello", url, think)  # warm the prompt cache
+    ok, times, misses = 0, [], []
+    for q, accept, say_re, counts in CASES:
+        try:
+            dt, raw = ask(q, url, think)
+        except Exception as e:  # e.g. llama.cpp issue 31328: HTTP 500 with thinking off + response_format
+            dt, raw = 0.0, f"ERROR {e}"
+        times.append(dt)
+        try:
+            d = json.loads(raw)
+            acts = [(a["action"], a.get("count", 1)) for a in d.get("actions", [])]
+            say = d.get("say", "")
+        except Exception:
+            acts, say = None, raw
+        names = None if acts is None else [a for a, _ in acts]
+        good = (names in accept and (say_re is None or re.search(say_re, say or "", re.I))
+                and all(dict(acts or []).get(k, 0) >= v for k, v in counts.items()))
+        ok += bool(good)
+        if not good:
+            misses.append(f"    x {q!r}: {acts} say={say!r}")
+    times.sort()
+    print(f"{label}: {ok}/{len(CASES)} correct | latency median {times[len(times) // 2]:.1f}s, "
+          f"p90 {times[int(len(times) * 0.9)]:.1f}s, max {times[-1]:.1f}s", flush=True)
+    print("\n".join(misses), flush=True)
+
+
+if __name__ == "__main__":
+    main()

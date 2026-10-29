@@ -41,7 +41,7 @@ class Agent:
         self.busy = threading.Event()
         self.body_lock = threading.Lock()  # held by the worker while a command runs
         self.last_warn = 0.0
-        self.listener = Listener(self.speaker, self._on_wake, lambda t: self.submit(t, "voice")) if voice else None
+        self.listener = Listener(self.speaker, self._on_wake, lambda t, a=None: self.submit(t, "voice", a)) if voice else None
 
     # ---- events -----------------------------------------------------------------------------------------------
 
@@ -58,7 +58,8 @@ class Agent:
 
     # ---- commands ---------------------------------------------------------------------------------------------
 
-    def submit(self, text: str, source: str) -> int:
+    def submit(self, text: str, source: str, audio: bytes | None = None) -> int:
+        """audio: the spoken command as WAV (voice), planned from directly; text is then the rough transcript."""
         rid = next(self.ids)
         text = text.strip()
         self.emit("heard", id=rid, source=source, text=text)
@@ -77,7 +78,7 @@ class Agent:
             self.jobs.get_nowait()  # drop a queued, not-yet-started command
         except queue.Empty:
             pass
-        self.jobs.put((rid, text))
+        self.jobs.put((rid, text, audio, source == "voice"))
         return rid
 
     def _on_wake(self) -> None:
@@ -86,12 +87,12 @@ class Agent:
 
     def _worker(self) -> None:
         while True:
-            rid, text = self.jobs.get()
+            rid, text, audio, voice = self.jobs.get()
             with self.body_lock:
                 self.busy.set()
                 self.body.cancelled.clear()
                 try:
-                    self._execute(rid, text)
+                    self._execute(rid, text, audio, voice)
                 except Exception as e:
                     log.exception("command failed")
                     self.emit("info", id=rid, text=f"error: {e}")
@@ -100,26 +101,47 @@ class Agent:
                     self.busy.clear()
                     self.emit("done", id=rid)
 
-    def _execute(self, rid: int, text: str) -> None:
+    def _execute(self, rid: int, text: str, audio: bytes | None = None, voice: bool = False) -> None:
+        """Moves start as soon as the streamed plan contains them (~0.9 s before it's complete), one after another in
+        this thread (a new body.run preempts the running one); the reply is spoken as soon as it's known."""
         t = time.monotonic()
         self.emit("thinking", id=rid)
-        plan = self.brain.plan(text)
-        self.emit("plan", id=rid, actions=plan.actions, say=plan.say, source=plan.source,
-                  seconds=round(time.monotonic() - t, 1))
-        if self.body.cancelled.is_set():
-            return
+        todo: queue.Queue = queue.Queue()
+        speech_threads: list[threading.Thread] = []
+        speech_ready = threading.Event()
 
         def say(s: str) -> None:
             if s and not self.body.cancelled.is_set():
                 self.emit("say", id=rid, text=s)
                 self.speaker.say(s)
 
-        speech = threading.Thread(target=say, args=(plan.say,), daemon=True)
-        speech.start()
-        moved = False
-        for name, count in plan.actions:
-            if self.body.cancelled.is_set():
-                break
+        class speech:  # joinable before the plan (and so its reply) exists
+            @staticmethod
+            def join() -> None:
+                speech_ready.wait()
+                speech_threads[0].join()
+
+        def planner() -> None:
+            reply = ""
+            try:
+                plan = self.brain.plan_stream(text, audio, on_action=lambda n, c: todo.put((n, c)))
+                self.emit("plan", id=rid, actions=plan.actions, say=plan.say, source=plan.source,
+                          seconds=round(time.monotonic() - t, 1))
+                reply = plan.say
+                for a in plan.actions[plan.early:]:
+                    todo.put(a)
+            finally:
+                speech_threads.append(threading.Thread(target=say, args=(reply,), daemon=True))
+                speech_threads[0].start()
+                speech_ready.set()
+                todo.put(None)
+
+        threading.Thread(target=planner, name="planner", daemon=True).start()
+        moved = stopped = False
+        while (item := todo.get()) is not None:
+            if stopped or self.body.cancelled.is_set():
+                continue  # drain
+            name, count = item
             self.emit("action", id=rid, name=name, count=count)
             if name == "describe_view":
                 self._describe(rid, say, speech)
@@ -129,11 +151,12 @@ class Agent:
             elif name != "stop":
                 ok = self.body.run(name, count, lambda s: (speech.join(), say(s)))
                 moved = moved or not name.startswith(("look_", "nod", "shake"))
-                if not ok:
-                    break
+                stopped = not ok
         if moved:
             self.body.settle()
         speech.join()
+        if voice and self.listener and not self.body.cancelled.is_set():
+            self.listener.followup()  # spoken command answered: the next words need no "hey Tony"
 
     def _describe(self, rid: int, say, speech: threading.Thread) -> None:
         try:

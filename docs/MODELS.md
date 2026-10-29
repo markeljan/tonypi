@@ -71,12 +71,57 @@ Text-to-speech: LFM3-Audio was ~6× slower than real time on the Pi (15 s for a 
 ## Memory (RSS)
 One Omni server with 2 slots: ~3.1 GB. Separate LFM3 servers were 2.8–3.1 GB each (encoder working buffers).
 
+## Voice pipeline and latency (2026-10-29)
+
+From the end of a spoken command to Tony moving: **~7.3 s → ~3.5 s** (typed commands: first move at ~1.5 s).
+
+| Stage | Before | Now | How |
+|---|---|---|---|
+| End-of-speech detection | 0.9 s silence | 0.7 s | zipformer endpoint rule 2 |
+| Accurate transcript | 2.7 s | ~2 s | LFM3-Omni second pass (kept: see below) |
+| Plan → first move | 4.5 s | ~1.4 s | no conversation history in the prompt (it changed every turn, so never cached: +1.7 s); moves start as soon as the streamed plan contains them |
+| Speech | after whole reply synthesised | after the first sentence | Piper chunks streamed into aplay |
+
+`tools/voice_eval.py` (30 synthetic "Hey Tony, …" commands + the user's 6 real ones):
+
+| Voice mode (`TONYPI_VOICE`) | Synthetic | Real | Median |
+|---|---|---|---|
+| **transcribe** (default): Omni transcribes, then plans from text | **26/30** | **6/6** | 4.4–4.8 s |
+| direct: audio straight into the plan | 24/30 | 6/6 | 3.2–3.4 s |
+| direct, model writes `heard` first | 20/30 | 5/6 | 5.0 s |
+
+`direct` is ~1.3 s faster but picked wrong moves live ("take a bow" → wave): the keyword rules only see the rough
+streaming text there. Correct moves beat 1.3 s, so `transcribe` is the default.
+
+Follow-up window: after Tony answers a voice command he listens 6 s for another one without "hey Tony"
+(`TONYPI_FOLLOWUP_S`). Rising tone = listening, falling tone = stopped. A lone "hey Tony" inside the window acts as a wake.
+
+## Always listening? (addressee detection, `tools/addressee_eval.py`)
+
+Question: is a speech clip addressed to Tony? 12 real lines by the user, 6 facing Tony and 6 turned to "someone else"
+(several share words: "what do you see", dancing, Tony's name).
+
+| Detector | Real voice | Time per clip | Memory |
+|---|---|---|---|
+| LFM3-Omni-2B, yes/no logprob | 6/12 | 0.7 s | (shared server) |
+| d1-omni-600M (`/v1/systemone` noul) | 7/12 | 0.33 s | 1.0 GB |
+| d1-omni-600M, choice (robot/person/about/media) | 5/12 | 0.36 s | 1.0 GB |
+| d1-Omni-2B Q8_0, noul | **8/12** | 1.2 s | 3.1 GB |
+
+From one microphone, "Can you pass me the remote?" (to a person) and "How's your battery?" (to Tony) sound alike.
+d1-Omni-2B mostly detects *direct address by name* (0.86–0.90 for "Wave at us, Tony" / "Tony, look to the left",
+0.36 for "I told Tony about the movie") and misses unnamed requests. Synthetic test speech is scored as "media" (TV),
+so only real recordings count. Not deployed: wake word + follow-up window instead. The d1 and Silero VAD files were
+removed; re-download: `LiquidAI/d1-Omni-2B-GGUF` (Q8_0 + mmproj), `LiquidAI/d1-omni-600M-GGUF` (built on
+LFM2.5-Encoder).
+Idea worth trying later: spot the bare word "Tony" anywhere (not just "hey Tony …"), then ask d1 whether it's
+addressed; or add a visual cue (someone facing the camera).
+
 ## Known issues
 - llama.cpp issue 31328: LFM3 + thinking off + `response_format` can return HTTP 500 (fix PR 31374 not merged). Not seen
   on our build; `brain.py` falls back to rules if it happens.
 - Hash-check downloads (`sha256sum` vs the Hugging Face LFS oid): a corrupted Omni file once produced only "!!!!".
 
 ## Not yet tried
-- Audio straight into the brain (spoken request → JSON plan in one Omni call), skipping the transcription step.
 - LFM3-Omni speech output (Omni can speak; LFM3-Audio's speech was too slow, so probably the same).
 - d1-Omni-2B (Liquid's single-pass "decision" model) for fast intent routing.

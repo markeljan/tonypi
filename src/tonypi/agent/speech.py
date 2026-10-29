@@ -33,9 +33,17 @@ RATE = 16000
 WAKE_PHRASES = ["HEY TONY", "HI TONY", "HEY TONI", "OK TONY", "A TONY"]
 PREROLL_S = 2.5  # the spotter fires ~0.3-1 s after "Tony", so the transcriber gets the recent audio too
 # how the transcriber writes the wake phrase: "hey tony", "haytony", "a toni", "eight only", ...
-_TONY = re.compile(r"\w*(t|th)(ony|oni|onie|oney|onya|iny|one)|\w*(only|pony|tommy)", re.I)
+_TONY = re.compile(r"[\w']*(t|th)(ony|oni|onie|oney|onya|iny|one)|[\w']*(only|pony|tommy)", re.I)
 _HEY = re.compile(r"(hey|hay|hi|a|eight|ok|okay|hello)", re.I)
 # biases the transcriber toward Tony's vocabulary
+# transcribe: LFM3 re-transcribes the command, the brain plans from that text (26/30 + 6/6 on tools/voice_eval.py,
+# ~4.5 s). direct: the audio goes straight into the plan (~1.3 s faster but 24/30, and live it picked wrong moves:
+# the keyword rules only get the rough streaming text). stream: streaming zipformer text only (18% word errors).
+VOICE_MODE = os.environ.get("TONYPI_VOICE", "transcribe")
+# after a voice command, listen this long for a follow-up without "hey Tony" (0 = off). Always-on addressee detection
+# from audio alone was ~50/50 on real speech (docs/MODELS.md), so the follow-up window is the "no wake word" path.
+FOLLOWUP_S = float(os.environ.get("TONYPI_FOLLOWUP_S", "6"))  # seconds of silence before it closes
+_FILLER = {"", "the", "a", "uh", "um", "oh", "eh", "huh", "hmm", "ah", "and", "i"}
 ASR_URL = os.environ.get("TONYPI_ASR_URL", "http://127.0.0.1:8080/v1/chat/completions")  # LFM3-Omni; "" = streaming only
 # in an LFM3 transcript of the pre-roll + command: everything up to the wake phrase ("..., hey Tony, dance")
 _WAKE_TEXT = re.compile(r"^.*?\b(?:(?:hey|hi|hay|okay|ok|a)[\s,]+)?(?:tony|toni|tonie|toney)\b[\s,.!?]*", re.I | re.S)
@@ -60,19 +68,23 @@ def command_from_words(words: list[tuple[str, float]], wake_t: float | None) -> 
     return " ".join(w for w, _ in words).lower().strip()
 
 
+def to_wav(audio: np.ndarray) -> bytes:
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1), w.setsampwidth(2), w.setframerate(RATE)
+        w.writeframes((np.clip(audio, -1, 1) * 32767).astype(np.int16).tobytes())
+    return buf.getvalue()
+
+
 def lfm_transcribe(audio: np.ndarray, fallback: str, has_preroll: bool) -> str:
     """Re-transcribe a finished command with LFM3 (0% vs 18% word errors on the stock mic; ~2.5 s for 3 s).
 
     The streaming zipformer still does wake word timing and end-of-speech; its text is the fallback."""
     if not ASR_URL or len(audio) < RATE // 4:
         return fallback
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as w:
-        w.setnchannels(1), w.setsampwidth(2), w.setframerate(RATE)
-        w.writeframes((np.clip(audio, -1, 1) * 32767).astype(np.int16).tobytes())
     body = {"messages": [{"role": "system", "content": "Perform ASR in English."},
                          {"role": "user", "content": [{"type": "input_audio", "input_audio": {
-                             "data": base64.b64encode(buf.getvalue()).decode(), "format": "wav"}}]}],
+                             "data": base64.b64encode(to_wav(audio)).decode(), "format": "wav"}}]}],
             "max_tokens": 80, "temperature": 0, "cache_prompt": False,
             "chat_template_kwargs": {"enable_thinking": False}}
     try:
@@ -82,11 +94,11 @@ def lfm_transcribe(audio: np.ndarray, fallback: str, has_preroll: bool) -> str:
     except Exception as e:
         log.warning("LFM3 ASR failed (%s); using streaming transcript", e)
         return fallback
-    if has_preroll:
-        m = _WAKE_TEXT.match(text)
-        if not m:  # can't tell where the command starts
-            log.info("LFM3 transcript without wake phrase %r; using streaming transcript", text)
-            return fallback
+    m = _WAKE_TEXT.match(text)
+    if has_preroll and not m:  # can't tell where the command starts
+        log.info("LFM3 transcript without wake phrase %r; using streaming transcript", text)
+        return fallback
+    if m:  # also "hey Tony, dance" said inside the follow-up window
         text = text[m.end():]
     text = text.strip().rstrip(".")
     log.info("transcripts: streaming=%r lfm3=%r", fallback, text)
@@ -109,24 +121,30 @@ class Speaker:
         text = text.strip()
         if not text:
             return
-        pcm = b"".join(c.audio_int16_bytes for c in self.voice.synthesize(text))
-        self._play(pcm, self.rate)
+        self._play((c.audio_int16_bytes for c in self.voice.synthesize(text)), self.rate)  # per sentence
+
+    @staticmethod
+    def _tones(freqs: tuple[int, ...], ms: int = 60, amp: int = 6000) -> bytes:
+        n, fade = int(ms / 1000 * RATE), int(0.012 * RATE)  # 12 ms fades: no clicks
+        return b"".join(struct.pack("<h", int(amp * math.sin(2 * math.pi * f * i / RATE) * min(1, i / fade, (n - i) / fade)))
+                        for f in freqs for i in range(n))
+
+    def cue(self, kind: str) -> None:
+        """'listen': soft rising tone, the mic is open for a command. 'done': falling tone, it's closed."""
+        if not hasattr(self, "_cues"):
+            self._cues = {"listen": self._tones((660, 990)), "done": self._tones((990, 660), amp=4500)}
+        self._play([self._cues[kind]], RATE)
 
     def chirp(self) -> None:
-        """Short rising two-tone: 'I'm listening'."""
-        pcm = b""
-        for f in (880, 1320):
-            n = int(0.07 * RATE)
-            pcm += b"".join(struct.pack("<h", int(9000 * math.sin(2 * math.pi * f * i / RATE) * min(1, (n - i) / 300)))
-                            for i in range(n))
-        self._play(pcm, RATE)
+        self.cue("listen")
 
     def stop(self) -> None:
         with self._lock:
             if self._proc and self._proc.poll() is None:
                 self._proc.kill()
 
-    def _play(self, pcm: bytes, rate: int) -> None:
+    def _play(self, chunks, rate: int) -> None:
+        """chunks: PCM pieces; playback starts with the first, so a long reply starts after one sentence."""
         self.speaking.set()
         try:
             with self._lock:
@@ -134,7 +152,11 @@ class Speaker:
                     ["aplay", "-q", "-D", ALSA_DEV, "-t", "raw", "-f", "S16_LE", "-c", "1", "-r", str(rate)],
                     stdin=subprocess.PIPE)
             try:
-                self._proc.stdin.write(pcm)
+                for pcm in chunks:
+                    if self._proc.poll() is not None:  # stop() killed it
+                        break
+                    self._proc.stdin.write(pcm)
+                    self._proc.stdin.flush()
                 self._proc.stdin.close()
             except BrokenPipeError:
                 pass
@@ -175,13 +197,13 @@ class Listener:
 
     def __init__(self, speaker: Speaker, on_wake: Callable[[], None], on_command: Callable[[str], None],
                  kws_threshold: float = 0.1, kws_score: float = 2.5,
-                 transcribe: Callable[[np.ndarray, str, bool], str] | None = lfm_transcribe) -> None:
+                 mode: str = VOICE_MODE) -> None:
         import sherpa_onnx
 
         self.speaker = speaker
         self.on_wake = on_wake
         self.on_command = on_command
-        self.transcribe = transcribe
+        self.mode = mode  # see VOICE_MODE
         self.kws = sherpa_onnx.KeywordSpotter(
             tokens=str(KWS_DIR / "tokens.txt"),
             encoder=str(KWS_DIR / "encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx"),
@@ -197,12 +219,22 @@ class Listener:
             num_threads=2, sample_rate=RATE, enable_endpoint_detection=True,
             decoding_method="modified_beam_search", hotwords_score=1.5,
             hotwords_file=_tmp(HOTWORDS), modeling_unit="bpe", bpe_vocab=_bpe_vocab(ASR_DIR / "bpe.model"),
-            rule1_min_trailing_silence=3.0,   # nothing said after the wake phrase
-            rule2_min_trailing_silence=0.9,   # pause after speaking = end of command
+            rule1_min_trailing_silence=FOLLOWUP_S or 3.0,  # nothing said after the wake phrase / in the follow-up window
+            rule2_min_trailing_silence=0.7,   # pause after speaking = end of command (0.9 felt sluggish)
             rule3_min_utterance_length=15.0)
         self._running = False
         self._thread: threading.Thread | None = None
         self._proc: subprocess.Popen | None = None
+        self._followup = False
+
+    def _cue(self, kind: str) -> None:
+        if hasattr(self.speaker, "cue"):
+            threading.Thread(target=self.speaker.cue, args=(kind,), daemon=True).start()
+
+    def followup(self) -> None:
+        """Call when Tony has finished answering a voice command: the next words need no wake phrase."""
+        if FOLLOWUP_S > 0:
+            self._followup = True
 
     def start(self) -> None:
         self._running = True
@@ -216,10 +248,17 @@ class Listener:
 
     # feed() is separate from the mic loop so it can be tested with recorded/synthesised audio
     def new_state(self) -> dict:
-        return {"kws": self.kws.create_stream(), "asr": None, "t_wake": 0.0, "wake_t": None, "retry": False,
-                "ring": collections.deque(maxlen=int(PREROLL_S * 10) + 1), "audio": []}
+        return {"kws": self.kws.create_stream(), "asr": None, "deadline": 0.0, "wake_t": None, "retry": False,
+                "ring": collections.deque(maxlen=int(PREROLL_S * 10) + 1), "audio": [], "followup": False}
 
     def feed(self, st: dict, samples: np.ndarray) -> None:
+        if st["asr"] is None and self._followup:
+            # follow-up window: transcribe straight away, no wake phrase; silence (rule 1) closes it quietly
+            self._followup = False
+            st.update(asr=self.asr.create_stream(), audio=[], wake_t=None, retry=True, followup=True,
+                      deadline=time.monotonic() + 15)
+            log.info("listening for a follow-up")
+            self._cue("listen")
         if st["asr"] is None:
             st["ring"].append(samples)
             st["kws"].accept_waveform(RATE, samples)
@@ -234,7 +273,7 @@ class Listener:
                     st["audio"] = [pre]
                     st["wake_t"] = len(pre) / RATE  # detection time within this transcript
                     st["retry"] = False
-                    st["t_wake"] = time.monotonic()
+                    st["deadline"] = time.monotonic() + 15
                     log.info("wake phrase heard")
                     self.on_wake()
                     return
@@ -244,9 +283,16 @@ class Listener:
             st["audio"].append(samples)
             while self.asr.is_ready(s):
                 self.asr.decode_stream(s)
-            timed_out = time.monotonic() - st["t_wake"] > 15
+            timed_out = time.monotonic() > st["deadline"]
             if self.asr.is_endpoint(s) or timed_out:
                 text = self._command_text(s, st["wake_t"])
+                if st["followup"] and text and not command_from_words([(w, 0.0) for w in text.split()], 1.0):
+                    # "hey Tony" said inside the follow-up window: it's a wake phrase, the command comes next
+                    log.info("wake phrase in the follow-up window")
+                    self.on_wake()
+                    st.update(asr=self.asr.create_stream(), audio=[], wake_t=None, retry=True, followup=False,
+                              deadline=time.monotonic() + 15)
+                    return
                 if not text and not st["retry"] and not timed_out:
                     # "Hey Tony ... <pause> ... dance": the pause ended the first segment; listen once more
                     st["asr"], st["wake_t"], st["retry"], st["audio"] = self.asr.create_stream(), None, True, []
@@ -263,15 +309,24 @@ class Listener:
 
     def _done(self, st: dict, text: str) -> None:
         audio, has_preroll = np.concatenate(st["audio"] or [np.zeros(0, np.float32)]), st["wake_t"] is not None
-        st["asr"], st["audio"] = None, []
+        followup = st["followup"]
+        st["asr"], st["audio"], st["followup"] = None, [], False
         st["kws"] = self.kws.create_stream()
-        if self.transcribe is None:
+        self._cue("done")
+        if followup and text.strip().lower() in _FILLER:
+            log.info("follow-up window closed (%r)", text)
+            return
+        if self.mode == "direct" and text and len(audio) >= RATE // 4:
+            log.info("heard command (rough): %r; planning from the audio", text)
+            self.on_command(text, to_wav(audio))
+            return
+        if self.mode != "transcribe":
             log.info("heard command: %r", text)
             self.on_command(text)
             return
 
         def second_pass() -> None:  # off the mic thread, so audio keeps flowing
-            final = self.transcribe(audio, text, has_preroll)
+            final = lfm_transcribe(audio, text, has_preroll)
             log.info("heard command: %r", final)
             self.on_command(final)
 

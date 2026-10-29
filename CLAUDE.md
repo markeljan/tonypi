@@ -70,8 +70,12 @@ Hermes Agent (Nous) can attach to the same MCP server later (it needs ≥64K con
   every motion; `relax()` (all torque off) after every command and at startup, and the 20 s idle watchdog re-unloads
   anything left on; fall guard tilt >70° for 0.3 s (dances lean past 50° on purpose); idle low-battery warning at 10.5 V.
 - `speech.py`: Piper (lessac medium) out; the wake phrase is removed from the transcript by token timestamps
-  (ASR writes it as "hey tony", "haytony", "athony", "eight only"…). After end of speech the clip is re-transcribed by
-  LFM3-Omni (`lfm_transcribe`, ~2 s; 0% vs 18% word errors on the stock mic), streaming text is the fallback.
+  (ASR writes it as "hey tony", "haytony", "athony", "ain'toni", "eight only"…). After end of speech (0.7 s) the clip
+  is re-transcribed by LFM3-Omni (`lfm_transcribe`, ~2 s; 0% vs 18% word errors), streaming text is the fallback
+  (`TONYPI_VOICE`: transcribe | direct | stream). After answering a voice command it listens 6 s for a follow-up
+  without the wake phrase. Cues: rising tone = listening, falling = stopped.
+- Latency: no conversation history unless the request is a follow-up ("again", "that"…; history costs ~1.7 s, never
+  cached); `Brain.plan_stream` hands moves to `_execute` as they stream, run one at a time. Typed: first move ~1.5 s.
   `vision.py`: `describe()` posts the image to LFM3-Omni on :8080 (~15 s).
 - Far-field voice is weak with the stock USB mic (works at ~1 m); a mic array would be the real fix.
 
