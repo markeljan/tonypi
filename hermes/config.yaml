@@ -1,0 +1,78 @@
+# Hermes profile "tonypi" (installed to ~/.hermes/profiles/tonypi/config.yaml by hermes/setup.sh).
+# setup.sh fills in the `model:` block for the chosen brain (--brain codex | anthropic | local); the rest is fixed.
+
+model:
+  default: lfm3-omni-2b
+  provider: custom
+  base_url: http://127.0.0.1:8080/v1
+  # THE 64K HACK. Hermes refuses windows < 64,000 tokens. tonypi-llm runs -c 16384 -np 2 = 8,192 tokens per slot,
+  # so we *claim* 65,536 here and in custom_providers (used when LFM3 is the fallback) and keep every real request
+  # small instead: few tools, short SOUL, compression.threshold_tokens below, no bundled skills.
+  context_length: 65536
+
+custom_providers:
+  - name: lfm3
+    base_url: http://127.0.0.1:8080/v1
+    api_key: none
+    api_mode: chat_completions
+    context_length: 65536
+    models:
+      lfm3-omni-2b:
+        context_length: 65536
+
+# Cloud brain unreachable / unauthorised → local LFM3 (setup.sh drops this when LFM3 is already primary).
+fallback_providers:
+  - provider: custom
+    model: lfm3-omni-2b
+    base_url: http://127.0.0.1:8080/v1
+
+compression:
+  enabled: true
+  # absolute trigger, applied to every model including fallbacks: the real local window is 8,192 tokens/slot
+  threshold_tokens: 6000
+  protect_first_n: 0
+  protect_last_n: 8
+
+# The robot is the only toolset: no terminal, files, browser, web, code execution or delegation.
+platform_toolsets:
+  cli: [tonypi, memory, skills]
+  api_server: [tonypi, memory, skills]
+  telegram: [tonypi, memory, skills]
+
+mcp_servers:
+  tonypi:
+    url: http://127.0.0.1:8765/mcp
+    timeout: 200          # run_skill(wait=True) can take a while (dance ~60 s)
+    connect_timeout: 10
+
+skills:
+  creation_nudge_interval: 15
+  external_dirs:
+    - __REPO__/hermes/skills   # robot skills, read-only; skills Hermes writes itself go to the profile
+
+memory:
+  memory_enabled: true
+  user_profile_enabled: true
+  memory_char_limit: 1500
+  user_char_limit: 800
+  nudge_interval: 10
+
+agent:
+  max_turns: 40
+
+display:
+  # Telegram etc.: a new message while Tony works is delivered into the running turn after the current tool call
+  busy_input_mode: steer
+
+telemetry:
+  shared_metrics:
+    enabled: false
+    send: false
+
+tools:
+  # off: MCP tools go straight into the tools array. "auto" hides them behind tool_search/tool_describe/tool_call,
+  # which a 2B model loops on (seen: 10x tool_describe, no answer).
+  tool_search:
+    enabled: "off"
+  connectors:
+    enabled: false

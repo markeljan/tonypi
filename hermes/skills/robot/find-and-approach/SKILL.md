@@ -1,0 +1,20 @@
+---
+name: find-and-approach
+description: Find an object or place with the camera and walk toward it (e.g. "find the door and walk to it").
+version: 1.0.0
+metadata:
+  hermes:
+    tags: [robot, camera, navigation]
+    category: robot
+---
+
+# Find and approach
+
+1. `snapshot`. If the target is not in view, scan: `look(pan_deg=45)`, `snapshot`, `look(pan_deg=-45)`, `snapshot`,
+   then `look(0, 0)`. Still nothing: `run_skill("turn_left", 3)` and scan again (at most 3 times), then give up and say so.
+2. Target seen at a head pan angle P: centre the head (`look(0, 0)`), then turn the body toward it:
+   P > 20 → `turn_left` (1 step per ~20°), P < -20 → `turn_right`.
+3. `run_skill("walk_forward", 2)`, then `snapshot`. Re-centre with small turns if it drifted off centre.
+4. Repeat 3 until the target fills most of the picture or is at your feet (look down: `look(0, -30)`), then stop and say
+   you're there. At most ~10 rounds.
+5. Anything in the way (wall, furniture, an edge or drop): stop and say so. Never walk off a table edge.
