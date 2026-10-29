@@ -21,9 +21,10 @@ SESSION_DIR = Path(os.environ.get("TONYPI_PI_SESSIONS", "/home/pi/.local/state/t
 
 
 def pi_command(model: str) -> list[str]:
+    extra = [a for p in os.environ.get("TONYPI_PI_EXTRA_EXT", "").split(",") if p for a in ("-e", p)]
     return ["pi", "--mode", "rpc", "--offline", "--model", model, "--thinking", "low",
             "--no-builtin-tools", "--no-context-files", "--no-skills", "--no-extensions", "--no-mcp",
-            "--no-prompt-templates", "--no-themes", "-e", str(EXTENSION),
+            "--no-prompt-templates", "--no-themes", "-e", str(EXTENSION), *extra,
             "--system-prompt", SYSTEM_PROMPT.read_text(), "--session-dir", str(SESSION_DIR)]
 
 
