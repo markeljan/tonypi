@@ -100,3 +100,19 @@ def test_sleep_and_wake():
     assert ("torque", False) in body.board.calls
     assert body.run("wave", 1, lambda s: None) and not body.asleep
     assert body.player.played == ["stand_up_back", "stand_slow", "wave"]
+
+
+def test_sleep_relaxes_even_if_lying_down_fails():
+    body = _body(lying=False)
+    body.player.play = lambda motion, speed=1.0: body.cancelled.set()  # "stop" during lie_down
+    assert not body.run("sleep", 1, lambda s: None) and not body.asleep
+    assert ("torque", False) in body.board.calls
+
+
+def test_thermal_stop_relaxes_instead_of_standing():
+    body = _body(lying=False)
+    body._watch = lambda ids, guard_fall, done: setattr(body, "_abort_reason", "hot")
+    said = []
+    assert not body.run("wave", 1, said.append)
+    assert body.board.calls[-1] == ("torque", False)
+    assert body.player.played == [] and "motors off" in said[0]

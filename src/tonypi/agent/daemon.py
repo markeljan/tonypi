@@ -39,6 +39,7 @@ class Agent:
         self.clients_lock = threading.Lock()
         self.ids = itertools.count(1)
         self.busy = threading.Event()
+        self.body_lock = threading.Lock()  # held by the worker while a command runs
         self.last_warn = 0.0
         self.listener = Listener(self.speaker, self._on_wake, lambda t: self.submit(t, "voice")) if voice else None
 
@@ -86,16 +87,18 @@ class Agent:
     def _worker(self) -> None:
         while True:
             rid, text = self.jobs.get()
-            self.busy.set()
-            self.body.cancelled.clear()
-            try:
-                self._execute(rid, text)
-            except Exception as e:
-                log.exception("command failed")
-                self.emit("info", id=rid, text=f"error: {e}")
-            finally:
-                self.busy.clear()
-                self.emit("done", id=rid)
+            with self.body_lock:
+                self.busy.set()
+                self.body.cancelled.clear()
+                try:
+                    self._execute(rid, text)
+                except Exception as e:
+                    log.exception("command failed")
+                    self.emit("info", id=rid, text=f"error: {e}")
+                finally:
+                    self.body.relax()  # idle = torque off, whatever pose it ended in
+                    self.busy.clear()
+                    self.emit("done", id=rid)
 
     def _execute(self, rid: int, text: str) -> None:
         t = time.monotonic()
@@ -163,18 +166,23 @@ class Agent:
     def _watchdog(self) -> None:
         while True:
             time.sleep(20)
-            if self.busy.is_set() or time.monotonic() - self.last_warn < 300:
-                continue
+            if not self.body_lock.acquire(blocking=False):
+                continue  # a command is running; its motion guards handle heat
             try:
                 st = self.body.status()
+                if st["torque_on"]:  # idle never holds torque (e.g. left on by something outside the agent)
+                    self.body.relax()
             except Exception:
                 log.exception("status failed")
                 continue
+            finally:
+                self.body_lock.release()
+            if time.monotonic() - self.last_warn < 300:
+                continue
             msg = None
-            if st["hottest"] and st["hottest"][2] >= IDLE_HOT_C and not self.body.asleep:
+            if st["torque_on"] and st["hottest"] and st["hottest"][2] >= IDLE_HOT_C:
                 _, joint, temp = st["hottest"]
-                msg = (f"My {joint} is at {temp} degrees from holding this pose. "
-                       "Please lay me down or switch off my servos for a while.")
+                msg = f"My {joint} was at {temp} degrees, so I switched my motors off to cool down."
             elif st["battery_mv"] and st["battery_mv"] < LOW_BATTERY_MV:
                 msg = f"My battery is low, at {st['battery_mv'] / 1000:.1f} volts. Please charge me."
             if msg:

@@ -2,6 +2,8 @@
 
 Guards (never LLM-dependent): servo temperature is checked before and during every motion, the IMU tilt stops a
 motion that is falling over, cancel() interrupts anything immediately, and locomotion is refused while lying down.
+Torque is only on while a motion plays: the robot carries no load, so it holds any pose (standing included) with the
+servos off. relax() unloads everything after each command and whenever a servo overheats.
 """
 
 from __future__ import annotations
@@ -62,6 +64,7 @@ class Body:
         self._last_dance: str | None = None
         self.asleep = False
         time.sleep(0.3)
+        self.relax()
 
     def close(self) -> None:
         self.board.close()
@@ -147,18 +150,19 @@ class Body:
         log.warning("unknown action %s", action)
         return False
 
+    def relax(self) -> None:
+        """All bus servo torque off. Safe in any pose: nothing is carried, and the next move() turns it back on."""
+        self.board.torque(range(1, 17), on=False)
+        log.info("relaxed: servo torque off")
+
     def sleep(self, say: Callable[[str], None]) -> bool:
         """Lie down, then switch all servo torque off (they cool down; the agent keeps listening)."""
-        if not self.lying() and not self._motions(["lie_down"], say, guard_fall=False):
+        lay = self.lying() or self._motions(["lie_down"], say, guard_fall=False)
+        self.relax()  # even if lying down was refused or interrupted
+        if not lay:
             return False
-        time.sleep(0.5)
-        if not self.lying():  # never go limp while standing
-            say("I couldn't lie down safely, so I'll stay powered.")
-            return False
-        self.board.torque(range(1, 17), on=False)
         self.board.rgb([(i, 0, 0, 0) for i in (1, 2)])
         self.asleep = True
-        log.info("asleep: servo torque off")
         return True
 
     def settle(self) -> None:
@@ -195,8 +199,8 @@ class Body:
             done.set()
             watcher.join()
         if self._abort_reason == "hot":
-            say("I'm getting too hot, so I stopped.")
-            self.player.play(load("stand_slow"))
+            self.relax()
+            say("I'm getting too hot, so I stopped and switched my motors off to cool down.")
         elif self._abort_reason == "fall":
             if self.lying():
                 say("Oops, I fell over. Say get up, and I'll try to stand.")

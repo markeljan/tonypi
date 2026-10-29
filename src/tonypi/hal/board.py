@@ -169,7 +169,7 @@ class Board:
         self.send(Func.BUS_SERVO, proto.bus_stop(list(ids)))
 
     def torque(self, ids, on: bool) -> None:
-        """Torque on/off. Off = the joint goes limp: only with the robot lying down. Any move() turns it back on."""
+        """Torque on/off. Off = the joint goes limp (fine unloaded, it holds its pose). Any move() turns it back on."""
         for sid in ids:
             self.send(Func.BUS_SERVO, proto.bus_simple(BusCmd.LOAD if on else BusCmd.UNLOAD, sid))
 

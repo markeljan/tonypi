@@ -22,7 +22,7 @@ Status markers: [x] done · [~] in progress · [ ] todo
 - [~] Fall detection: tilt guard stops motions (agent); still todo: gyro, protective pose, auto get-up (`get_up` action exists, unverified on hardware)
 - [ ] Fall detection (tilt + gyro) → protective pose → classify face-up/face-down → `stand_up_back` / `stand_up_front`
 - [ ] Walk state machine (start → loop → end), turn, side-step; head look-at
-- [~] Thermal / low-battery watchdog: agent skips/stops hot motions, warns when idle; still todo: unload or sit when idle
+- [x] Thermal / low-battery watchdog: agent skips hot motions, stops + unloads mid-motion, torque off whenever idle (2026-10-29)
 - [~] Local IPC: agent Unix socket `/run/tonypi/agent.sock` (JSON lines, used by `tonypi-chat`)
 
 ## 3. Senses

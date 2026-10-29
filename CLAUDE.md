@@ -10,7 +10,7 @@ it's told ("hey, go get that"), with local LFM models on the Pi and Claude (Opus
 - Motion only through the supervisor/motion layer. LLMs call skill-level tools (walk, turn, look, play_motion, say, stop), never raw joint writes.
 - `stop` and fall recovery never depend on an LLM.
 - Before commanding motion, assume the robot may be standing on a table: start slow, prefer `stand_slow`, keep a hand near it the first time.
-- Servo **temperature**: limit is 85 °C (servo self-protects). Measured up to 80 °C after ~1 h of holding a pose on 2026-10-28 (elbows 6/14 hottest at 78–80, right leg 66–76). Unload or sit/lie the robot when idle; add a thermal watchdog.
+- Servo **temperature**: limit is 85 °C (servo self-protects). Measured up to 80 °C after ~1 h of holding a pose on 2026-10-28 (elbows 6/14 hottest at 78–80, right leg 66–76). **Torque is off whenever idle** (any pose, standing included: it carries no load and holds the pose limp); a thermal stop unloads instead of standing.
 - No `sudo chmod 777` hacks. Access is via groups (dialout, gpio, i2c, video, audio) + `provision/files/99-tonypi.rules`.
 
 ## Hardware facts (verified live 2026-10-28 with `tools/bench.py`)
@@ -63,8 +63,9 @@ Hermes Agent (Nous) can attach to the same MCP server later (it needs ≥64K con
   llama-server needs `-ub 64 -cms 64`: LFM2 is hybrid, prompt cache resumes only from a checkpoint at len-ubatch.
 - `sleep` ("go to sleep", "power down"): lie down, check tilt >60°, unload all servos, RGB off; still listens.
   "wake up" or any body move while lying → `stand_up_back`/`front` → stand. `/status` shows torque on N/16.
-- `body.py`: actions → motion sequences; servo temp checked before (≥81 °C skip) and during (≥83 °C stop + stand)
-  every motion; fall guard tilt >70° for 0.3 s (dances lean past 50° on purpose); idle warning at 80 °C / 10.5 V.
+- `body.py`: actions → motion sequences; servo temp checked before (≥81 °C skip) and during (≥83 °C stop + torque off)
+  every motion; `relax()` (all torque off) after every command and at startup, and the 20 s idle watchdog re-unloads
+  anything left on; fall guard tilt >70° for 0.3 s (dances lean past 50° on purpose); idle low-battery warning at 10.5 V.
 - `speech.py`: Piper (lessac medium) out; the wake phrase is removed from the transcript by token timestamps
   (ASR writes it as "hey tony", "haytony", "athony", "eight only"…). `vision.py`: snapshot + LFM2.5-VL-1.6B (~25 s).
 - Far-field voice is weak with the stock USB mic (works at ~1 m); a mic array would be the real fix.
