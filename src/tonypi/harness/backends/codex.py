@@ -39,10 +39,13 @@ DOWN_FOR_S = 30
 OFF = ["shell_tool", "unified_exec", "unified_exec_tty", "shell_snapshot", "apps", "plugins", "remote_plugin",
        "plugin_discovery_prefetch", "browser_use", "browser_use_external", "in_app_browser", "computer_use",
        "image_generation", "multi_agent", "view_image", "sleep_tool", "goals", "tool_suggest", "skill_search",
-       "skill_mcp_dependency_install", "code_mode_host", "hooks", "workspace_dependencies", "memories"]
-CONFIG = ['web_search="disabled"', "include_apply_patch_tool=false", "project_doc_max_bytes=0",
+       "skill_mcp_dependency_install", "hooks", "workspace_dependencies", "memories"]
+# dynamic tools are called through the code-mode host: `codex-code-mode-host` from the same release must sit next to
+# the codex binary, or every tool call fails closed
+CONFIG = ['web_search="disabled"', "project_doc_max_bytes=0",
           'cli_auth_credentials_store="file"', "check_for_update_on_startup=false"]
 FATAL_HTTP = {401, 402, 403}
+TRACE = int(os.environ.get("TONYPI_CODEX_TRACE", "0"))  # log raw incoming lines, cut to this many chars
 
 
 class CodexBackend:
@@ -173,6 +176,8 @@ class CodexBackend:
                     msg = json.loads(line)
                 except ValueError:
                     continue
+                if TRACE:
+                    log.info("codex <- %s", line.decode(errors="replace").rstrip()[:TRACE])
                 if "method" in msg and "id" in msg:
                     asyncio.create_task(self._server_request(msg))
                 elif "method" in msg:

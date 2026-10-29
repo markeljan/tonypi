@@ -70,13 +70,17 @@ class Conn:
 
 
 def procs() -> list[int]:
-    """The harness process and its children (the Claude CLI)."""
+    """The harness process and all its descendants (the brain CLI)."""
     try:
         pid = int(subprocess.check_output(["pgrep", "-f", "-o", r"bin/python3? .*tonypi-harness( |$)"]).split()[0])
     except (subprocess.CalledProcessError, IndexError):
         return []
-    kids = subprocess.run(["pgrep", "-P", str(pid)], capture_output=True, text=True).stdout.split()
-    return [pid] + [int(k) for k in kids]
+    out, todo = [], [pid]
+    while todo:  # the whole tree: codex app-server and its code-mode host
+        p = todo.pop()
+        out.append(p)
+        todo += [int(k) for k in subprocess.run(["pgrep", "-P", str(p)], capture_output=True, text=True).stdout.split()]
+    return out
 
 
 def sample(pids: list[int]) -> tuple[int, float]:
