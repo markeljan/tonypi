@@ -21,21 +21,23 @@ Status markers: [x] done · [~] in progress · [ ] todo
 - [ ] Same prompts against the Mac's OpenAI-compatible endpoint (LM Studio) for comparison
 
 ## 2. Body runtime (`tonyd`)
-- [ ] Daemon owning the board: 100 Hz IMU → orientation filter (Mahony), battery + servo temp polling, key events
+- [x] `tonyd` owns the board + camera; skills API over a Unix socket; torque off when idle; watchdog warnings (M1, 2026-10-29)
+- [ ] tonyd: 100 Hz IMU → orientation filter (Mahony), key events
 - [x] Verify torque on/off: 0x0B unload, 0x0C load (2026-10-28); agent `sleep` = lie down + unload, wakes on any move
 - [~] Fall detection: tilt guard stops motions (agent); still todo: gyro, protective pose, auto get-up (`get_up` action exists, unverified on hardware)
 - [ ] Fall detection (tilt + gyro) → protective pose → classify face-up/face-down → `stand_up_back` / `stand_up_front`
 - [ ] Walk state machine (start → loop → end), turn, side-step; head look-at
 - [x] Thermal / low-battery watchdog: agent skips hot motions, stops + unloads mid-motion, torque off whenever idle (2026-10-29)
-- [~] Local IPC: agent Unix socket `/run/tonypi/agent.sock` (JSON lines, used by `tonypi-chat`)
+- [x] Local IPC: `/run/tonypi/tonyd.sock` (body) + `/run/tonypi/agent.sock` (chat, speech)
 
 ## 3. Senses
-- [ ] Camera service: continuous capture, latest frame + JPEG snapshot, simple detectors (color/AprilTag/person)
+- [x] Camera service in tonyd: continuous capture, latest frame, ~30 ms JPEG snapshot (M1)
+- [ ] Detectors on the live frame (person/YOLO26n, AprilTag)
 - [x] Audio: always-on mic → "hey Tony" wake word → streaming STT → command; Piper TTS → speaker (2026-10-28)
 - [ ] Barge-in while speaking; better far-field mic
 
 ## 4. Brain
-- [ ] Robot MCP server (Streamable HTTP): walk, turn, look, snapshot, play_motion, say, get_status, stop
+- [x] Robot MCP server `tonypi-mcp` (Streamable HTTP :8765): list_skills, run_skill, stop, get_state, look, snapshot, say (M1)
 - [x] Local fast loop: JSON-schema plan (say + ≤6 enum actions), offline, ~2–4 s (`tonypi-agent`, 2026-10-28; LFM3-Omni since 2026-10-29)
 - [ ] `escalate(task)` → Claude Opus via Claude Agent SDK (tools=[], robot MCP, PreToolUse gate)
 - [ ] "Go get that": VLM target → head tracking → walk-to (visual servoing) loop

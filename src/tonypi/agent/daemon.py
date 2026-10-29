@@ -1,8 +1,9 @@
 """tonypi-agent: the robot's always-on process.
 
-Owns the board, speaker and mic. Commands come from the terminal (Unix socket, see chat.py) or by voice
-("hey Tony, <command>"). The newest command preempts the running one; "stop" is handled without the LLM.
-Events (heard / say / action / info / done) are broadcast to every connected terminal.
+Owns the speaker and mic; the body is tonyd's (every move goes through its socket). Commands come from the
+terminal (Unix socket, see chat.py) or by voice ("hey Tony, <command>"). The newest command preempts the running
+one; "stop" is handled without the LLM. Events (heard / say / action / info / done) are broadcast to every
+connected terminal. {"op": "say", "text": ...} on the socket just speaks (used by the MCP server).
 """
 
 from __future__ import annotations
@@ -19,29 +20,25 @@ import time
 from pathlib import Path
 
 from tonypi.agent import vision
-from tonypi.agent.body import LOW_BATTERY_MV, Body
+from tonypi.agent.body_link import BodyLink
 from tonypi.agent.brain import STOP_RE, Brain, debug_command
 from tonypi.agent.speech import Listener, Speaker
 
 log = logging.getLogger("tonypi.agent")
 SOCK = os.environ.get("TONYPI_SOCK", "/run/tonypi/agent.sock")
-SNAP = Path(os.environ.get("TONYPI_SNAP", "/run/tonypi/snapshot.jpg"))
-IDLE_HOT_C = 80
 
 
 class Agent:
     debug = False  # see __init__
     def __init__(self, voice: bool = True) -> None:
-        self.body = Body()
         self.speaker = Speaker()
+        self.body = BodyLink(on_warn=self._on_warn)
         self.brain = Brain()
         self.jobs: queue.Queue = queue.Queue(maxsize=1)
         self.clients: set[socket.socket] = set()
         self.clients_lock = threading.Lock()
         self.ids = itertools.count(1)
         self.busy = threading.Event()
-        self.body_lock = threading.Lock()  # held by the worker while a command runs
-        self.last_warn = 0.0
         self.debug = False  # "enable debug mode": play back what was heard and narrate every step
         self.listener = Listener(self.speaker, self._on_wake,
                                  lambda t, a=None, recording=None: self.submit(t, "voice", a, recording=recording)
@@ -105,18 +102,16 @@ class Agent:
     def _worker(self) -> None:
         while True:
             rid, text, audio, voice, recording = self.jobs.get()
-            with self.body_lock:
-                self.busy.set()
-                self.body.cancelled.clear()
-                try:
-                    self._execute(rid, text, audio, voice, recording)
-                except Exception as e:
-                    log.exception("command failed")
-                    self.emit("info", id=rid, text=f"error: {e}")
-                finally:
-                    self.body.relax()  # idle = torque off, whatever pose it ended in
-                    self.busy.clear()
-                    self.emit("done", id=rid)
+            self.busy.set()
+            self.body.cancelled.clear()
+            try:
+                self._execute(rid, text, audio, voice, recording)
+            except Exception as e:
+                log.exception("command failed")
+                self.emit("info", id=rid, text=f"error: {e}")
+            finally:  # tonyd switches the servos off by itself once the body is idle
+                self.busy.clear()
+                self.emit("done", id=rid)
 
     def _execute(self, rid: int, text: str, audio: bytes | None = None, voice: bool = False,
                  recording: bytes | None = None) -> None:
@@ -194,14 +189,14 @@ class Agent:
 
     def _describe(self, rid: int, say, speech: threading.Thread) -> None:
         try:
-            vision.snapshot(SNAP)
+            snap = Path(self.body.snapshot())
         except Exception as e:
             speech.join()
             say("My camera isn't working right now.")
             self.emit("info", id=rid, text=f"camera error: {e}")
             return
-        self.emit("info", id=rid, text=f"snapshot saved to {SNAP}; describing (~25 s)")
-        desc = vision.describe(SNAP, self.body.cancelled)
+        self.emit("info", id=rid, text=f"snapshot saved to {snap}; describing (~25 s)")
+        desc = vision.describe(snap, self.body.cancelled)
         speech.join()
         if desc:
             say(desc)
@@ -220,32 +215,11 @@ class Agent:
 
     # ---- background checks ------------------------------------------------------------------------------------
 
-    def _watchdog(self) -> None:
-        while True:
-            time.sleep(20)
-            if not self.body_lock.acquire(blocking=False):
-                continue  # a command is running; its motion guards handle heat
-            try:
-                st = self.body.status()
-                if st["torque_on"]:  # idle never holds torque (e.g. left on by something outside the agent)
-                    self.body.relax()
-            except Exception:
-                log.exception("status failed")
-                continue
-            finally:
-                self.body_lock.release()
-            if time.monotonic() - self.last_warn < 300:
-                continue
-            msg = None
-            if st["torque_on"] and st["hottest"] and st["hottest"][2] >= IDLE_HOT_C:
-                _, joint, temp = st["hottest"]
-                msg = f"My {joint} was at {temp} degrees, so I switched my motors off to cool down."
-            elif st["battery_mv"] and st["battery_mv"] < LOW_BATTERY_MV:
-                msg = f"My battery is low, at {st['battery_mv'] / 1000:.1f} volts. Please charge me."
-            if msg:
-                self.last_warn = time.monotonic()
-                self.emit("info", text=msg)
-                self.speaker.say(msg)
+    def _on_warn(self, text: str) -> None:
+        """tonyd's watchdog (low battery, overheating): say it unless a command is running."""
+        self.emit("info", text=text)
+        if not self.busy.is_set():
+            self.speaker.say(text)
 
     # ---- socket server ----------------------------------------------------------------------------------------
 
@@ -274,7 +248,12 @@ class Agent:
                     msg = json.loads(line)
                     text = msg.get("text", "") if isinstance(msg, dict) else str(msg)
                 except json.JSONDecodeError:
-                    text = line
+                    msg, text = None, line
+                if isinstance(msg, dict) and msg.get("op") == "say":
+                    self.emit("say", text=text)
+                    threading.Thread(target=self.speaker.say, args=(text,), daemon=True).start()
+                    conn.sendall((json.dumps({"type": "accepted", "op": "say"}) + "\n").encode())
+                    continue
                 if text == "/status":
                     st = self.body.status()
                     self.emit("status", **st, busy=self.busy.is_set())
@@ -290,7 +269,6 @@ class Agent:
 
     def run(self) -> None:
         threading.Thread(target=self._worker, name="worker", daemon=True).start()
-        threading.Thread(target=self._watchdog, name="watchdog", daemon=True).start()
         threading.Thread(target=self._serve, name="socket", daemon=True).start()
         if self.listener:
             self.listener.start()

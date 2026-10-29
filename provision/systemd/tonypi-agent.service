@@ -1,7 +1,7 @@
 [Unit]
-Description=TonyPi agent (owns the board; terminal + "hey Tony" voice commands -> speech and motion)
-After=tonypi-llm.service sound.target
-Wants=tonypi-llm.service
+Description=TonyPi agent (terminal + "hey Tony" voice commands -> speech, and motion via tonyd)
+After=tonypi-tonyd.service tonypi-llm.service sound.target
+Wants=tonypi-tonyd.service tonypi-llm.service
 StartLimitIntervalSec=300
 StartLimitBurst=5
 
@@ -10,6 +10,7 @@ User=pi
 # /run/tonypi/agent.sock is how tonypi-chat talks to it
 RuntimeDirectory=tonypi
 RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
 Environment=PYTHONUNBUFFERED=1
 ExecStart=/home/pi/tonypi/.venv/bin/tonypi-agent
 Restart=on-failure

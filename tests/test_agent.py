@@ -76,7 +76,7 @@ class _FakePlayer:
 
 def _body(lying, asleep=False):
     import threading
-    from tonypi.agent.body import Body
+    from tonypi.tonyd.body import Body
     b = Body.__new__(Body)
     b.board, b.cancelled, b._abort_reason, b._last_dance, b.asleep = _FakeBoard(lying), threading.Event(), None, None, asleep
     b.player = _FakePlayer(b.board)

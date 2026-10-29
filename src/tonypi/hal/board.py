@@ -8,7 +8,9 @@ replies are matched to requests by (id, cmd), and moves are one batched frame.
 from __future__ import annotations
 
 import collections
+import fcntl
 import struct
+import termios
 import threading
 import time
 from dataclasses import dataclass, field
@@ -43,7 +45,16 @@ class Board:
         port.rts = False  # must be set before open, or the MCU may reset
         port.dtr = False
         port.port = device
-        port.open()
+        port.exclusive = True  # flock: a second Board in another process fails here instead of corrupting replies
+        try:
+            port.open()
+        except serial.SerialException as e:
+            raise BoardError(f"can't open {device} ({e}). Only one process may own the board: "
+                             "is tonypi-tonyd running?  sudo systemctl stop tonypi-tonyd") from e
+        try:
+            fcntl.ioctl(port.fileno(), termios.TIOCEXCL)  # kernel-enforced: plain open() by other programs fails too
+        except OSError:
+            pass
         self._port = port
         self._wlock = threading.Lock()
         self._decoder = proto.Decoder()

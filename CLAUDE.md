@@ -6,7 +6,7 @@ Goal: an always-on humanoid that hears, sees, knows its orientation, gets up whe
 it's told ("hey, go get that"), with local LFM models on the Pi and Claude (Opus) for harder reasoning.
 
 ## Hard rules
-- **One process owns `/dev/ttyAMA0`** (`tonypi.hal.board.Board`). Everything else goes through that process (IPC/MCP). Never open the port twice.
+- **One process owns `/dev/ttyAMA0`: `tonyd`** (`tonypi.hal.board.Board` opens it exclusively; a second open fails with EBUSY). Everything else goes through tonyd's socket or the MCP server. tonyd also owns the camera.
 - Motion only through the supervisor/motion layer. LLMs call skill-level tools (walk, turn, look, play_motion, say, stop), never raw joint writes.
 - `stop` and fall recovery never depend on an LLM.
 - Before commanding motion, assume the robot may be standing on a table: start slow, prefer `stand_slow`, keep a hand near it the first time.
@@ -26,7 +26,8 @@ it's told ("hey, go get that"), with local LFM models on the Pi and Claude (Opus
 - Lights: RGB pixels via FUNC 11 can be set off; a red and a blue LED stay lit (power/status, not switchable).
 - Buzzer: `AA 55 02` `<HHHH` freq, on_ms, off_ms, repeat. **off_ms=0 = stays on forever**; `Board.beep` clamps it, `Board.buzzer_off()` sends all zeros.
 - Head PWM: ch1 tilt (1500 centre, 1081 look-down), ch2 pan (1466 centre). Readback works.
-- Camera: UVC `/dev/video0`, YUYV 640×480 only, ≤30 fps; intrinsics in `data/camera_calibration.npz`.
+- Camera: UVC icSpring (`/dev/v4l/by-id/usb-icSpring_icspring_camera-video-index0`, usually `/dev/video0`), YUYV 640×480 only, ≤30 fps;
+  intrinsics in `data/camera_calibration.npz`. It dropped off USB once (2026-10-29) until the cable was reseated; tonyd retries every 3 s.
 - Audio: USB "PnP Audio Device" (JMTek 0c76:161f) speaker + mic. WonderEcho voice module on CH340 `/dev/ttyUSB0` (optional).
 - I2C-1 bus is empty (no sonar/ToF fitted). Pi GPIO25/23 are board keys, GPIO16/26 LEDs.
 - Power: EEPROM `PSU_MAX_CURRENT=5000`, `usb_max_current_enable=1` (robot board power).
@@ -52,9 +53,21 @@ brain: thin local loop (LFM3-Omni-2B, few tools, fast, offline) + escalate() to 
 ```
 Hermes Agent (Nous) can attach to the same MCP server later (it needs ≥64K context, so not for the local 2B tier).
 
+## tonyd (body daemon, `tonypi-tonyd.service`, since M1 2026-10-29)
+`src/tonypi/tonyd/` — the only process on `/dev/ttyAMA0` and the camera. **Stop it (`sudo systemctl stop tonypi-tonyd`)
+before `tools/bench.py`** or anything else that opens the board.
+- Socket `/run/tonypi/tonyd.sock`, JSON lines (`tonypi.tonyd.client.TonydClient`): ops `ping, skills, run, stop, state, head,
+  snapshot, relax, subscribe`. `run` takes a skill name from `tonyd/skills.py` (the only list of body skills) + count 1–5;
+  one skill at a time, the newest preempts; `wait: true` returns the finished job (`done/failed/cancelled` + `said`).
+- Safety lives here: `body.py` temperature/fall guards per motion, **torque off 1.5 s after the last skill**, 20 s watchdog
+  (re-unloads torque left on, warns on overheating / low battery as `warn` events, which the agent speaks).
+- `head` takes degrees (pan + = left, ±60; tilt + = up, −40..25). `snapshot` writes `/run/tonypi/snap-NNNNNN.jpg` from the
+  latest frame (~30 ms; the camera thread keeps capturing at 15 fps).
+- MCP: `tonypi-mcp.service` → `http://127.0.0.1:8765/mcp` (Streamable HTTP, no auth, localhost only by default). Tools:
+  `list_skills, run_skill, stop, get_state, look, snapshot (image), say`. `.mcp.json` in the repo points Claude Code at it.
+
 ## Agent (live: `tonypi-agent.service`, since 2026-10-28)
-`src/tonypi/agent/` — the always-on process. **It owns `/dev/ttyAMA0`**: `sudo systemctl stop tonypi-agent` before
-`tools/bench.py` or any script that opens the board, and start it again after.
+`src/tonypi/agent/` — voice + terminal front end. Owns the mic and speaker; every move goes through tonyd (`body_link.py`).
 - Input: terminal (`tonypi-chat` → `/run/tonypi/agent.sock`, JSON lines) and voice ("hey Tony …": sherpa-onnx KWS
   gigaspeech 3.3M → streaming zipformer en-2023-06-26 with hotwords; mic gain at max). Newest command preempts;
   `stop` never reaches the LLM.
@@ -66,8 +79,8 @@ Hermes Agent (Nous) can attach to the same MCP server later (it needs ≥64K con
   (LFM3 sliding-window layers: else no prompt reuse, ~17 s/command) and `-ub 64 -cms 64` (checkpoint at len-ubatch).
 - `sleep` ("go to sleep", "power down"): lie down, check tilt >60°, unload all servos, RGB off; still listens.
   "wake up" or any body move while lying → `stand_up_back`/`front` → stand. `/status` shows torque on N/16.
-- `body.py`: actions → motion sequences; servo temp checked before (≥81 °C skip) and during (≥83 °C stop + torque off)
-  every motion; `relax()` (all torque off) after every command and at startup, and the 20 s idle watchdog re-unloads
+- `tonyd/body.py`: actions → motion sequences; servo temp checked before (≥81 °C skip) and during (≥83 °C stop + torque off)
+  every motion; `relax()` (all torque off) at startup and whenever tonyd goes idle, and the 20 s idle watchdog re-unloads
   anything left on; fall guard tilt >70° for 0.3 s (dances lean past 50° on purpose); idle low-battery warning at 10.5 V.
 - `speech.py`: Piper (lessac medium) out; the wake phrase is removed from the transcript by token timestamps
   (ASR writes it as "hey tony", "haytony", "athony", "ain'toni", "eight only"…). After end of speech (0.7 s) the clip
@@ -79,7 +92,7 @@ Hermes Agent (Nous) can attach to the same MCP server later (it needs ≥64K con
   `tests/test_listener_flow.py` checks all of this with the real models in simulated time.
 - Latency: no conversation history unless the request is a follow-up ("again", "that"…; history costs ~1.7 s, never
   cached); `Brain.plan_stream` hands moves to `_execute` as they stream, run one at a time. Typed: first move ~1.5 s.
-  `vision.py`: `describe()` posts the image to LFM3-Omni on :8080 (~15 s).
+  `vision.py`: `describe()` posts a tonyd snapshot to LFM3-Omni on :8080 (~15 s).
 - Debug mode ("enable/disable debug mode", spoken or typed; checked before `stop`, off again after a restart): each voice
   command's recording is played back, then the reply, then "Starting X" / "X finished" around each move (no
   streamed early moves). `tests/test_debug_mode.py`.
@@ -91,5 +104,5 @@ See `docs/ROADMAP.md`. Provisioning: `sudo provision/provision.sh` (idempotent; 
 
 ## Dev
 - `uv sync` then `uv run pytest`. Python package lives in `src/tonypi`.
-- `uv run python tools/bench.py` — read-only hardware check (`sudo systemctl stop tonypi-agent` first).
+- `uv run python tools/bench.py` — read-only hardware check (`sudo systemctl stop tonypi-tonyd` first).
 - Use absolute paths in shell commands.

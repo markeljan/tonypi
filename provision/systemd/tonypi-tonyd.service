@@ -1,0 +1,20 @@
+[Unit]
+Description=TonyPi body daemon (only owner of the controller board /dev/ttyAMA0 and the camera; socket /run/tonypi/tonyd.sock)
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+User=pi
+# shared with the agent and MCP server; Preserve so a restart of one doesn't delete the others' sockets
+RuntimeDirectory=tonypi
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/pi/tonypi/.venv/bin/tonyd
+Restart=on-failure
+RestartSec=3
+# the body's safety loop must not starve behind LLM inference
+Nice=-5
+
+[Install]
+WantedBy=multi-user.target

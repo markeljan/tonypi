@@ -1,4 +1,4 @@
-"""Camera snapshot + description by the on-board multimodal LFM3 server (llama-server with --mmproj, kept loaded)."""
+"""Description of a tonyd snapshot by the on-board multimodal LFM3 server (llama-server with --mmproj, kept loaded)."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ import base64
 import json
 import os
 import re
-import subprocess
 import threading
 import urllib.request
 from pathlib import Path
@@ -14,13 +13,6 @@ from pathlib import Path
 MM_URL = os.environ.get("TONYPI_MM_URL", "http://127.0.0.1:8080/v1/chat/completions")  # same LFM3-Omni server as the brain
 PROMPT = ("This photo was taken by a small robot's camera, close to the floor. Describe what is in it in one or two "
           "short sentences, mentioning any people. Speak in the first person as the robot, e.g. 'I see ...'.")
-
-
-def snapshot(path: Path) -> Path:
-    subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-f", "v4l2", "-input_format", "yuyv422",
-                    "-video_size", "640x480", "-i", "/dev/video0", "-vf", r"select=gte(n\,10)", "-frames:v", "1",
-                    str(path)], check=True, timeout=20)
-    return path
 
 
 def describe(image: Path, cancelled: threading.Event) -> str | None:

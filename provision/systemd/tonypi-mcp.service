@@ -1,0 +1,18 @@
+[Unit]
+Description=TonyPi MCP server (Streamable HTTP on 127.0.0.1:8765/mcp; wraps tonyd + agent speech)
+After=tonypi-tonyd.service
+Wants=tonypi-tonyd.service
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+User=pi
+Environment=PYTHONUNBUFFERED=1
+# set TONYPI_MCP_HOST=0.0.0.0 (drop-in) to reach it from the LAN; it has no auth
+Environment=TONYPI_MCP_HOST=127.0.0.1 TONYPI_MCP_PORT=8765
+ExecStart=/home/pi/tonypi/.venv/bin/tonypi-mcp
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
