@@ -15,11 +15,11 @@ PROMPT = ("This photo was taken by a small robot's camera, close to the floor. D
           "short sentences, mentioning any people. Speak in the first person as the robot, e.g. 'I see ...'.")
 
 
-def describe(image: Path, cancelled: threading.Event) -> str | None:
+def describe(image: Path, cancelled: threading.Event, prompt: str = PROMPT) -> str | None:
     """~16 s on the Pi 5. Returns None if cancelled or the server fails."""
     url = "data:image/jpeg;base64," + base64.b64encode(Path(image).read_bytes()).decode()
     body = {"messages": [{"role": "user", "content": [{"type": "image_url", "image_url": {"url": url}},
-                                                      {"type": "text", "text": PROMPT}]}],
+                                                      {"type": "text", "text": prompt}]}],
             "max_tokens": 120, "temperature": 0, "cache_prompt": False,
             "chat_template_kwargs": {"enable_thinking": False}}
     out: list[str | None] = [None]

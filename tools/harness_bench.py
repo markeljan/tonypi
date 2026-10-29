@@ -93,8 +93,20 @@ def sample(pids: list[int]) -> tuple[int, float]:
     return rss // 2**20, cpu
 
 
+def llm_load() -> int | None:
+    """llama-server CPU % over 1 s (shared with the other bake-off sessions: >50 % means someone else is using it)."""
+    try:
+        pid = int(subprocess.check_output(["pgrep", "-o", "llama-server"]).split()[0])
+    except (subprocess.CalledProcessError, IndexError):
+        return None
+    a = sample([pid])[1]
+    time.sleep(1)
+    return round((sample([pid])[1] - a) * 100)
+
+
 def run_task(c: Conn, tonyd: TonydClient, name: str, timeout: float) -> dict:
     text, steps = TASKS[name]
+    llm_before = llm_load()
     pids = procs()
     rss0, cpu0 = sample(pids)
     peak = rss0
@@ -137,7 +149,7 @@ def run_task(c: Conn, tonyd: TonydClient, name: str, timeout: float) -> dict:
                          for u in usage),
         "tokens_out": sum(u.get("output") or 0 for u in usage),
         "rss_mb": peak, "cpu_s": round(cpu1 - cpu0, 1),
-        "timed_out": t_end - t0 > timeout,
+        "timed_out": t_end - t0 > timeout, "llm_cpu_pct_before": llm_before,
     }
     for words, ts, *extra in sent:
         if words == "stop":

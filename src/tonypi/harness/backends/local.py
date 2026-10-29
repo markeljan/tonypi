@@ -82,13 +82,13 @@ class LocalBackend:
             if name == "stop":
                 continue
             if name == "describe_view":
-                self._describe(cancel)
+                self._describe(cancel, text)
             elif name == "report_status":
                 self._status()
             else:
                 h.call_tool_sync("run_skill", {"skill": name, "count": count})
 
-    def _describe(self, cancel: threading.Event) -> None:
+    def _describe(self, cancel: threading.Event, request: str) -> None:
         res = self.h.call_tool_sync("snapshot", {})
         if not res.images:
             self.h.say("My camera isn't working right now.")
@@ -96,7 +96,8 @@ class LocalBackend:
         with tempfile.NamedTemporaryFile(suffix=".jpg") as f:
             f.write(res.images[0])
             f.flush()
-            desc = vision.describe(f.name, cancel)
+            desc = vision.describe(f.name, cancel, vision.PROMPT + f' You were asked: "{request}". Answer that '
+                                   "first (yes or no if it is a yes/no question), then describe briefly.")
         if desc and not (cancel.is_set() or self.h.stopped):
             self.h.say(desc)
 
