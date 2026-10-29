@@ -16,13 +16,14 @@ import os
 
 
 def build(order: str | None = None) -> list:
-    """TONYPI_BRAIN: comma list in preference order (default claude,codex,local). local is always appended."""
+    """TONYPI_BRAIN: comma list in preference order (default codex,local: the owner's ChatGPT plan, then LFM3).
+    local is always appended. claude needs CLAUDE_CODE_OAUTH_TOKEN (`claude setup-token`)."""
     from tonypi.harness.backends.claude import ClaudeBackend
     from tonypi.harness.backends.codex import CodexBackend
     from tonypi.harness.backends.local import LocalBackend
 
     makers = {"claude": ClaudeBackend, "codex": CodexBackend, "local": LocalBackend}
-    names = [n.strip() for n in (order or os.environ.get("TONYPI_BRAIN", "claude,codex,local")).split(",") if n.strip()]
+    names = [n.strip() for n in (order or os.environ.get("TONYPI_BRAIN", "codex,local")).split(",") if n.strip()]
     if "local" not in names:
         names.append("local")
     names = names[:names.index("local") + 1]  # local never fails, so nothing after it would ever run

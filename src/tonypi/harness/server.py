@@ -10,8 +10,8 @@ Socket protocol (same events as tonypi-agent, so tonypi-chat works with TONYPI_S
   -> "/status"                        a status event
   <- {"type": "heard"|"thinking"|"action"|"tool_result"|"say"|"info"|"plan"|"usage"|"done"|"status", "t": ...}
 
-Environment: TONYPI_BRAIN (claude,codex,local), TONYPI_PERIPHERALS (body,camera,voice,iphone),
-TONYPI_CLAUDE_MODEL, TONYPI_CLAUDE_EFFORT, CLAUDE_CODE_OAUTH_TOKEN (from /home/pi/.config/tonypi/secrets.env).
+Environment: TONYPI_BRAIN (default codex,local; claude optional), TONYPI_PERIPHERALS (body,camera,voice,iphone),
+TONYPI_CODEX_MODEL, TONYPI_CODEX_EFFORT, TONYPI_STEER_MODE (cut|steer); Claude: CLAUDE_CODE_OAUTH_TOKEN in secrets.env.
 """
 
 from __future__ import annotations

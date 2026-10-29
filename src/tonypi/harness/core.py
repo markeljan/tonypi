@@ -8,7 +8,8 @@ Flow for each utterance (typed, spoken, later from the iPhone app):
         result carries the new words to the brain ("[While this ran, the user said: ...]");
       * a motion tool that is about to start is held back and returns the new words instead;
       * if no tool picks them up within STEER_GRACE_S (the model is mid-thought), the backend is cut
-        (Claude: interrupt()) and the words are sent as the next message of the same session.
+        (interrupt) and the words are sent as the next message of the same session, or (STEER_MODE=steer)
+        passed into the running turn (Codex turn/steer).
     Backends that can't take words mid-turn (local LFM3) are cut at once and re-plan from the new words.
 """
 
@@ -18,6 +19,7 @@ import asyncio
 import itertools
 import json
 import logging
+import os
 import threading
 import time
 from typing import Callable
@@ -27,6 +29,9 @@ from tonypi.harness.peripherals import Ctx, Peripheral, Result, Tool
 
 log = logging.getLogger("tonypi.harness")
 STEER_GRACE_S = 0.3
+# words that arrive while the brain thinks (no tool running): "cut" = interrupt + send them as the next message;
+# "steer" = hand them to the running turn (backends with steer(), e.g. Codex turn/steer), cut if that fails
+STEER_MODE = os.environ.get("TONYPI_STEER_MODE", "cut")
 
 SYSTEM = """You are Tony, a small (35 cm) humanoid robot, a Hiwonder TonyPi with a Raspberry Pi 5 inside. You live \
 with your owner at home. People talk to you by voice ("hey Tony, ...") or by text; voice comes through \
@@ -155,6 +160,12 @@ class Harness:
             return
         await asyncio.sleep(STEER_GRACE_S)
         if self.pending and self.tools_running == 0 and self.busy():
+            if STEER_MODE == "steer" and hasattr(backend, "steer"):
+                msgs = self.take_pending()
+                if await backend.steer(msgs):
+                    self.emit("info", text="new words passed into the running turn")
+                    return
+                self.pending = msgs + self.pending
             self.emit("info", text="interrupting the brain to pass on the new words")
             await backend.cut()
 

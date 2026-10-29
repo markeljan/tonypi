@@ -214,6 +214,8 @@ def test_backend_order(monkeypatch):
     monkeypatch.setenv("TONYPI_BRAIN", "local,claude")
     assert [b.name for b in backends.build()] == ["local"]
     assert [b.name for b in backends.build("claude")] == ["claude", "local"]
+    monkeypatch.delenv("TONYPI_BRAIN")
+    assert [b.name for b in backends.build()] == ["codex", "local"]
 
 
 def test_claude_tool_results_carry_images():
@@ -233,3 +235,86 @@ def test_claude_tool_results_carry_images():
 def test_claude_unconfigured_without_token(monkeypatch):
     monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
     assert not ClaudeBackend().configured()
+
+
+@pytest.fixture
+def fake_codex(monkeypatch, tmp_path):
+    import sys
+
+    from tonypi.harness.backends import codex
+    (tmp_path / "auth.json").write_text("{}")
+    monkeypatch.setattr(codex, "CODEX_HOME", tmp_path)
+    monkeypatch.setattr(codex, "PROBE", "127.0.0.1:1")  # unused: available() is patched below
+    monkeypatch.setenv("TONYPI_CODEX_CMD", f"{sys.executable} {Path(__file__).parent / 'fakes/codex_app_server.py'}")
+    monkeypatch.setattr(codex.CodexBackend, "available", lambda self: True)
+    return codex
+
+
+class _Camera:
+    name, prompt = "camera", ""
+
+    def tools(self):
+        from tonypi.harness.peripherals import Tool
+        return [Tool("snapshot", "photo", lambda a, c: Result("photo", [b"\xff\xd8x"]))]
+
+    def start(self):
+        pass
+
+    def stop(self):
+        pass
+
+
+def test_codex_tool_loop_and_speech(tonyd, fake_codex):
+    async def main():
+        d, client = tonyd
+        events = []
+        cx = fake_codex.CodexBackend()
+        h = Harness([BodyPeripheral(client), _Camera()], [cx, Scripted(None)],
+                    emit=lambda type_, **kw: events.append({"type": type_, **kw}))
+        await h.start()
+        await h.submit("wave")
+        await until(lambda: any(e["type"] == "done" for e in events), 10)
+        assert ("wave", 1) in d.body.ran
+        assert [e["text"] for e in events if e["type"] == "say"] == ["Hi! wave: done"]
+        assert any(e["type"] == "usage" and e["input"] == 100 for e in events)
+        await h.submit("look")
+        await until(lambda: sum(e["type"] == "done" for e in events) == 2, 10)
+        assert [e["text"] for e in events if e["type"] == "say"][-1] == "1 image"
+        if cx.proc:
+            cx.proc.kill()
+
+    asyncio.run(main())
+
+
+def test_codex_401_falls_back(tonyd, fake_codex):
+    async def script(b, text):
+        await b.tool("run_skill", skill="bow")
+
+    async def main():
+        d, client = tonyd
+        cx, local = fake_codex.CodexBackend(), Scripted(script, injects=False)
+        h = Harness([BodyPeripheral(client)], [cx, local], emit=lambda type_, **kw: None)
+        await h.start()
+        await h.submit("deny me")
+        await until(lambda: local.texts == ["deny me"] and not h.busy(), 10)
+        assert ("bow", 1) in d.body.ran and time.monotonic() < cx.down_until
+        if cx.proc:
+            cx.proc.kill()
+
+    asyncio.run(main())
+
+
+def test_codex_thinking_turn_is_interrupted_by_new_words(tonyd, fake_codex):
+    async def main():
+        d, client = tonyd
+        cx = fake_codex.CodexBackend()
+        h = Harness([BodyPeripheral(client)], [cx, Scripted(None)], emit=lambda type_, **kw: None)
+        await h.start()
+        await h.submit("think hard")
+        await until(lambda: cx.turn_id is not None and not cx.turn_done.is_set(), 10)
+        await h.submit("wave instead")
+        await until(lambda: ("wave", 1) in d.body.ran, 10)
+        if cx.proc:
+            cx.proc.kill()
+
+    asyncio.run(main())
