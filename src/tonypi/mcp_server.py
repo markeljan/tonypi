@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import socket
+import time
 from contextlib import contextmanager
 
 from mcp.server.mcpserver import MCPServer
@@ -87,6 +88,22 @@ def snapshot() -> Image:
         path = tonyd.snapshot()["path"]
         with open(path, "rb") as f:
             return Image(data=f.read(), format="jpeg")
+
+
+@mcp.tool()
+def video(seconds: float = 2.0, frames: int = 4) -> list[Image]:
+    """A short clip: `frames` JPEGs (2-8) spread evenly over `seconds` (0.5-10), oldest first. Use it to see
+    motion or to look while a skill runs (start the skill with wait=False first)."""
+    frames = max(2, min(8, int(frames)))  # tonyd keeps the last 10 snapshot files
+    gap = max(0.5, min(10.0, float(seconds))) / (frames - 1)
+    out = []
+    with _robot():
+        for i in range(frames):
+            if i:
+                time.sleep(gap)
+            with open(tonyd.snapshot()["path"], "rb") as f:
+                out.append(Image(data=f.read(), format="jpeg"))
+    return out
 
 
 @mcp.tool()
