@@ -27,8 +27,8 @@ from typing import Callable
 
 from tonypi.agent.brain import STOP_RE
 from tonypi.harness.peripherals import Ctx, Peripheral, Result, Tool
-from tonypi.harness.tasks import (CONTINUE_PROMPT, LOOP_PROMPT, MAX_CONTINUES, MAX_PUSHBACKS, PUSHBACK_PROMPT,
-                                  TASK_CAP_S, TaskLog)
+from tonypi.harness.tasks import (CONTINUE_PROMPT, LOOP_PROMPT, MAX_CONTINUES, MAX_PUSHBACKS, PLAYBOOK,
+                                  PUSHBACK_PROMPT, TASK_CAP_S, TaskLog)
 
 log = logging.getLogger("tonypi.harness")
 STEER_GRACE_S = 0.3
@@ -103,7 +103,7 @@ class Harness:
         self._emit(type_, **kw)
 
     def system_prompt(self) -> str:
-        parts = [SYSTEM, LOOP_PROMPT] + [p.prompt for p in self.peripherals.values() if p.prompt]
+        parts = [SYSTEM, LOOP_PROMPT] + [p.prompt for p in self.peripherals.values() if p.prompt] + [PLAYBOOK]
         if self.extra_prompt and (extra := self.extra_prompt()):
             parts.append(extra)
         return "\n\n".join(parts)

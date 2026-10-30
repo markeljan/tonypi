@@ -181,9 +181,13 @@ def main() -> None:
     ap.add_argument("--voice", action="store_true", help='listen for "hey Tony" (stop tonypi-agent first)')
     ap.add_argument("--mute", action="store_true", help="no speaker: replies only as events")
     ap.add_argument("--brain", help="backend order, e.g. claude,local or local (default TONYPI_BRAIN)")
+    ap.add_argument("--check", action="store_true", help="print the E2E readiness checklist and exit")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     load_secrets()
+    if args.check:
+        from tonypi.harness import readiness
+        raise SystemExit(readiness.run())
     asyncio.run(Frontend(voice=args.voice, sound=not args.mute, brain=args.brain).run())
 
 
