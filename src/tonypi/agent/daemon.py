@@ -99,10 +99,14 @@ class Agent:
             self.emit("done", id=rid)
             return rid
         # anything new interrupts what's running; "stop" does nothing else
-        if (target := parse_switch(text)) is not None:  # "switch to pi": hand Tony to another harness
-            self.emit("info", id=rid, text=f"switching to {target}")
-            self.speaker.say(f"Switching to {LABEL[target]}.")
-            request_switch(target)
+        if (target := parse_switch(text)) is not None:  # "switch to live": hand Tony back to tonypi-voice
+            if target == "local":  # this agent is the local brain
+                self.emit("info", id=rid, text="already the local agent")
+                self.speaker.say("I'm already the local agent.")
+            else:
+                self.emit("info", id=rid, text=f"switching to {target}")
+                self.speaker.say(f"Switching to {LABEL[target]}.")
+                request_switch(target)  # starting tonypi-voice stops this unit (they conflict)
             self.emit("done", id=rid)
             return rid
         if robot_reserved():  # another harness / test owns the robot: don't cancel or move anything of theirs

@@ -1,16 +1,21 @@
 [Unit]
-Description=TonyPi voice (GPT-Live-1 via Codex realtime, local wake word fallback; socket /run/tonypi/voice.sock)
-After=network-online.target tonypi-tonyd.service
-# owns the USB mic and speaker, like tonypi-agent: only one of them runs (a harness slot starts this one)
+Description=TonyPi voice + live brain (GPT-Live-1 + Codex brain, local wake word fallback; socket /run/tonypi/voice.sock)
+After=network-online.target tonypi-tonyd.service tonypi-mcp.service
+Wants=network-online.target
+# owns the USB mic and speaker, like tonypi-agent: only one of them runs ("switch to local" starts the agent)
 Conflicts=tonypi-agent.service
 
 [Service]
 User=pi
 RuntimeDirectory=tonypi
 RuntimeDirectoryPreserve=yes
-Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONUNBUFFERED=1 TONYPI_VOICE_MODE=live
+# optional overrides for debugging (values in this file win over Environment=)
 EnvironmentFile=-/run/tonypi/voice.env
 ExecStart=/home/pi/tonypi/.venv/bin/tonypi-voice
-Restart=on-failure
+Restart=always
 RestartSec=5
 OOMScoreAdjust=-500
+
+[Install]
+WantedBy=multi-user.target

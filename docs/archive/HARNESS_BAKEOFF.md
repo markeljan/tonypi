@@ -1,5 +1,7 @@
 # Harness bake-off (2026-10-29)
 
+> Archived 2026-10-30: the bake-off is over. Live mode won; own/Hermes/pi live on branches `deprecated/harness-*`. See `docs/BRAIN.md`.
+
 Goal: pick the brain harness for an always-on Tony that can be told anything ("hey Tony, go to the living room"),
 uses every capability as a tool (camera photo/video, body skills, head, speech, sensors), and can be steered mid-task
 ("actually, turn around"), like a message to Claude Code while it works. Three options are built in parallel, each in

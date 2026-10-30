@@ -1,5 +1,7 @@
 # Final end-to-end test (harness bake-off, 2026-10-29)
 
+> Archived 2026-10-30: replaced by `docs/ACCEPTANCE.md` (live mode only).
+
 Goal: find the best harness for a self-learning Tony with full control of his body and senses. Each harness gets
 the same three tasks from the same starting point; the owner times them and judges the method.
 

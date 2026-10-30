@@ -1,19 +1,16 @@
 #!/bin/bash
-# Switch Tony's harness: tools/switch.sh own | hermes | pi | live | off | status
-# (Voice: "switch to pi" / "switch to Hermes" / "switch to our own" / "switch to local".)
+# Switch Tony's brain: tools/switch.sh live | local | status   (src/tonypi/switch.py does the same by voice:
+# "switch to local" / "switch to live"). live = tonypi-voice (GPT-Live + Codex brain, the default at boot);
+# local = tonypi-agent (offline LFM3 fallback). The units conflict, so starting one stops the other.
 set -u
 target=${1:-status}
-running() { for n in own hermes pi live; do systemctl is-active -q "tonypi-brain@$n" && echo "$n"; done; }
-if [[ $target == status ]]; then cur=$(running); echo "running: ${cur:-off (tonypi-agent)}"; exit 0; fi
-[[ $target =~ ^(own|hermes|pi|live|off)$ ]] || { echo "usage: $0 own|hermes|pi|live|off|status"; exit 2; }
-for n in $(running); do
-  [[ $n == "$target" ]] && { echo "$n is already running"; exit 0; }
-  echo "stopping $n"; sudo systemctl stop "tonypi-brain@$n"
-done
-if [[ $target == off ]]; then
-  sudo systemctl start tonypi-agent
-  echo "running: off (tonypi-agent)"
-else
-  sudo systemctl start "tonypi-brain@$target"
-  echo "running: $target (journal: journalctl -fu tonypi-brain@$target)"
-fi
+running() { systemctl is-active -q tonypi-voice && echo live; systemctl is-active -q tonypi-agent && echo local; }
+case $target in
+  status) cur=$(running); echo "running: ${cur:-none}"; exit 0 ;;
+  live|own|codex) unit=tonypi-voice; target=live ;;
+  local|off|default) unit=tonypi-agent; target=local ;;
+  *) echo "usage: $0 live|local|status"; exit 2 ;;
+esac
+[[ $(running) == "$target" ]] && { echo "$target is already running"; exit 0; }
+sudo systemctl start "$unit"
+echo "running: $target (journal: journalctl -fu $unit)"

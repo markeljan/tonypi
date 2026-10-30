@@ -1,6 +1,6 @@
 # TonyPi: earlyoom kills the biggest *optional* process before RAM runs out, so the Pi never livelocks on zram.
-# (2026-10-29 the Pi froze with llama-server + several Claude Code sessions + harness Node/Hermes jobs.)
+# (2026-10-29 the Pi froze with llama-server + several Claude Code sessions + Node/Hermes dev jobs.)
 # Acts when available RAM AND free swap are both low: SIGTERM below 8 % / 40 %, SIGKILL below 4 % / 20 %.
-# Robot core is never chosen; dev / harness jobs are chosen first; otherwise the largest (usually llama-server,
-# which systemd restarts).
-EARLYOOM_ARGS="-m 8,4 -s 40,20 -r 60 --avoid '^(tonyd|tonypi-agent|tonypi-mcp|sshd|sshd-session|systemd|systemd-.*|init|NetworkManager|dbus-daemon)$' --prefer '^(node|pi|hermes|python|python3|pytest|uv|npm|cc1plus|ld|cmake|make)$'"
+# Robot core and Tony's live brain (voice service, its codex app-server, the phone bridge) are never chosen;
+# dev jobs are chosen first; otherwise the largest (usually llama-server, which systemd restarts).
+EARLYOOM_ARGS="-m 8,4 -s 40,20 -r 60 --avoid '^(tonyd|tonypi-agent|tonypi-mcp|tonypi-voice|tonypi-phone|codex|codex-.*|sshd|sshd-session|systemd|systemd-.*|init|NetworkManager|dbus-daemon)$' --prefer '^(node|pi|hermes|python|python3|pytest|uv|npm|cc1plus|ld|cmake|make)$'"

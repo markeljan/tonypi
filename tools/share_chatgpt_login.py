@@ -1,7 +1,7 @@
-"""Share the one ChatGPT (Codex) login made in Hermes with pi and the Codex CLI (harness bake-off, 2026-10-29).
+"""Share the one ChatGPT (Codex) login made in Hermes with Tony's Codex homes (GPT-Live voice + live brain).
 
-Hermes (profile `tonypi`) is the only owner and the only refresher: pi and Codex get the current access token
-(valid ~10 days) but NOT the refresh token, so they can't rotate it and log Hermes out. Re-run (the
+Hermes (profile `tonypi`) is installed only for this: it is the only owner and the only refresher. The Codex homes get
+the current access token (valid ~10 days) but NOT the refresh token, so they can't rotate it and log Hermes out. Re-run (the
 tonypi-chatgpt-share timer does it hourly) to pick up a token Hermes has refreshed. Hermes only refreshes while it
 runs, so with under REFRESH_BEFORE_H left this asks it to (`tonypi auth refresh openai-codex`). If every token has
 expired anyway, log in again in Hermes:  tonypi auth add openai-codex --type oauth --no-browser
@@ -18,9 +18,7 @@ import time
 from pathlib import Path
 
 HERMES = Path("/home/pi/.hermes/profiles/tonypi/auth.json")
-PI = Path("/home/pi/.pi/agent/auth.json")
-CODEX_HOMES = [Path("/home/pi/.config/tonypi/codex-own"), Path("/home/pi/.config/tonypi/codex-voice"),
-               Path("/home/pi/.config/tonypi/codex-live")]  # harness, voice relay, live brain
+CODEX_HOMES = [Path("/home/pi/.config/tonypi/codex-voice"), Path("/home/pi/.config/tonypi/codex-live")]  # voice, brain
 NO_REFRESH = "shared-from-hermes-no-refresh"  # deliberately invalid: only Hermes may refresh
 REFRESH_BEFORE_H = 48
 
@@ -60,11 +58,6 @@ def main() -> int:
         print("Hermes's token has expired: log in again in Hermes", file=sys.stderr)
         return 1
 
-    auth = json.loads(PI.read_text()) if PI.exists() else {}
-    auth["openai-codex"] = {"type": "oauth", "access": access, "refresh": NO_REFRESH,
-                            "expires": exp * 1000 - 60_000, "accountId": account}
-    write(PI, auth)
-
     for home in CODEX_HOMES:
         write(home / "auth.json", {
             "OPENAI_API_KEY": None,
@@ -72,7 +65,7 @@ def main() -> int:
                        "account_id": account},
             "last_refresh": cred.get("last_refresh") or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         })
-    print(f"shared Hermes's ChatGPT token with pi + {len(CODEX_HOMES)} Codex home(s); valid {hours:.0f} more hours")
+    print(f"shared Hermes's ChatGPT token with {len(CODEX_HOMES)} Codex home(s); valid {hours:.0f} more hours")
     return 0
 
 

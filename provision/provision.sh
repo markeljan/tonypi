@@ -150,13 +150,21 @@ for unit in "$REPO"/provision/systemd/*.service; do
   [[ -e $unit ]] || continue
   install -m 0644 "$unit" /etc/systemd/system/
 done
+# retired 2026-10-30 with the bake-off harnesses (branches deprecated/harness-*): drop old installed copies
+for u in tonypi-brain@.service tonypi-switch@.service; do
+  [[ -f /etc/systemd/system/$u ]] && { systemctl stop "${u%@.service}@*" 2>/dev/null; rm -f "/etc/systemd/system/$u"; }
+done
 systemctl daemon-reload
 ln -sf "$REPO/.venv/bin/tonypi-chat" /usr/local/bin/tonypi-chat
 # USB mic gain to max (default ~82%): the robot's mic is weak at a distance
 amixer -c 0 -q cset name='Mic Capture Volume' 496 && alsactl store || log "  could not set mic gain"
-for u in tonypi-llm.service tonypi-tonyd.service tonypi-agent.service tonypi-mcp.service tonypi-bootcheck.service; do
+for u in tonypi-llm.service tonypi-tonyd.service tonypi-mcp.service tonypi-bootcheck.service; do
   [[ -f /etc/systemd/system/$u ]] && systemctl enable --now "$u" || true
 done
+# live mode (tonypi-voice) is Tony's brain at boot; tonypi-agent (offline LFM3) stays installed as the fallback that
+# "switch to local" starts. They conflict, so starting the voice stops a running agent.
+systemctl disable tonypi-agent.service >/dev/null 2>&1 || true
+[[ -f /etc/systemd/system/tonypi-voice.service ]] && systemctl enable --now tonypi-voice.service || true
 
 if [[ -f $STAMP_DIR/apt.done && -f $STAMP_DIR/uv.done && -f $STAMP_DIR/llama.done ]]; then
   touch "$STAMP_DIR/provisioned"

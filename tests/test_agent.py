@@ -253,3 +253,32 @@ def test_agent_ignores_commands_while_the_robot_lock_is_held(tmp_path, monkeypat
         fcntl.flock(f, fcntl.LOCK_EX)
         assert daemon.robot_reserved()
     assert not daemon.robot_reserved()
+
+
+def test_switch_names_map_to_live_or_local_only():
+    from tonypi.switch import parse_switch
+
+    assert parse_switch("Tony, switch to local") == "local"
+    assert parse_switch("switch back to default") == "local"
+    assert parse_switch("which to alive") == "live"  # ASR mangles both words
+    assert parse_switch("switch to our own") == "live"  # retired harness names mean live now
+    assert parse_switch("use the codex brain") == "live"
+    assert parse_switch("switch to Hermes") is None and parse_switch("switch to pi") is None
+    assert parse_switch("walk to the chair") is None and parse_switch("switch off the light") is None
+
+
+def test_agent_switch_to_live_starts_the_voice_and_local_only_acks(monkeypatch):
+    import itertools
+    from tonypi import switch
+    from tonypi.agent import daemon
+
+    started, said = [], []
+    monkeypatch.setattr(switch.subprocess, "Popen", lambda cmd: started.append(cmd))
+    monkeypatch.setattr(daemon, "request_switch", switch.request_switch)
+    a = daemon.Agent.__new__(daemon.Agent)
+    a.ids, a.debug, a.emit = itertools.count(1), False, lambda *x, **k: None
+    a.speaker = type("S", (), {"say": lambda self, s: said.append(s)})()
+    a.submit("switch to local", "text")
+    a.submit("switch to live", "text")
+    assert started == [["sudo", "systemctl", "start", "--no-block", "tonypi-voice.service"]]
+    assert said == ["I'm already the local agent.", "Switching to live mode."]
