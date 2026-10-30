@@ -1,5 +1,5 @@
-// Camera + head peripheral: snapshot (one photo), look (point the head, then a photo), video (a short burst of
-// frames). Images go back to the model as tool-result image content; pi forwards them
+// Camera + head peripheral: snapshot (one photo), look (point the head, then a photo), scan (head sweep, tonyd's
+// scan op: one settled photo per angle + gyro heading), video (tonyd's burst op). Images go back to the model as tool-result image content; pi forwards them
 // (Responses API: input_image in the tool output; chat completions: a user message right after the tool result).
 
 import { readFile } from "node:fs/promises";
@@ -52,46 +52,44 @@ export default function camera(pi: ExtensionAPI) {
   pi.registerTool(defineTool({
     name: "scan",
     label: "Scan",
-    description: "Look around without moving the body: sweep the head from left to right and take a photo at each "
-      + "angle (default 5 photos: pan 60, 30, 0, -30, -60; + = left), then look straight again. Each photo is "
-      + "labelled with its pan angle, so you know which way to turn (body turn left = positive). The camera sees "
-      + "about 60 degrees across.",
+    description: "Look around without moving the body: one photo per head angle (default pan 60, 30, 0, -30, -60; "
+      + "+ = left), each after the head settled, then the head goes back. Photos are labelled with their pan angle and "
+      + "you get the gyro heading, so you know which way to turn (body turn left = positive). The camera sees about "
+      + "60 degrees across.",
     parameters: Type.Object({
-      tilt_deg: Type.Optional(Type.Number({ minimum: -40, maximum: 25, description: "head tilt, default 0; -20 to see the floor" })),
-      photos: Type.Optional(Type.Integer({ minimum: 3, maximum: 7, description: "default 5" })),
+      pans: Type.Optional(Type.Array(Type.Number({ minimum: -60, maximum: 60 }), { minItems: 1, maxItems: 7,
+        description: "head angles, default [60, 30, 0, -30, -60]; [60, 0, -60] is quicker" })),
+      tilt_deg: Type.Optional(Type.Number({ minimum: -40, maximum: 25, description: "head tilt; -20 to see the floor" })),
     }),
     executionMode: "sequential",
-    async execute(_id, { tilt_deg = 0, photos = 5 }, signal) {
-      const content: any[] = [];
-      for (let i = 0; i < photos && !signal?.aborted; i++) {
-        const pan = Math.round(60 - (120 * i) / (photos - 1));
-        await tonyd.head(pan, tilt_deg, 300);
-        await sleep(i === 0 ? HEAD_SETTLE_MS + 200 : HEAD_SETTLE_MS);
-        const p = await photo();
-        content.push({ type: "text", text: `pan ${pan} deg (${pan > 0 ? "left" : pan < 0 ? "right" : "straight ahead"}), tilt ${tilt_deg}` }, p.image);
+    async execute(_id, { pans = [60, 30, 0, -30, -60], tilt_deg }) {
+      const r = await tonyd.call("scan", { pans, ...(tilt_deg != null ? { tilt_deg } : {}) }, 30_000);
+      const content: any[] = [{ type: "text", text: `scan at body heading ${r.heading_deg} deg (gyro):` }];
+      for (const v of r.views) {
+        const side = v.pan_deg > 0 ? "left" : v.pan_deg < 0 ? "right" : "straight ahead";
+        content.push({ type: "text", text: `pan ${v.pan_deg} deg (${side}), tilt ${v.tilt_deg}` },
+          { type: "image", data: (await readFile(v.path)).toString("base64"), mimeType: "image/jpeg" });
       }
-      await tonyd.head(0, tilt_deg);
-      return { content, details: { photos: content.length / 2, tilt_deg } };
+      return { content, details: { heading_deg: r.heading_deg, pans: r.views.map((v: any) => v.pan_deg) } };
     },
   }));
 
   pi.registerTool(defineTool({
     name: "video",
     label: "Video",
-    description: "Short video: a burst of 2-6 photos over up to 5 s, oldest first. Use it to see motion or change.",
+    description: "Short video: a burst of 2-12 photos over a few seconds, oldest first. Use it to see motion or change.",
     parameters: Type.Object({
-      frames: Type.Optional(Type.Integer({ minimum: 2, maximum: 6, description: "default 3" })),
-      seconds: Type.Optional(Type.Number({ minimum: 0.3, maximum: 5, description: "total span, default 2" })),
+      frames: Type.Optional(Type.Integer({ minimum: 2, maximum: 12, description: "default 4" })),
+      seconds: Type.Optional(Type.Number({ minimum: 0.2, maximum: 10, description: "total span, default 2" })),
     }),
-    async execute(_id, { frames = 3, seconds = 2 }, signal) {
+    async execute(_id, { frames = 4, seconds = 2 }) {
+      const r = await tonyd.call("burst", { frames, seconds }, (seconds + 10) * 1000);
       const content: any[] = [];
-      const t0 = Date.now();
-      for (let i = 0; i < frames && !signal?.aborted; i++) {
-        if (i) await sleep(Math.max(0, t0 + (i * seconds * 1000) / (frames - 1) - Date.now()));
-        const p = await photo();
-        content.push({ type: "text", text: `frame ${i + 1} at ${((Date.now() - t0) / 1000).toFixed(1)} s` }, p.image);
+      for (const f of r.frames) {
+        content.push({ type: "text", text: `frame at ${f.t_s} s` },
+          { type: "image", data: (await readFile(f.path)).toString("base64"), mimeType: "image/jpeg" });
       }
-      return { content, details: { frames: content.length / 2 } };
+      return { content, details: { frames: r.frames.length } };
     },
   }));
 }
