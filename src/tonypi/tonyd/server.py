@@ -6,7 +6,9 @@ Brains (the voice agent, the MCP server, scripts) talk to it over a Unix socket 
   reply    {"rid": 7, "ok": true, "job": {"id": 3, "skill": "wave", "state": "done", "said": [], ...}}
   event    {"event": "job" | "warn", ...}          (only to connections that sent {"op": "subscribe"})
 
-ops: ping, skills, run, stop, state, head, snapshot, relax, subscribe.
+ops: ping, skills, run, stop, state, head, snapshot, relax, subscribe,
+     and for brains that write their own moves (studio.py): joints, pose, play, torque, motions, motion_get,
+     motion_save, motion_delete, skill_save, skill_delete, calibration.
 One skill runs at a time and the newest preempts. Safety lives here, never in a brain: servo temperature and
 fall guards (body.py), torque off whenever idle, and low-battery / overheating / camera lost-or-back warnings.
 """
@@ -29,6 +31,7 @@ from tonypi.tonyd import SOCK
 from tonypi.tonyd.body import LOW_BATTERY_MV, Body
 from tonypi.tonyd.camera import Camera
 from tonypi.tonyd.skills import MAX_COUNT, SKILLS
+from tonypi.tonyd.studio import parse_frames
 
 log = logging.getLogger("tonypi.tonyd")
 SNAP_DIR = Path(os.environ.get("TONYD_SNAP_DIR", "/run/tonypi"))
@@ -58,10 +61,13 @@ class Job:
     error: str | None = None
     started: float | None = None
     seconds: float | None = None
+    hold_s: float = 0.0  # keep torque on this long after the job (a pose being held), instead of settle + relax
+    max_tilt_deg: float | None = None  # how far Tony leaned during the job (judging a new gait)
+    frames: list | None = field(default=None, repr=False)  # a brain's own keyframes ("_play")
     finished: threading.Event = field(default_factory=threading.Event, repr=False)
 
     def public(self) -> dict:
-        return {f.name: getattr(self, f.name) for f in fields(self) if f.name != "finished"}
+        return {f.name: getattr(self, f.name) for f in fields(self) if f.name not in ("finished", "frames")}
 
 
 class Tonyd:
@@ -77,6 +83,7 @@ class Tonyd:
         self.last_skill_end = 0.0
         self.torque_maybe_on = True
         self.needs_settle = False  # the last skill left the body in a step pose: stand before going limp
+        self.hold_s = 0.0  # the last job asked to hold its pose this long
         self.last_warn = 0.0
         self.cached: dict = {}
         self.cached_t = 0.0
@@ -101,10 +108,19 @@ class Tonyd:
 
     # ---- skills ---------------------------------------------------------------------------------------------
 
-    def submit(self, skill: str, count: int = 1) -> Job:
-        if skill not in SKILLS:
-            raise ValueError(f"unknown skill {skill!r}; known: {', '.join(SKILLS)}")
-        job = Job(next(self.ids), skill, max(1, min(MAX_COUNT, int(count))))
+    def skills(self) -> dict[str, dict]:
+        """Every skill a brain can run: the built-in ones plus the studio's (defaults + the user's)."""
+        out = {k: {"description": v, "source": "builtin"} for k, v in SKILLS.items()}
+        out.update(self.body.studio.skills())
+        return out
+
+    def submit(self, skill: str, count: int = 1, frames=None, hold_s: float = 0.0) -> Job:
+        if frames is not None:
+            frames, skill = [{"ms": f.ms, "pos": f.pos} for f in parse_frames(frames)], "_play"
+        elif skill not in (known := self.skills()):
+            raise ValueError(f"unknown skill {skill!r}; known: {', '.join(known)}")
+        job = Job(next(self.ids), skill, max(1, min(MAX_COUNT, int(count))),
+                  hold_s=max(0.0, min(120.0, float(hold_s or 0))), frames=frames)
         self.body.cancel()  # the newest command preempts whatever is running
         self._drop_queued()
         self.queue.put(job)
@@ -142,15 +158,21 @@ class Tonyd:
                     if job.skill == "settle":
                         self.body.settle()
                         ok = True
+                    elif job.frames is not None:
+                        ok = self.body.play_frames(job.frames, job.said.append)
                     else:
                         ok = self.body.run(job.skill, job.count, job.said.append)
                     state = "done" if ok else ("cancelled" if self.body.cancelled.is_set() else "failed")
+                    job.max_tilt_deg = getattr(self.body, "max_tilt", None)  # before _finish: waiters reply then
                     self._finish(job, state)
                 except Exception as e:
                     log.exception("skill %s failed", job.skill)
                     self._finish(job, "failed", f"{type(e).__name__}: {e}")
                 finally:
-                    self.needs_settle = job.skill not in NO_SETTLE and job.state != "cancelled"
+                    info = self.body.studio.skills().get(job.skill)
+                    settles = info.get("settle", True) if info else job.skill not in NO_SETTLE
+                    self.needs_settle = settles and not job.hold_s and job.state != "cancelled"
+                    self.hold_s = job.hold_s
                     self.current = None
                     self.last_skill_end = time.monotonic()
                     self.torque_maybe_on = True
@@ -197,7 +219,7 @@ class Tonyd:
             # idle = torque off (Tony carries no load and holds the pose limp), but only from a neutral stand: going
             # limp in a walk/turn end pose, then starting the next step from it, put Tony on his back (2026-10-29).
             # A brain's next step within IDLE_RELAX_S chains on with torque still on, no settle in between.
-            if idle and self.torque_maybe_on and now - self.last_skill_end >= IDLE_RELAX_S:
+            if idle and self.torque_maybe_on and now - self.last_skill_end >= max(IDLE_RELAX_S, self.hold_s):
                 if self.lock.acquire(blocking=False):
                     try:
                         if self.needs_settle and self.current is None and self.queue.empty():
@@ -210,7 +232,7 @@ class Tonyd:
                         self.lock.release()
             # the 20 s check unloads torque left on by others, never earlier than the idle delay above: unloading
             # right as a step ends drops Tony mid-sway (2026-10-29: fell on its back after turn_left)
-            if now < next_check or not idle or now - self.last_skill_end < IDLE_RELAX_S:
+            if now < next_check or not idle or now - self.last_skill_end < max(IDLE_RELAX_S, self.hold_s):
                 continue
             next_check = now + WATCH_S
             if not self.lock.acquire(blocking=False):
@@ -275,9 +297,14 @@ class Tonyd:
         if op == "ping":
             reply({"pong": True})
         elif op == "skills":
-            reply({"skills": SKILLS, "max_count": MAX_COUNT})
-        elif op == "run":
-            job = self.submit(str(msg.get("skill", "")), msg.get("count", 1))
+            details = self.skills()
+            reply({"skills": {k: v.get("description", "") for k, v in details.items()}, "details": details,
+                   "max_count": MAX_COUNT})
+        elif op in ("run", "play", "pose"):
+            if op == "pose":
+                msg = {**msg, "frames": [{"ms": msg.get("ms", 500), "pos": msg.get("positions") or {}}]}
+            job = self.submit(str(msg.get("skill", "")), msg.get("count", 1),
+                              frames=msg.get("frames") if op != "run" else None, hold_s=msg.get("hold_s", 0))
             if not msg.get("wait"):
                 reply({"job": job.public()})
                 return
@@ -303,8 +330,44 @@ class Tonyd:
                 self.body.relax()
                 self.torque_maybe_on = False
             reply({"relaxed": True})
+        elif op == "joints":
+            got = self.lock.acquire(timeout=0.5)  # reading mid-motion is fine, just not racing the watchdog
+            try:
+                reply(self.body.joints())
+            finally:
+                if got:
+                    self.lock.release()
+        elif op == "torque":  # e.g. off on one leg to pose it by hand, then `joints` to record the pose
+            on = bool(msg.get("on"))
+            with self.lock:
+                self.body.torque(msg.get("ids") or range(1, 17), on)
+                if on:
+                    self.torque_maybe_on, self.last_skill_end = True, time.monotonic()
+                    self.needs_settle, self.hold_s = False, max(0.0, min(120.0, float(msg.get("hold_s", 0))))
+            reply({"torque": on})
         else:
-            raise ValueError(f"unknown op {op!r}")
+            reply(self._studio_op(op, msg))
+
+    def _studio_op(self, op: str, msg: dict) -> dict:
+        st = self.body.studio
+        if op == "motions":
+            return {"motions": st.list_motions()}
+        if op == "motion_get":
+            return st.get_motion(msg.get("name", ""))
+        if op == "motion_save":
+            return st.save_motion(msg.get("name", ""), msg.get("frames"), msg.get("description", ""))
+        if op == "motion_delete":
+            return st.delete_motion(msg.get("name", ""))
+        if op == "skill_save":
+            return st.save_skill(msg.get("name", ""), msg.get("motions"), msg.get("description", ""),
+                                 msg.get("upright", True), msg.get("settle", True))
+        if op == "skill_delete":
+            return st.delete_skill(msg.get("name", ""))
+        if op == "calibration":
+            if msg.get("trim") is not None or msg.get("limits") is not None:
+                st.set_calibration(msg.get("trim"), msg.get("limits"))
+            return {"calibration": self.body.reload_calibration()}
+        raise ValueError(f"unknown op {op!r}")
 
     def _client(self, conn: socket.socket) -> None:
         wlock = threading.Lock()

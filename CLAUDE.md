@@ -7,7 +7,10 @@ it's told ("hey, go get that"), with local LFM models on the Pi and Claude (Opus
 
 ## Hard rules
 - **One process owns `/dev/ttyAMA0`: `tonyd`** (`tonypi.hal.board.Board` opens it exclusively; a second open fails with EBUSY). Everything else goes through tonyd's socket or the MCP server. tonyd also owns the camera.
-- Motion only through the supervisor/motion layer. LLMs call skill-level tools (walk, turn, look, play_motion, say, stop), never raw joint writes.
+- **Brains author movement** (owner's direction, 2026-10-29): any brain may read joints, play its own keyframes, hold
+  poses, save motions and skills (overriding walk/turn/step/...), and calibrate (trim, soft limits), all through tonyd
+  (`tonyd/studio.py`, MCP tools). The factory motions are defaults and examples. tonyd keeps the reflexes no brain can
+  bypass: stop, temperature, tilt/fall guard, joint limits, settle + torque off when idle.
 - `stop` and fall recovery never depend on an LLM.
 - Before commanding motion, assume the robot may be standing on a table: start slow, prefer `stand_slow`, keep a hand near it the first time.
 - Servo **temperature**: limit is 85 °C (servo self-protects). Measured up to 80 °C after ~1 h of holding a pose on 2026-10-28 (elbows 6/14 hottest at 78–80, right leg 66–76). **Torque is off whenever idle** (any pose, standing included: it carries no load and holds the pose limp); a thermal stop unloads instead of standing.
@@ -75,6 +78,10 @@ before `tools/bench.py`** or anything else that opens the board.
   latest frame (~30 ms; the camera thread keeps capturing at 15 fps).
   Camera unplugged / back → `warn` event (`kind: "camera"`), which the agent says ("Camera disconnected." /
   "Camera reconnected."; after the current command if busy; at startup if the camera is missing).
+- Writing moves (`studio.py`): user layer in `~/.local/share/tonypi/` (`motions/*.json` override `data/motions` by name,
+  `skills.json` = name → motion sequence with `"*step"` repeated by count, `calibration.json` = per-servo `trim` +
+  soft `limits`). Ops `joints, play {frames, hold_s}, pose {positions, ms, hold_s}, torque {ids, on}, motions,
+  motion_get/save/delete, skill_save/delete, calibration`. Every job reports `max_tilt_deg` (judge a new gait by it).
 - MCP: `tonypi-mcp.service` → `http://127.0.0.1:8765/mcp` (Streamable HTTP, no auth, localhost only by default). Tools:
   `list_skills, run_skill, stop, get_state, look, snapshot (image), say`. `.mcp.json` in the repo points Claude Code at it.
 

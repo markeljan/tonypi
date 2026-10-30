@@ -29,8 +29,26 @@ class _Body:
     """Skills take `seconds` each unless cancelled; records what ran."""
 
     def __init__(self, seconds=0.05):
+        from tonypi.tonyd.body import DEFAULT_SKILLS
+        from tonypi.tonyd.studio import Studio
+
         self.board, self.cancelled, self.asleep = _Board(), threading.Event(), False
         self.ran, self.relaxed, self.seconds = [], 0, seconds
+        self.studio = Studio(Path(tempfile.mkdtemp()), default_skills=DEFAULT_SKILLS)
+        self.max_tilt, self.torqued = 3.0, []
+
+    def play_frames(self, frames, say):
+        self.ran.append(("_play", len(frames)))
+        return not self.cancelled.wait(self.seconds)
+
+    def joints(self):
+        return {"raw": {i: 500 for i in range(1, 17)}, "pos": {i: 500 for i in range(1, 17)}}
+
+    def torque(self, ids, on):
+        self.torqued.append((list(ids), on))
+
+    def reload_calibration(self):
+        return self.studio.calibration()
 
     def cancel(self):
         self.cancelled.set()
@@ -197,3 +215,96 @@ def test_camera_missing_at_startup_is_announced():
     d.emit = lambda event, **kw: events.append(kw["text"])
     cam._set_connected(False)
     assert events == ["Camera disconnected."]
+
+
+# ---- brains writing their own moves ---------------------------------------------------------------------------
+
+STEP = [{"ms": 300, "pos": {"4": 620, "12": 380}}, {"ms": 300, "pos": {"4": 600, "12": 400}}]
+
+
+def test_play_frames_runs_as_a_guarded_job_and_settles(robot, monkeypatch):
+    monkeypatch.setattr(server, "IDLE_RELAX_S", 0.1)
+    d, c = robot
+    job = c.play(STEP)
+    assert job["skill"] == "_play" and job["state"] == "done" and job["max_tilt_deg"] == 3.0
+    time.sleep(0.6)
+    assert d.body.ran == [("_play", 2), ("settle", 1)] and d.body.relaxed >= 1
+
+
+def test_pose_hold_keeps_torque_and_skips_settle(robot, monkeypatch):
+    monkeypatch.setattr(server, "IDLE_RELAX_S", 0.1)
+    d, c = robot
+    c.pose({"8": 900}, ms=200, hold_s=0.8)
+    relaxed = d.body.relaxed
+    time.sleep(0.4)
+    assert d.body.relaxed == relaxed and ("settle", 1) not in d.body.ran  # still holding
+    time.sleep(0.8)
+    assert d.body.relaxed > relaxed and ("settle", 1) not in d.body.ran
+
+
+def test_bad_frames_are_refused(robot):
+    _, c = robot
+    for bad in ([], [{"ms": 5, "pos": {"1": 500}}], [{"ms": 300, "pos": {"17": 500}}],
+                [{"ms": 300, "pos": {"1": 1200}}], [{"ms": 300}]):
+        with pytest.raises(TonydError):
+            c.play(bad)
+
+
+def test_user_motion_and_skill_round_trip(robot):
+    d, c = robot
+    r = c.call("motion_save", name="my_step", frames=STEP, description="test step")
+    assert r["frames"] == 2 and not r["overrides_default"]
+    assert any(m["name"] == "my_step" and m["source"] == "user" for m in c.call("motions")["motions"])
+    assert c.call("motion_get", name="my_step")["frames"] == STEP
+    with pytest.raises(TonydError, match="no motion"):
+        c.call("skill_save", name="shuffle", motions=["nope"])
+    c.call("skill_save", name="shuffle", motions=["*my_step"], description="shuffle forward")
+    assert c.call("skills")["details"]["shuffle"]["source"] == "user"
+    assert c.run("shuffle", 2)["state"] == "done" and ("shuffle", 2) in d.body.ran
+    # overriding a default, then restoring it
+    assert c.call("skill_save", name="turn_left", motions=["*my_step"])["overrides_default"]
+    assert c.call("skills")["details"]["turn_left"]["motions"] == ["*my_step"]
+    c.call("skill_delete", name="turn_left")
+    assert c.call("skills")["details"]["turn_left"]["motions"] == ["*turn_left"]
+
+
+def test_calibration_trim_and_limits():
+    from tonypi.tonyd.studio import Studio, StudioError
+
+    st = Studio(Path(tempfile.mkdtemp()))
+    cal = st.set_calibration(trim={"4": 12, "12": -8}, limits={"8": [200, 800]})
+    assert st.to_servo(cal, {4: 600, 12: 400, 8: 950, 1: 1000}) == {4: 612, 12: 392, 8: 800, 1: 1000}
+    cal = st.set_calibration(trim={"4": 0}, limits={"8": None})
+    assert cal == {"trim": {12: -8}, "limits": {}}
+    with pytest.raises(StudioError):
+        st.set_calibration(trim={"4": 500})
+
+
+def test_body_plays_user_skills_with_calibration():
+    """The real Body: a user skill's motions, repeated by count, reach the board with the trim applied."""
+    from tonypi.motion.library import Player
+    from tonypi.tonyd.body import DEFAULT_SKILLS, Body
+    from tonypi.tonyd.studio import Studio
+
+    class Board:
+        imu, battery_mv = _Imu(), 11500
+
+        def __init__(self):
+            self.moves = []
+
+        def bus_read(self, sid, cmd, timeout=0.05, retries=2):
+            return 40
+
+        def move(self, ms, targets):
+            self.moves.append(dict(targets))
+
+    body = Body.__new__(Body)
+    body.board, body.cancelled, body.asleep, body._last_dance = Board(), threading.Event(), False, None
+    body.player = Player(body.board)
+    body.studio = Studio(Path(tempfile.mkdtemp()), default_skills=DEFAULT_SKILLS)
+    body.studio.save_motion("tiny_step", [{"ms": 20, "pos": {"4": 600}}])
+    body.studio.save_skill("tiny_walk", ["*tiny_step"])
+    body.studio.set_calibration(trim={"4": 10})
+    body.reload_calibration()
+    assert body.run("tiny_walk", 3, lambda s: None)
+    assert body.board.moves == [{4: 610}] * 3
