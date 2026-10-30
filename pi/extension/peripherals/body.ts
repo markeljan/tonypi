@@ -21,6 +21,7 @@ import { fileURLToPath } from "node:url";
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import * as tonyd from "../tonyd.ts";
+import { mine } from "./studio.ts";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -146,6 +147,9 @@ export default async function body(pi: ExtensionAPI) {
         hold_s: NO_SETTLE.test(skill) ? 0 : HOLD_S,
       };
       const info = ((await tonyd.skillDetails().catch(() => undefined)) ?? {})[skill];
+      if (info?.source === "user" && !mine(skill)) {
+        throw new Error(`${skill} is another brain's skill; use the defaults or yours (list_skills), or write your own`);
+      }
       const stepped = STEPPED.has(skill) || !!info?.motions?.some((m: string) => m.startsWith("*"));
       const t0 = Date.now();
       const said: string[] = [];
@@ -199,7 +203,8 @@ export default async function body(pi: ExtensionAPI) {
       + "(builtin/default/user) and the motions a sequence skill plays.",
     parameters: Type.Object({}),
     async execute() {
-      const d = await tonyd.skillDetails();
+      const d = Object.fromEntries(Object.entries(await tonyd.skillDetails())
+        .filter(([n, v]: [string, any]) => v.source !== "user" || mine(n)));
       const lines = Object.entries(d).map(([n, v]: [string, any]) =>
         `${n} [${v.source}]${v.motions ? ` = ${v.motions.join(" ")}` : ""}${v.description ? ` - ${v.description}` : ""}`);
       return text(lines.join("\n"), d);

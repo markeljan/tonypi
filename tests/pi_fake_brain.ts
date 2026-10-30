@@ -28,7 +28,7 @@ function decide(context: any) {
       return fauxAssistantMessage(fauxToolCall("save_motion", { name: "turn_left", frames: [{ ms: 300, pos: { "5": 520 } }] }), { stopReason: "toolUse" });
     if (!calls.some((c: any) => c.name === "play_frames"))
       return fauxAssistantMessage(fauxToolCall("play_frames", { frames: [{ ms: 300, pos: { "5": 520, "13": 480 } }] }), { stopReason: "toolUse" });
-    if (!did("my_turn")) return run("my_turn", 2);
+    if (!did("my_turn_pi")) return run("my_turn_pi", 2);
     return fauxAssistantMessage(fauxText("Tried it."));
   }
   if (/turn right/i.test(newest)) return did("turn_right") ? fauxAssistantMessage(fauxText("Turned right.")) : run("turn_right", 2);

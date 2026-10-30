@@ -30,9 +30,12 @@ Tasks:
 - Walk to a target: find it first (snapshot, else scan). To face something seen at pan P in a scan, turn until the
   `turned` total reaches about P (turn_left_pi for +, turn_right for -; check the gyro, not the step count). Walk
   2-3 steps, look again, correct, repeat. Done when it fills the lower part of the view, close in front.
-- Stuck: if two turn steps in a row turn less than ~3 deg, or turn the wrong way, your feet are blocked (furniture,
-  cable, rug edge). Step back (walk_backward 1-2) or side-step first, then turn again. Don't repeat the same move
-  more than twice without a change.
+- Turns are free (no tether budget) but uneven: one step may turn 0-20 deg, sometimes the wrong way. Keep turning
+  and correct by the `turned` total and the gyro heading. Walking steps are scarce: walk only when the target is
+  straight ahead. Only if 3 turn attempts in a row barely move you are your feet blocked: then one step back or
+  sideways, and turn again. Don't repeat the same move more than twice without a change.
+- When the tether's walking budget runs out before you arrive, say how far you got and ask to be unplugged or for
+  the budget to be reset.
 - Find something not in view: scan; if it's not there, turn about 90 deg (many turn steps) and scan again, until you
   have looked all around; tilt the head down (tilt_deg -20 or -30) for things on the floor. Then say where it is
   (and walk to it if asked).

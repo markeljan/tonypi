@@ -22,9 +22,12 @@ const json = (o: unknown) => JSON.stringify(o);
 // bake-off rule: the user layer (~/.local/share/tonypi) is shared by every harness, so this one saves only names
 // with its suffix (turn_left_pi, turn_left_pi_v2) and never overrides a default (turn_left stays the factory turn until a winner is promoted).
 // Set TONYPI_STUDIO_SUFFIX="" to lift it.
-const SUFFIX = process.env.TONYPI_STUDIO_SUFFIX ?? "_pi";
+export const SUFFIX = process.env.TONYPI_STUDIO_SUFFIX ?? "_pi";
+/** One of ours (or no suffix rule). Other brains' user motions/skills (e.g. _own, _hermes) are hidden and refused:
+ *  in the bake-off each harness authors its own moves. Defaults and built-ins are for everyone. */
+export const mine = (name: string) => !SUFFIX || name.endsWith(SUFFIX) || name.includes(SUFFIX + "_");
 function own(name: string) {
-  if (SUFFIX && !(name.endsWith(SUFFIX) || name.includes(SUFFIX + "_")))
+  if (!mine(name))
     throw new Error(`save it as "${name}${SUFFIX}": names saved here must contain "${SUFFIX}" (e.g. turn_left${SUFFIX}_v2; the library is shared, defaults stay as they are)`);
 }
 
@@ -85,11 +88,18 @@ export default function studio(pi: ExtensionAPI) {
 
   op("list_motions", "Motions", "Every motion (keyframe file): factory defaults and saved user motions (a user "
     + "motion overrides the default of the same name). Name, source, frames, duration.",
-    Type.Object({}), () => tonyd.call("motions"),
+    Type.Object({}), async () => {
+      const r = await tonyd.call("motions");
+      return { motions: r.motions.filter((m: any) => m.source !== "user" || mine(m.name)) };
+    },
     (r) => r.motions.map((m: any) => `${m.name}${m.source === "user" ? " [user]" : ""} ${m.frames}f ${m.ms}ms`).join(", "));
 
   op("get_motion", "Get motion", "A motion's keyframes, to study or copy before writing your own version.",
-    Type.Object({ name: Type.String() }), ({ name }) => tonyd.call("motion_get", { name }));
+    Type.Object({ name: Type.String() }), async ({ name }) => {
+      const m = await tonyd.call("motion_get", { name });
+      if (m.source === "user" && !mine(name)) throw new Error(`${name} belongs to another brain; start from a default motion or one of yours`);
+      return m;
+    });
 
   op("save_motion", "Save motion", "Save keyframes as a named motion (lowercase, digits, _). The name "
     + `must contain "${SUFFIX}" (e.g. turn_left${SUFFIX}_v2); defaults can't be overridden from here.`,

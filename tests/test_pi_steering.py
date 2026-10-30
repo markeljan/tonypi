@@ -54,7 +54,7 @@ class FakeTonyd:
             op, rid = msg["op"], msg.get("rid")
             if op == "skills":
                 details = {"wave": {"description": "wave", "source": "builtin"},
-                           "my_turn": {"motions": ["*my_turn_step"], "description": "user turn", "source": "user"}}
+                           "my_turn_pi": {"motions": ["*my_turn_pi_step"], "description": "user turn", "source": "user"}}
                 conn.sendall((json.dumps({"rid": rid, "ok": True, "skills": {k: v["description"] for k, v in details.items()},
                                           "details": details}) + "\n").encode())
                 continue
@@ -113,7 +113,7 @@ def test_studio_play_and_a_saved_stepped_skill(tmp_path: Path, monkeypatch):
     finally:
         pi.close()
     assert body.plays and body.plays[0]["frames"] == [{"ms": 300, "pos": {"5": 520, "13": 480}}]
-    assert [(s, c) for _, s, c in body.runs if s == "my_turn"] == [("my_turn", 1), ("my_turn", 1)]  # one step per job
+    assert [(s, c) for _, s, c in body.runs if s == "my_turn_pi"] == [("my_turn_pi", 1), ("my_turn_pi", 1)]  # one step per job
     ends = {e["toolName"]: e for e in events if e.get("type") == "tool_execution_end"}
     results = {k: e["result"]["content"][0]["text"] for k, e in ends.items()}
     assert "max tilt 4.2" in results["play_frames"], results
