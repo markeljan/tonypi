@@ -41,10 +41,14 @@ def run() -> int:
     except TonydError as e:
         item(False, "tonyd reachable", str(e))
 
-    voice_ok = bool(os.environ.get("TONYPI_LIVE_URL") or Path(__file__).with_name("live.py").exists())
-    item(voice_ok, "GPT-Live-1 voice in/out (+ barge-in / stop)",
-         "live.py present (verify on the robot: speak a command, hear the answer)" if voice_ok else
-         "not wired yet (waiting for M1's GPT-Live-1 brief)")
+    from tonypi.harness.peripherals.voicelink import SOCK, VoiceLink
+    if VoiceLink.available():
+        link = VoiceLink(lambda i, t: None, name="own-check")
+        st = link.status() if link.connected.wait(3) else {"connected": False}
+        voice_ok, ev = bool(st.get("connected")), f"tonypi-voice at {SOCK}: {st}"
+    else:
+        voice_ok, ev = False, f"client ready (peripherals/voicelink.py); the tonypi-voice service isn't running ({SOCK})"
+    item(voice_ok, "GPT-Live-1 voice in/out via tonypi-voice (+ barge-in / stop)", ev)
 
     home = Path(os.environ.get("TONYPI_CODEX_HOME", codex.CODEX_HOME))
     login = subprocess.run([shutil.which("codex") or "codex", "login", "status"], capture_output=True, text=True,

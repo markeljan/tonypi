@@ -28,7 +28,7 @@ from typing import Callable
 from tonypi.agent.brain import STOP_RE
 from tonypi.harness.peripherals import Ctx, Peripheral, Result, Tool
 from tonypi.harness.tasks import (CONTINUE_PROMPT, LOOP_PROMPT, MAX_CONTINUES, MAX_PUSHBACKS, PLAYBOOK,
-                                  PUSHBACK_PROMPT, TASK_CAP_S, TaskLog)
+                                  PUSHBACK_PROMPT, STUCK_AFTER, STUCK_PROMPT, TASK_CAP_S, TaskLog)
 
 log = logging.getLogger("tonypi.harness")
 STEER_GRACE_S = 0.3
@@ -87,6 +87,7 @@ class Harness:
         self.tools_running = 0
         self.stopped = False
         self.timed_out = False
+        self.failures: dict[str, int] = {}
         self.tasklog: TaskLog | None = None
         self.on_lesson: Callable[[str, str], None] | None = None  # (lesson, task text): self-update (learning.py)
         self.extra_prompt: Callable[[], str] | None = None  # learned instructions, appended to the system prompt
@@ -108,10 +109,11 @@ class Harness:
             parts.append(extra)
         return "\n\n".join(parts)
 
-    def say(self, text: str) -> None:
+    def say(self, text: str, final: bool = False) -> None:
+        """final: the task's last word (closes the voice request it answers)."""
         voice = self.peripherals.get("voice")
         if voice:
-            voice.speak(text)
+            voice.speak(text, final)
         else:
             self.emit("say", text=text)
 
@@ -213,6 +215,7 @@ class Harness:
         self.stopped = False
         t0 = time.monotonic()
         tl = self.tasklog = TaskLog(text, source)
+        self.failures: dict[str, int] = {}  # failed tries per "same thing" in this task (stuck detection)
         self.emit("thinking")
         msg: str | None = text
         failed: set[str] = set()
@@ -251,6 +254,8 @@ class Harness:
                     continues += 1
                     tl.continues = continues
                     msg = CONTINUE_PROMPT.format(elapsed=elapsed, cap=TASK_CAP_S)
+                    if continues % 3 == 0:  # turn after turn without getting there: the same nudge as for failures
+                        msg += "\n" + STUCK_PROMPT.format(n=continues, what="turns that didn't finish the task")
                 elif outcome.status == "give_up" and pushbacks < MAX_PUSHBACKS and elapsed < TASK_CAP_S - 30:
                     pushbacks += 1
                     tl.pushbacks = pushbacks
@@ -270,6 +275,8 @@ class Harness:
             body = self.peripherals.get("body")
             if body is not None and not self.stopped:
                 await asyncio.to_thread(body.settle)
+            if (voice := self.peripherals.get("voice")) is not None and hasattr(voice, "task_ended"):
+                voice.task_ended()
             tl.t_done = time.time()
             self.tasklog = None
             rec = tl.write()
@@ -352,6 +359,12 @@ class Harness:
             self.active.discard(steer)
         self.emit("tool_result", name=name, text=res.text[:300], images=len(res.images),
                   seconds=round(time.monotonic() - t, 2))
+        if res.error and not res.text.startswith(("NOT done", "unknown tool")) and self.tasklog is not None:
+            what = f"{name} {args.get('skill', '')}".strip() if name in ("run_skill", "trial") else name
+            n = self.failures[what] = self.failures.get(what, 0) + 1
+            if n >= STUCK_AFTER:  # 2 failed tries of the same thing: stop repeating it (owner's lesson, rug edge)
+                res.text += "\n\n" + STUCK_PROMPT.format(n=n, what=what)
+                self.emit("stuck", what=what, tries=n)
         if inject and self.pending:
             msgs = self.take_pending()
             self.told = (time.monotonic(), msgs)

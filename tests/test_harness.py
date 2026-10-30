@@ -480,6 +480,77 @@ def test_improve_code(repo, monkeypatch, tmp_path, edit, tests_ok, kept):
     assert ("self-update" in learning.git("log", "-1", "--format=%s")) is kept
 
 
+def test_same_failure_twice_gets_the_stuck_nudge(tonyd, tasklog):
+    from tonypi.harness.tasks import Outcome
+
+    async def script(b, text):
+        await b.tool("run_skill", skill="squat")  # the fake body refuses squats: too hot
+        await asyncio.sleep(0.6)
+        await b.tool("run_skill", skill="squat")
+        return Outcome("done", "", "", "")
+
+    async def main():
+        brain = Scripted(script)
+        h, _, _ = await make(tonyd, brain)
+        await h.submit("do a squat")
+        await until(lambda: not h.busy())
+        assert "Stop repeating it" not in brain.results[0] and "Stop repeating it" in brain.results[1]
+        assert "ask_user" in brain.results[1]
+        assert json.loads(tasklog.read_text().splitlines()[-1])["stuck"] == ["run_skill squat x2"]
+
+    asyncio.run(main())
+
+
+def test_ask_user_typed_and_by_voice(tmp_path):
+    import socket as so
+    import threading as th
+
+    from tonypi.harness.peripherals import Ctx
+    from tonypi.harness.peripherals.voice import VoicePeripheral
+    from tonypi.harness.peripherals.voicelink import VoiceLink
+    events = []
+    ctx = Ctx(th.Event(), lambda t, **k: events.append((t, k)))
+    v = VoicePeripheral(ask_typed=lambda q, t: "go around it")
+    assert "go around it" in v._ask_tool({"question": "I'm stuck at the rug edge, what should I do?"}, ctx).text
+
+    # a fake tonypi-voice service: one heard request, answers asks, records what the harness sends
+    path = str(tmp_path / "voice.sock")
+    srv = so.socket(so.AF_UNIX)
+    srv.bind(path)
+    srv.listen(1)
+    got = []
+
+    def serve():
+        c, _ = srv.accept()
+        f = c.makefile("r")
+        got.append(json.loads(f.readline()))  # attach
+        c.sendall(b'{"event": "heard", "id": 7, "text": "walk to the chair"}\n')
+        for line in f:
+            m = json.loads(line)
+            got.append(m)
+            if m["op"] == "ask":
+                c.sendall((json.dumps({"rid": m["rid"], "answer": "try the left side"}) + "\n").encode())
+    th.Thread(target=serve, daemon=True).start()
+    heard = []
+    link = VoiceLink(lambda i, t: heard.append((i, t)), path=path, name="own")
+    assert link.connected.wait(3)
+    for _ in range(100):
+        if heard:
+            break
+        time.sleep(0.02)
+    assert heard == [(7, "walk to the chair")] and got[0] == {"op": "attach", "name": "own"}
+    v = VoicePeripheral(link=link)
+    link.task_started(7)
+    v.speak("On my way.")
+    assert "try the left side" in v._ask_tool({"question": "Which way?", "timeout_s": 5}, ctx).text
+    v.speak("I'm at the chair.", final=True)
+    v.speak("Battery is fine.")  # no open request: unprompted say
+    time.sleep(0.2)
+    ops = [(m["op"], m.get("id"), m.get("text"), m.get("final")) for m in got[1:]]
+    assert ops == [("reply", 7, "On my way.", False), ("ask", None, "Which way?", None),
+                   ("reply", 7, "I'm at the chair.", True), ("say", None, "Battery is fine.", None)]
+
+
 def test_backend_order(monkeypatch):
     monkeypatch.setenv("TONYPI_BRAIN", "local,claude")
     assert [b.name for b in backends.build()] == ["local"]

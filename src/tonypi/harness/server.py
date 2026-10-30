@@ -24,8 +24,10 @@ import logging
 import os
 import threading
 import time
+from concurrent.futures import Future
 from pathlib import Path
 
+from tonypi.agent.brain import STOP_RE
 from tonypi.harness import backends, peripherals
 from tonypi.harness.core import Harness
 
@@ -53,21 +55,30 @@ class Frontend:
 
         self.clients: set[asyncio.StreamWriter] = set()
         self.loop: asyncio.AbstractEventLoop | None = None
+        self.ask_fut: Future | None = None  # ask_user without the voice service: the next typed line answers
         self.speaker = None
-        if sound or voice:
+        self.link = None
+        # voice: the shared tonypi-voice service (GPT-Live-1) when it runs, else the local "hey Tony" listener
+        from tonypi.harness.peripherals.voicelink import VoiceLink
+        use_service = voice and os.environ.get("TONYPI_HARNESS_VOICE_SERVICE", "auto") != "off" and (
+            VoiceLink.available() or os.environ.get("TONYPI_HARNESS_VOICE_SERVICE") == "on")
+        if use_service:
+            self.link = VoiceLink(self._from_voice, lambda: self.emit("info", text="barge-in"))
+        elif sound or voice:
             from tonypi.agent.speech import Speaker
             self.speaker = Speaker()
         self.tonyd = TonydClient(on_event=self._on_tonyd_event)
         names = os.environ.get("TONYPI_PERIPHERALS", "body,camera,voice,learning,iphone").split(",")
         self.peripherals = peripherals.build([n.strip() for n in names if n.strip()], tonyd=self.tonyd,
-                                             speaker=self.speaker, on_say=lambda s: self.emit("say", text=s))
+                                             speaker=self.speaker, on_say=lambda s: self.emit("say", text=s),
+                                             voicelink=self.link, ask_typed=self._ask_typed)
         self.harness = Harness(self.peripherals, backends.build(brain), emit=self.emit,
                                on_task_done=self._task_done)
         self.learning = next((p for p in self.peripherals if p.name == "learning"), None)
         if self.learning:
             self.learning.attach(self.harness)
         self.listener = None
-        if voice:
+        if voice and not self.link:
             from tonypi.agent.speech import Listener
             # streaming speech-to-text only: the LFM3 second pass would load the shared llama-server, and a cloud
             # brain copes with the odd misheard word (TONYPI_HARNESS_VOICE=transcribe brings it back)
@@ -103,6 +114,28 @@ class Frontend:
 
     def _from_thread(self, text: str, source: str) -> None:
         asyncio.run_coroutine_threadsafe(self.harness.submit(text, source), self.loop)
+
+    def _from_voice(self, voice_id: int, text: str) -> None:
+        """A request from the voice service: a task (or steering for the running one); 'stop' is handled at once."""
+        async def go() -> None:
+            await self.harness.submit(text, "voice")
+            if self.harness.busy():
+                self.link.task_started(voice_id)  # answered (final) when the task ends
+            else:
+                self.link.close(voice_id)
+        asyncio.run_coroutine_threadsafe(go(), self.loop)
+
+    def _ask_typed(self, question: str, timeout: float) -> str | None:
+        """ask_user on the text socket: the question goes out as an `ask` event, the next typed line answers."""
+        fut: Future = Future()
+        self.ask_fut = fut
+        self.emit("ask", text=question)
+        try:
+            return fut.result(timeout)
+        except Exception:
+            return None
+        finally:
+            self.ask_fut = None
 
     def _task_done(self, source: str) -> None:
         if self.learning and self.learning.reload_pending:  # self-update committed: hot reload once idle
@@ -142,6 +175,11 @@ class Frontend:
                 except json.JSONDecodeError:
                     msg = line
                 text = msg.get("text", "") if isinstance(msg, dict) else str(msg)
+                if self.ask_fut is not None and not self.ask_fut.done() and text and text != "/status" and not (
+                        isinstance(msg, dict) and msg.get("op") == "say") and not STOP_RE.match(text):  # an answer
+                    self.ask_fut.set_result(text)
+                    writer.write((json.dumps({"type": "accepted", "op": "answer"}) + "\n").encode())
+                    continue
                 if isinstance(msg, dict) and msg.get("op") == "say":
                     self.harness.say(text)
                     writer.write((json.dumps({"type": "accepted", "op": "say"}) + "\n").encode())

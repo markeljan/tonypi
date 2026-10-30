@@ -261,7 +261,7 @@ class CodexBackend:
                 if (out := Outcome.parse(item["text"])) is not None:  # the turn's final status (tasks.py)
                     self.outcome = out
                     if out.say.strip():
-                        self.h.say(out.say)
+                        self.h.say(out.say, final=out.status != "continue")
                 else:
                     self.h.say(item["text"])
         elif method == "error":

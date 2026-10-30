@@ -73,7 +73,8 @@ def build(names: list[str], **deps) -> list[Peripheral]:
     registry: dict[str, Callable[[], Peripheral]] = {
         "body": lambda: body.BodyPeripheral(deps["tonyd"]),
         "camera": lambda: camera.CameraPeripheral(deps["tonyd"]),
-        "voice": lambda: voice.VoicePeripheral(deps.get("speaker"), deps.get("on_say")),
+        "voice": lambda: voice.VoicePeripheral(deps.get("speaker"), deps.get("on_say"), deps.get("voicelink"),
+                                               deps.get("ask_typed")),
         "iphone": lambda: iphone.IphonePeripheral(),
         "learning": lambda: learning.Learning(),
     }
