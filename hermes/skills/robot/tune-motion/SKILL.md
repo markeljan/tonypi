@@ -20,11 +20,13 @@ Joint map (servo id: L/R): 1/9 ankle roll, 2/10 ankle pitch, 3/11 knee, 4/12 hip
 `{"ms": 400, "pos": {"4": 620, "12": 380}}`; servos left out keep their position.
 
 1. Start from what exists: `list_skills` (which motions a skill plays), `get_motion(name)` of the default.
-   Baseline: `run_skill(name, 1, guard_tilt_deg=40)` and note `max_tilt_deg` and whether it worked (snapshot / get_state).
+   Baseline: `run_skill(name, 1, guard_tilt_deg=40)` a few times and note `max_tilt_deg` and `yaw_deg` (gyro, how far
+   Tony turned during the job, + = left; the default turn_left does ~6-13° per step here). A turn fix must keep
+   turning: judge versions by low tilt AND yaw per step close to the default's, not tilt alone.
 2. Change one thing at a time, in small steps (≤30 counts per servo, or slower `ms`). Typical fixes for a wobbly
    gait: slower frames (+20-50 % ms), smaller hip-roll (5/13) and ankle-roll (1/9) swings, feet back under the body
    (a neutral stand frame) at the end of each step.
-3. Try it without saving: `play_frames(frames, guard_tilt_deg=40)` once (the guard stops it before a topple). Compare `max_tilt_deg` with the baseline; a stable stand is
+3. Try it without saving: `play_frames(frames, guard_tilt_deg=40)` once (the guard stops it before a topple). Compare `max_tilt_deg` and `yaw_deg` with the baseline; a stable stand is
    < 10°, a normal step < 20°. Over 30° or a fall: undo that change. tonyd guards temperature only; tilt is your guard_tilt_deg, and the body
    keeper gets Tony up if he falls (wait for it, then check get_state).
 4. Keep the better version under a name ending in `_hermes`, never a default name (the user layer is shared with

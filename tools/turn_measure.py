@@ -1,7 +1,8 @@
 """T9 measurement (docs/HARNESS_BAKEOFF.md): run a turn skill 3x at count 1 and 1x at count 3, record tonyd's
-max_tilt_deg, falls, and how far Tony turned (yaw from before/after head-camera snapshots: ORB feature matches,
-undistorted with data/camera_calibration.npz; left = positive). Operator-side, no LLM. Moves the robot: run under
-`flock /run/lock/tonypi-robot.lock`. Falls are left to the harness's body keeper (waits up to 45 s for it).
+max_tilt_deg, falls, and how far Tony turned: the job's gyro yaw_deg (+ = left; within ~1° of the camera), with a
+camera cross-check (ORB matches on before/after snapshots, undistorted with data/camera_calibration.npz) when --camera.
+Operator-side, no LLM. Moves the robot: run under `flock /run/lock/tonypi-robot.lock`. Falls are left to the
+harness's body keeper (waits up to 45 s for it).
 
     uv run python tools/turn_measure.py turn_left turn_left_hermes
 """
@@ -59,23 +60,23 @@ def wait_up(t: TonydClient, limit_s: float = 45) -> float | None:
     return None
 
 
-def measure(t: TonydClient, skill: str) -> dict:
+def measure(t: TonydClient, skill: str, camera: bool = False) -> dict:
     trials = []
     for count in TRIALS:
         t.head(0, 0)
-        before = frame(t)
+        before = frame(t) if camera else None
         job = t.run(skill, count)
-        time.sleep(2.5)  # the keeper settles ~0.8 s after the move
+        time.sleep(2.5)  # the keeper settles ~0.8 s after the move (outside the job, so not in its yaw_deg)
         st = t.state(fresh=True)
         fell = bool(st["lying"]) or (job.get("max_tilt_deg") or 0) > 60
-        rec = {"count": count, "state": job["state"], "max_tilt_deg": job.get("max_tilt_deg"), "fell": fell}
+        rec = {"count": count, "state": job["state"], "max_tilt_deg": job.get("max_tilt_deg"), "fell": fell,
+               "yaw_deg": job.get("yaw_deg")}
+        if job.get("yaw_deg") is not None and not fell:
+            rec["deg_per_step"] = round(job["yaw_deg"] / count, 1)
         if fell:
             rec["recovered_in_s"] = wait_up(t)
-            rec["yaw_deg"] = None  # heading after a fall + get_up isn't the turn's
-        else:
-            rec["yaw_deg"], rec["matches"] = yaw_deg(before, frame(t))
-            if rec["yaw_deg"] is not None:
-                rec["deg_per_step"] = round(rec["yaw_deg"] / count, 1)
+        elif camera:
+            rec["camera_yaw_deg"], rec["matches"] = yaw_deg(before, frame(t))
         trials.append(rec)
         print(json.dumps({"skill": skill, **rec}), flush=True)
     tilts = [r["max_tilt_deg"] for r in trials if r["max_tilt_deg"] is not None]
@@ -88,10 +89,11 @@ def measure(t: TonydClient, skill: str) -> dict:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("skills", nargs="+")
+    ap.add_argument("--camera", action="store_true", help="also estimate yaw from snapshots (cross-check)")
     args = ap.parse_args()
     t = TonydClient()
     for skill in args.skills:
-        print(json.dumps({"summary": measure(t, skill)}), flush=True)
+        print(json.dumps({"summary": measure(t, skill, args.camera)}), flush=True)
 
 
 if __name__ == "__main__":
