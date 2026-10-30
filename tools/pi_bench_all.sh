@@ -85,7 +85,7 @@ case $MODE in
     TIMEOUT=200 b E3 "do a jumping jack" "@180" "stop"
     ;;
   voice-e2e|voice-e1)  # E2E voice dry run through tonypi-voice (GPT-Live-1), commands injected as speech
-    sudo systemctl start tonypi-voice   # stops tonypi-agent (Conflicts=)
+    sudo systemctl restart tonypi-voice   # fresh service (current code); stops tonypi-agent (Conflicts=)
     trap 'pkill -f "[t]onypi.pi_front.daemon"; sudo systemctl start tonypi-agent' EXIT
     # wait until GPT-Live is really listening (the service reports mode "gpt-live" only then; audio before is dropped)
     for i in $(seq 60); do
