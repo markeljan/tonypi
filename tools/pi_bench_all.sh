@@ -44,6 +44,15 @@ case $MODE in
     b T8b "walk forward 5 steps" "@7" "stop"
     b T8c "dance" "@8" "stop"
     ;;
+  voice2)  # the two that collided with the front end's own speech (one ALSA device): with pauses
+    sudo systemctl stop tonypi-agent
+    trap 'pkill -f "[t]onypi.pi_front.daemon"; sudo systemctl start tonypi-agent' EXIT
+    pkill -f "[t]onypi.pi_front.daemon"; sleep 1
+    $PY -m tonypi.pi_front.daemon > $OUT/front-voice2.log 2>&1 & sleep 25
+    export TIMEOUT=90
+    b V-T2 --voice "what do you see?"; sleep 10
+    b V-T6 --voice "find the door and walk toward it" "@40" "stop"
+    ;;
   deadcloud)
     start_front TONYPI_CLOUD=deadcloud/gpt TONYPI_PI_EXTRA_EXT=tests/pi_dead_cloud.ts
     b T7a "wave"
