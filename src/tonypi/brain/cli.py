@@ -8,7 +8,7 @@
   tony recall QUERY [--days N] [--limit N] [--source talk|task|learn|journal]
   tony inbox [add TEXT | take]
   tony say TEXT                                 speak through tonypi-voice
-  tony autonomy status | pause [MIN] | resume | now | body-pause [MIN]
+  tony autonomy status | wander [MIN] | stop | now | pause [MIN] | resume | body-pause [MIN]
   tony history [--today] [--days N]             journal lines
 Add --json (after the subcommand) for machine output where it applies.
 """
@@ -102,6 +102,10 @@ def cmd_autonomy(args) -> int:
         store.set_autonomy(paused_until=0, body_paused_until=0)
     elif a == "now":
         store.set_autonomy(paused_until=0, run_now=True)
+    elif a == "wander":
+        store.set_autonomy(paused_until=0, run_now=True, wander_until=now + 60 * (args.minutes or store.WANDER_MIN))
+    elif a == "stop":
+        store.set_autonomy(run_now=False, wander_until=0, stop_at=now)
     elif a == "body-pause":
         store.set_autonomy(body_paused_until=now + 60 * (args.minutes or 30))
     st = store.autonomy_state()
@@ -109,7 +113,7 @@ def cmd_autonomy(args) -> int:
     def left(k: str) -> int:
         return max(0, int((st.get(k, 0) - now) / 60))
 
-    text = (f"paused: {left('paused_until')} min  body paused: {left('body_paused_until')} min  "
+    text = (f"wander: {left('wander_until')} min  paused: {left('paused_until')} min  body paused: {left('body_paused_until')} min  "
             f"run_now: {st['run_now']}  today: {st['sessions_today']} sessions, {st['tokens_today'] // 1000}k tokens  "
             f"last end: {_ts(st['last_session_end'])}")
     _out(args, st, text)
@@ -186,7 +190,7 @@ def main(argv: list[str] | None = None) -> int:
     sy.add_argument("text", nargs="+")
 
     au = sub.add_parser("autonomy", parents=[js], help="the autonomy scheduler's switches")
-    au.add_argument("action", nargs="?", choices=["status", "pause", "resume", "now", "body-pause"], default="status")
+    au.add_argument("action", nargs="?", choices=["status", "wander", "stop", "now", "pause", "resume", "body-pause"], default="status")
     au.add_argument("minutes", nargs="?", type=float)
 
     h = sub.add_parser("history", parents=[js], help="journal lines")

@@ -1,4 +1,7 @@
-"""Autonomy: Tony works on his goals when nobody talks to him (docs/BRAIN.md).
+"""Autonomy: Tony works on his goals when told to wander (docs/BRAIN.md).
+
+Off by default (owner's direction, 2026-10-30: no tokens while he only waits for the wake word). `tony autonomy
+wander [MIN]` (default store.WANDER_MIN) allows sessions until then, `now` allows one, `stop` ends both.
 
 Pure policy plus a tick loop. The host (LiveBrain in live.py) does the work: start_session runs one persistent Codex
 thread with a native goal; this module only decides when, on what, with which budget, and when to stop. The goal
@@ -191,6 +194,12 @@ class Autonomy:
             if st.get("paused_until", 0) > now:
                 await self.end("paused")
                 return "paused: session ended"
+            if st.get("stop_at", 0) >= s["t0"]:
+                await self.end("told to stop")
+                return "told to stop: session ended"
+            if not s.get("once") and st.get("wander_until", 0) <= now:
+                await self.end("wander over")
+                return "wander over: session ended"
             if now - s["t0"] >= SESSION_MAX_S:
                 await self.end("time cap")
                 return "time cap: session ended"
@@ -204,6 +213,8 @@ class Autonomy:
         if st.get("paused_until", 0) > now:
             return "paused"
         run_now = bool(st.get("run_now"))
+        if not run_now and st.get("wander_until", 0) <= now:
+            return "off (not told to wander)"
         if self.host.l_busy():
             return "L busy"
         if self.host.body_task_running():
@@ -276,7 +287,7 @@ class Autonomy:
         store.journal("autonomy", f"start {gid} ({'body' if body_ok else 'no body: ' + why_no_body}, "
                                   f"budget {budget // 1000}k): {goal['title']}")
         self.session = {"goal_id": gid, "title": goal["title"], "t0": now, "tokens0": self._tokens(),
-                        "body_ok": body_ok, "starting": True}
+                        "body_ok": body_ok, "starting": True, "once": st.get("wander_until", 0) <= now}
         try:
             thread = await self.host.start_session(goal, objective(goal, body_ok, why_no_body), body_ok, budget)
         except Exception as e:
@@ -353,5 +364,6 @@ class Autonomy:
         return {"session": None if s is None else {"goal": s["goal_id"], "title": s["title"],
                                                      "s": int(self.clock() - s["t0"]), "body": s["body_ok"]},
                 "last": self.last, "paused_until": st.get("paused_until", 0),
-                "body_paused_until": st.get("body_paused_until", 0), "tokens_today": st.get("tokens_today", 0),
+                "body_paused_until": st.get("body_paused_until", 0), "wander_until": st.get("wander_until", 0),
+                "tokens_today": st.get("tokens_today", 0),
                 "sessions_today": st.get("sessions_today", 0)}

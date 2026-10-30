@@ -3,7 +3,7 @@
 Hiwonder TonyPi humanoid (16 bus servos + 2 PWM head servos) on a Raspberry Pi 5 8 GB, rebuilt from scratch
 on Raspberry Pi OS Lite 64-bit (trixie) with one user (`pi`). This repo replaces all Hiwonder software.
 Goal: a self-thinking, self-improving humanoid that hears, sees, controls and learns its own body, upgrades its own
-code, uses the owner's iPhone and AI tools, and works on its own goals when nobody talks to it.
+code, uses the owner's iPhone and AI tools, and works on its own goals when told to wander.
 **Agents:** Codex (Tony's own brain) reads `AGENTS.md`, not this file: the root `AGENTS.md` is Tony's self-model and
 indexes the nested `AGENTS.md` files and `docs/BRAIN.md` (architecture of his mind, runbook). This file is the full
 hardware/service reference for Claude Code and for Tony when he needs a detail.
@@ -137,8 +137,10 @@ state.json`), compacts at 80k tokens and rotates after 20 h. Codex speaks its `[
 `tony_*`: speak now, background tasks (persistent worker threads, tier terra/sol, optional Codex goal; result spoken
 once), steer/cancel tasks, restart its own voice. The voice service merges utterance fragments and bridges requests
 GPT-Live or Codex missed.
-- **Autonomy** (`src/tonypi/voice/autonomy.py`): after ~75 s of quiet a session thread works on the next goal
-  (owner goals first, then self goals / the curriculum); owner speech ends it within 2 s. `tony autonomy pause [MIN]`.
+- **Autonomy** (`src/tonypi/voice/autonomy.py`): off unless told to wander (owner, 2026-10-30: no tokens while he
+  only waits for the wake word). `tony autonomy wander [MIN]` (default 30; "go wander") / `now` (one session) / `stop`.
+  While allowed, after ~75 s of quiet a session thread works on the next goal (owner goals first, then self goals /
+  the curriculum); owner speech ends it within 2 s.
 - **Memory** (`src/tonypi/brain/`, `~/.local/share/tonypi/brain/`, local git): MEMORY.md, goals.json, journal,
   inbox, curriculum, learning ledger, FTS recall; the `tony` CLI (`tony memory|remember|journal|goal|recall|inbox|say|
   autonomy|history`).

@@ -60,9 +60,11 @@ with my goals. CLAUDE.md is the full hardware and service reference: read only t
   quick body work itself.
 - Background tasks (`tony_start_task`): worker threads for work over 20 s; tier terra, or sol for hard work
   (authoring, tuning, recovery, tricky code). The result is spoken once.
-- Autonomy: after about 75 s of quiet the voice service starts a session on its own thread. It takes the next goal
-  from `goals.json` and works with the same tools. Owner speech ends it within 2 s. `tony autonomy pause [MIN]` holds
-  it off.
+- Autonomy: off unless the owner tells me to wander. "Go wander" / "work on your goals" / "explore for an hour" ->
+  `tony autonomy wander [MIN]` (default 30); "stop wandering" -> `tony autonomy stop`; "do one goal now" -> `tony
+  autonomy now`. While wandering, after about 75 s of quiet the voice service starts a session on its own thread: it
+  takes the next goal from `goals.json` and works with the same tools. Owner speech ends a session within 2 s (the
+  wander continues after the next quiet spell). Never turn it on myself.
 - Fallback: "switch to local" starts the offline LFM3 agent (`tonypi-agent`); "switch to live" comes back.
 
 ## Memory (`~/.local/share/tonypi/brain/`, a private git repo, never pushed)
@@ -71,7 +73,7 @@ with my goals. CLAUDE.md is the full hardware and service reference: read only t
   body model and skill library. `history.sqlite` the search index.
 - The `tony` CLI (`.venv/bin`; elsewhere `uv run tony`): `memory`, `remember [--kind fact|lesson|owner|body|home]
   TEXT`, `journal [--kind K] TEXT`, `goal list|show|add|update|note|done|drop|block|activate|pause`, `recall QUERY`,
-  `inbox [add TEXT|take]`, `say TEXT`, `autonomy status|pause|resume|now|body-pause`, `history [--today]`.
+  `inbox [add TEXT|take]`, `say TEXT`, `autonomy status|wander [MIN]|stop|now|pause|resume|body-pause`, `history [--today]`.
 - `tony recall` searches conversations, journals, tasks and the ledger: use it before saying I don't know.
 
 ## Learning my body (docs/BODY_LEARNING.md, skill `body-learning`)

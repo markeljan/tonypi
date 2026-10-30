@@ -69,8 +69,10 @@ class Clock:
         return self.t
 
 
-def make():
+def make(wander=True):
     h, c = Host(), Clock()
+    if wander:  # the policy tests below run inside a long wander
+        store.set_autonomy(wander_until=c.t + 10**7)
     return h, c, A.Autonomy(h, clock=c)
 
 
@@ -99,6 +101,39 @@ def test_gates_before_start():
     h.rl = {"rateLimits": {"primary": {"usedPercent": 10}, "secondary": {"usedPercent": 60}}}
     assert tick(a).startswith("secondary rate limit")
     assert h.started == []
+
+
+def test_off_until_told_to_wander():
+    h, c, a = make(wander=False)
+    assert tick(a) == "off (not told to wander)" and h.started == []
+    store.set_autonomy(wander_until=c.t + 60 * store.WANDER_MIN)
+    assert tick(a) == "started g1"
+    c.t += 60 * store.WANDER_MIN
+    assert tick(a) == "wander over: session ended" and h.ended == ["wander over"]
+    c.t += A.COOLDOWN_S
+    assert tick(a) == "off (not told to wander)"
+
+
+def test_now_runs_one_session_and_stop_ends_it():
+    h, c, a = make(wander=False)
+    store.set_autonomy(run_now=True)
+    assert tick(a) == "started g1"
+    c.t += 120
+    assert tick(a) == "running g1"  # a `now` session doesn't need a wander
+    store.set_autonomy(stop_at=c.t)
+    assert tick(a) == "told to stop: session ended" and h.ended == ["told to stop"]
+    c.t += A.COOLDOWN_S
+    assert tick(a) == "off (not told to wander)"
+
+
+def test_cli_wander_and_stop(capsys):
+    from tonypi.brain import cli
+    assert cli.main(["autonomy", "wander", "90"]) == 0
+    st = store.autonomy_state()
+    assert st["run_now"] and 89 * 60 < st["wander_until"] - time.time() <= 90 * 60
+    assert cli.main(["autonomy", "stop"]) == 0
+    st = store.autonomy_state()
+    assert not st["run_now"] and st["wander_until"] == 0 and st["stop_at"] > 0
 
 
 def test_run_now_skips_quiet_and_cooldown():

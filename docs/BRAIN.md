@@ -65,15 +65,19 @@ done|partial|failed|blocked, spoken_sentence (spoken once), details, lesson, com
 Task ids persist across restarts (`1030-t7`).
 
 ## Autonomy (`src/tonypi/voice/autonomy.py`)
-- Every 15 s: if nobody spoke and L was idle for 75 s, no body task runs, no session runs, 90 s since the last one,
-  tokens today < 5M and the rate-limit windows are under 70 % / 60 %, start a session.
+- Off by default (owner's direction, 2026-10-30: no tokens while Tony only waits for the wake word). It runs only
+  while `wander_until` is in the future (`tony autonomy wander [MIN]`, default 30 min; the owner says "go wander")
+  or for one session after `tony autonomy now`; `tony autonomy stop` ends both. A wander ending ends its session.
+- Every 15 s while allowed: if nobody spoke and L was idle for 75 s, no body task runs, no session runs, 90 s since the last one,
+  autonomy tokens today < 25M and the rate-limit windows are under 70 % / 60 %, start a session.
 - Goal: `store.next_goal(body_ok)`: owner goals first by priority, then active self goals, then proposed self goals;
   none → the next unmet curriculum rung or a non-body self-review. At most 4 sessions per goal per day.
 - body_ok: battery >= 11.0 V (or unknown with the tether on), hottest servo < 70 C, no stop latch, not body-paused.
 - Session: a new thread (`codex_autonomy.md` + snapshot), `thread/goal/set {objective, tokenBudget 400k}`, 15 min wall
   cap. Ends on goal complete/blocked/budget, 60 s without a turn, the cap, or owner speech (within 2 s: goal paused,
   turn interrupted, body stopped without a latch). A spoken stop also sets `body_paused_until` = now + 30 min.
-- Owner control (via L or a shell): `tony autonomy pause [MIN]`, `body-pause [MIN]`, `resume`, `now`, `status`.
+- Owner control (via L or a shell): `tony autonomy wander [MIN]`, `stop`, `now`, `pause [MIN]`, `body-pause [MIN]`,
+  `resume`, `status`.
 
 ## Memory (`tonypi.brain`, BRAIN_DIR = `~/.local/share/tonypi/brain`, a local git repo, never pushed)
 | File | What |
@@ -82,7 +86,7 @@ Task ids persist across restarts (`1030-t7`).
 | `goals.json` | goal ledger: id, title, why, origin owner/self, priority 1-5, state, success, next_step, notes (10), attempts, evidence |
 | `journal/YYYY-MM-DD.md` | `- HH:MM [kind] text` (talk, task, goal, autonomy, learn, fall, code, note) |
 | `inbox.md` | things to tell the owner next time |
-| `autonomy.json` | paused_until, body_paused_until, run_now, tokens and sessions today |
+| `autonomy.json` | wander_until, stop_at, paused_until, body_paused_until, run_now, tokens and sessions today |
 | `curriculum.json` | skill ladder with prerequisites and measurable targets (docs/BODY_LEARNING.md) |
 | `learning/` | `ledger.jsonl`, `body_model.json`, `library.json` (src/tonypi/learn) |
 | `history.sqlite` | FTS5 index over conversations, journals, tasks and the ledger (`tony recall`) |

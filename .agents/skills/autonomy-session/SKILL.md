@@ -38,5 +38,7 @@ session picks up from the ledger.
 3. Success criteria met by measurement: `tony goal done <id> "<evidence>"`. Blocked: `tony goal block <id> "..."`.
 4. `tony journal --kind autonomy "<one line summary>"`; `tony remember --kind lesson` for a lesson that transfers.
 
-Owner control: "be quiet / stay still / pause" -> `tony autonomy pause [MIN]` (all) or `tony autonomy body-pause
-[MIN]` (no movement); `tony autonomy resume`; `tony autonomy now` starts one at once; `tony autonomy status`.
+Owner control: autonomy runs only when told. "Go wander / work on your goals" -> `tony autonomy wander [MIN]`
+(default 30); "stop wandering" -> `tony autonomy stop`; `tony autonomy now` runs one session at once. "Be quiet /
+stay still / pause" -> `tony autonomy pause [MIN]` (all) or `tony autonomy body-pause [MIN]` (no movement); `tony
+autonomy resume`; `tony autonomy status`.

@@ -1,0 +1,291 @@
+<title>Tony Latency Traces</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one column of trace cards (waterfall + step table), then an aggregate stats sheet. */
+:root {
+  --bg: #f5f6f8; --surface: #ffffff; --fg: #1b1f27; --muted: #5d6573; --line: #dde1e8; --grid: #eceff4;
+  --speech: #8a93a3; --voice: #0f8f86; --model: #4b55c9; --vision: #b8418f; --tool: #c27a0e; --worker: #7a4fc4; --overhead: #c4453b; --wake: #3b78b5;
+  --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #12151b; --surface: #1a1e26; --fg: #e6e9ef; --muted: #98a0ae; --line: #2c323d; --grid: #222731;
+  --speech: #7d8696; --voice: #2bb5aa; --model: #7c86f0; --vision: #e06bb6; --tool: #e2a03a; --worker: #a17ee6; --overhead: #e8665b; --wake: #5f9de0; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #12151b; --surface: #1a1e26; --fg: #e6e9ef; --muted: #98a0ae; --line: #2c323d; --grid: #222731;
+  --speech: #7d8696; --voice: #2bb5aa; --model: #7c86f0; --vision: #e06bb6; --tool: #e2a03a; --worker: #a17ee6; --overhead: #e8665b; --wake: #5f9de0; color-scheme: dark }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1060px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 32px 64px; display: grid; gap: 28px; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; }
+h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 20px; font-weight: 600; }
+h3 { font-size: 15px; font-weight: 600; }
+p { margin: 0; max-width: 72ch; }
+.muted { color: var(--muted); }
+.mono, code { font-family: var(--mono); font-size: 0.86em; }
+header { display: grid; gap: 10px; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.takeaways { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; display: grid; gap: 10px; }
+.takeaways ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.takeaways li { max-width: 90ch; }
+.case { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px; display: grid; gap: 16px; min-width: 0; }
+.case-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.case-head > div { min-width: 0; display: grid; gap: 4px; }
+.quote { font-family: var(--display); font-size: 18px; font-weight: 600; }
+.kind { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; font-size: 13px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.chip b { font-family: var(--mono); font-weight: 500; }
+.fall { overflow-x: auto; }
+.fall-inner { min-width: 640px; display: grid; gap: 4px; }
+.row { display: grid; grid-template-columns: 112px 1fr; align-items: center; gap: 10px; }
+.lane { font-size: 12px; color: var(--muted); font-family: var(--mono); text-align: right; }
+.track { position: relative; height: 26px; background: repeating-linear-gradient(to right, var(--grid) 0 1px, transparent 1px var(--tick)); border-radius: 4px; }
+.bar { position: absolute; top: 3px; height: 20px; border-radius: 4px; color: #fff; font-size: 11px; line-height: 20px; padding: 0 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--mono); cursor: default; }
+.bar.thin { padding: 0; }
+.bar.cont { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.bar:focus-visible { outline: 2px solid var(--fg); outline-offset: 1px; }
+.pt { position: absolute; top: 2px; width: 3px; height: 22px; border-radius: 2px; }
+.axis { position: relative; height: 18px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.axis span { position: absolute; transform: translateX(-50%); }
+.mark { position: absolute; top: 0; bottom: 0; border-left: 1.5px dashed var(--fg); opacity: .55; pointer-events: none; }
+.marks { position: absolute; inset: 0 0 0 122px; pointer-events: none; }
+.fall-body { position: relative; display: grid; gap: 4px; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+td.num { font-family: var(--mono); text-align: right; white-space: nowrap; }
+th.num { text-align: right; }
+.tbl { overflow-x: auto; }
+details summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+details summary:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+.stats { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px; display: grid; gap: 14px; min-width: 0; }
+.stat-bar { position: relative; height: 10px; min-width: 120px; background: var(--grid); border-radius: 5px; }
+.stat-bar i { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 5px; opacity: .35; }
+.stat-bar b { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 5px; }
+.group td { font-family: var(--display); font-weight: 600; padding-top: 14px; }
+footer { font-size: 13px; color: var(--muted); display: grid; gap: 6px; }
+@media (max-width: 560px) { h1 { font-size: 24px; } .quote { font-size: 16px; } }
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">TonyPi · live mode · traces from 2026-10-30</div>
+  <h1>Tony Latency Traces</h1>
+  <p class="muted">Five real requests from today, broken into every step between you speaking and Tony answering. Times are seconds after Tony first heard you (or after the wake word / typed text). Hover or focus a bar for the exact span and where it came from.</p>
+  <div class="legend" id="legend"></div>
+</header>
+
+<section class="takeaways">
+  <h2>Where the time goes</h2>
+  <ul>
+    <li><b>Codex model calls are the biggest cost.</b> A request that uses one tool needs two model calls (decide, then answer), 2–4 s together. First token: median 1.6 s, slowest 10% 5.0 s or more (75 voice turns).</li>
+    <li><b>GPT-Live adds about 1.3 s.</b> About 0.7 s to notice you stopped and hand off, and 0.6 s from the brain's answer to sound coming out (medians of 105 and 127 events).</li>
+    <li><b>Image to text has no step of its own.</b> The camera snapshot takes about 10 ms. The cost is the next model call, which reads the JPEG: median 2.8 s after an image result vs 1.85 s after a text result. In the vision trace it took 1.2 s.</li>
+    <li><b>Web search: 3.5 s median</b>, plus a slow first token on that turn (3.8 s).</li>
+    <li><b>Background tasks:</b> starting one takes 0.1 s, but the worker thread needs 1.2 s (median, up to 5.9 s) before it starts working, and then makes its own model calls. Whole tasks run 47 s median.</li>
+    <li><b>The first turn after a voice restart is cold:</b> 3.6 s of turn setup plus a 6.4 s first token (trace 4).</li>
+    <li><b>Waking from sleep costs about 6.3 s before GPT-Live hears you:</b> 3.2 s to start the realtime session, 1.4 s WebRTC, 1.7 s to replay your held audio.</li>
+    <li><b>Context compaction stalls the brain 20 s</b> (median, 19 times today, up to 83 s).</li>
+  </ul>
+</section>
+
+<div id="cases" style="display:grid;gap:28px"></div>
+
+<section class="stats">
+  <h2>All of today, by step</h2>
+  <p class="muted">Medians and 90th percentiles over every event in today's logs (all brain threads, including autonomy and background workers). The solid bar is the median, the faint bar the 90th percentile.</p>
+  <div class="tbl"><table id="stats"></table></div>
+</section>
+
+<footer>
+  <div><b>Sources.</b> GPT-Live and voice-service events: <code>journalctl -u tonypi-voice</code> (ms timestamps for transcript deltas, delegation, <code>[FINAL]</code>, speech segments, wake/replay). Codex brain: rollout files in <code>~/.config/tonypi/codex-live/sessions/2026/10/30/</code> (model outputs, tool start/finish ms, first-token and turn durations, token counts). Body jobs: <code>~/.local/share/tonypi/jobs.jsonl</code>.</div>
+  <div>"Speaking" ends when GPT-Live closes the transcript segment, which can trail the last word by a second or two. Background worker threads are not saved as rollouts, so trace 4's worker steps come from the journal (start of each item, so tool calls show as instants).</div>
+</footer>
+</div>
+
+<script>
+const CATS = {
+  speech: ["You", "--speech"], voice: ["GPT-Live (voice)", "--voice"], model: ["Codex model call", "--model"],
+  vision: ["Model reads image", "--vision"], tool: ["Tool / backend", "--tool"], worker: ["Background worker", "--worker"],
+  overhead: ["Setup / overhead", "--overhead"], wake: ["Wake path", "--wake"]
+};
+const LANES = { you: "You", voice: "GPT-Live", brain: "Codex brain", tool: "Backend", worker: "Worker t1", wake: "Wake" };
+
+// [lane, cat, start, end, label, detail]  (seconds from t0; end == start → instant)
+const CASES = [
+{
+  quote: "Tony, wave your hand", kind: "Body move · voice · 07:52:37 · robot MCP run_skill → tonyd",
+  t0: "07:52:37.263 first word transcribed",
+  chips: [["Wave finished", 6.52], ["Answer audio starts", 8.38]],
+  marks: [[8.38, "answer"]],
+  steps: [
+    ["you", "speech", 0, 0.62, "“Tony, wave your hand”", "GPT-Live streaming transcript, first to last delta"],
+    ["voice", "voice", 0.62, 1.27, "end of turn → handoff", "last word → delegation: handoff_request sent to Codex"],
+    ["brain", "model", 1.29, 3.26, "plan + “Waving now.”", "model call 1, gpt-6.1-terra low; first token 1.66 s after turn start; 27.1k input tokens (0 cached)"],
+    ["tool", "tool", 3.32, 6.52, "run_skill wave (motion 3.2 s)", "mcp tonypi.run_skill {wave, wait:true}; tonyd job 1 ran 3.20 s; MCP overhead ≈ 5 ms"],
+    ["brain", "model", 6.53, 7.37, "→ [FINAL] “I waved!”", "model call 2; 27.5k input, 26.9k cached"],
+    ["voice", "voice", 7.37, 8.38, "FINAL → audio", "brain's [FINAL] → GPT-Live first speech delta"],
+    ["voice", "voice", 8.38, 10.62, "speaking “I waved!”", "GPT-Live speech segment"]
+  ]
+},
+{
+  quote: "What do you see right now", kind: "Vision (image to text) · voice · 07:54:24 · tonypi.snapshot → gpt-6.1-terra reads the JPEG",
+  t0: "07:54:24.554 first word transcribed",
+  chips: [["Snapshot taken", 3.83], ["Answer audio starts", 5.63]],
+  marks: [[5.63, "answer"]],
+  steps: [
+    ["you", "speech", 0, 1.22, "“What do you see right now”", "GPT-Live streaming transcript"],
+    ["voice", "voice", 1.22, 2.19, "end of turn → handoff", "last word → delegation"],
+    ["brain", "model", 2.22, 3.77, "plan + “I’ll use my look-around skill”", "model call 1; first token 1.10 s; 28.2k input, 27.9k cached"],
+    ["tool", "tool", 3.83, 3.85, "snapshot + read SKILL.md", "parallel: mcp tonypi.snapshot (≈10 ms, latest camera frame) and cat look-around/SKILL.md; script wall 0.1 s"],
+    ["brain", "vision", 3.85, 5.06, "image → text → [FINAL]", "model call 2 reads the 640×480 JPEG and answers: 1.21 s; 28.9k input, only 13.6k cached (image breaks the cache)"],
+    ["voice", "voice", 5.06, 5.63, "FINAL → audio", "brain's [FINAL] → GPT-Live first speech delta"],
+    ["voice", "voice", 5.63, 11.26, "speaking “I see a patterned rug…”", "GPT-Live speech segment"]
+  ]
+},
+{
+  quote: "How's the weather in San Diego right now", kind: "Web lookup · voice · 04:41:35 · web.run weather",
+  t0: "04:41:35.746 first word transcribed",
+  chips: [["Ack audio", 2.17], ["Answer audio starts", 12.88]],
+  marks: [[2.17, "ack"], [12.88, "answer"]],
+  steps: [
+    ["you", "speech", 0, 1.58, "“How's the weather in San Diego…”", "GPT-Live streaming transcript"],
+    ["voice", "voice", 1.58, 1.97, "handoff", "last word → delegation"],
+    ["voice", "voice", 2.17, 4.93, "speaking “On it, checking now.”", "GPT-Live's own filler while the brain works"],
+    ["brain", "model", 1.99, 5.86, "plan (slow first token 3.8 s)", "model call 1; first token 3.77 s after turn start; 55.1k input, 54.8k cached"],
+    ["tool", "tool", 5.89, 9.98, "web search 4.1 s", "web.run {weather: San Diego}; Extension web.search item 4.10 s"],
+    ["brain", "model", 9.99, 12.49, "→ [FINAL] “light rain, 66 °F”", "model call 2: 2.50 s; 55.4k input"],
+    ["voice", "voice", 12.49, 12.88, "FINAL → audio", "brain's [FINAL] → GPT-Live first speech delta"],
+    ["voice", "voice", 12.88, 19.92, "speaking the forecast", "GPT-Live speech segment"]
+  ]
+},
+{
+  quote: "In the background, count how many Python files are under src/tonypi… answer me right away that you started it.",
+  kind: "Background task · typed · 04:08:37 · tony_start_task → worker thread t1 (first turn after a voice restart)",
+  t0: "04:08:37.0 typed text on voice.sock",
+  chips: [["Ack audio", 11.03], ["Result audio", 23.18]],
+  marks: [[11.03, "ack"], [23.18, "result"]],
+  steps: [
+    ["you", "speech", 0, 0, "typed", "op text on /run/tonypi/voice.sock"],
+    ["brain", "overhead", 0.03, 3.67, "cold turn setup 3.6 s", "turn/started → user message in context; first turn on the thread after the voice restarted at 04:08:34"],
+    ["brain", "model", 3.67, 7.97, "plan + “Starting the background count.”", "model call 1: 4.3 s; first token 6.40 s after turn start; 37.3k input"],
+    ["tool", "tool", 8.02, 8.12, "tony_start_task", "dynamic tool call: 0.10 s"],
+    ["brain", "model", 8.14, 9.99, "→ [FINAL] ack", "model call 2: 1.85 s"],
+    ["voice", "voice", 9.99, 11.03, "FINAL → audio", ""],
+    ["voice", "voice", 11.03, 13.63, "speaking “Got it, I've started…”", ""],
+    ["worker", "overhead", 8.12, 12.25, "worker boot 4.1 s", "task t1 started → worker's first item (new Codex thread, low effort)"],
+    ["worker", "worker", 12.25, 14.74, "model", "worker model call 1"],
+    ["worker", "tool", 14.74, 14.74, "find", "commandExecution"],
+    ["worker", "worker", 14.74, 18.11, "model", "worker model call 2"],
+    ["worker", "tool", 18.11, 18.11, "count", "commandExecution"],
+    ["worker", "worker", 18.11, 22.61, "model → “26 files”", "worker model call 3 (answer streamed 1.5 s)"],
+    ["voice", "voice", 22.64, 23.18, "result → audio", "task t1 completed → GPT-Live speaks it"],
+    ["voice", "voice", 23.18, 28.61, "speaking “There are exactly 26…”", ""]
+  ]
+},
+{
+  quote: "OK Tony, how's your progress", kind: "Wake from sleep · voice · 13:02:33 · local spotter → new GPT-Live session → replay held audio",
+  t0: "13:02:33.592 wake word spotted (OK_TONY)",
+  chips: [["GPT-Live hears you", 6.72], ["Answer audio starts", 10.34]],
+  marks: [[10.34, "answer"]],
+  steps: [
+    ["you", "speech", 0, 0, "wake word", "local sherpa-onnx spotter; the mic is held from here"],
+    ["wake", "wake", 0, 3.16, "realtime session start 3.2 s", "codex thread/realtime/start → realtimeSessionStarted"],
+    ["wake", "wake", 3.16, 4.58, "WebRTC ready 1.4 s", "answer → ready (session up in 4.6 s total)"],
+    ["wake", "wake", 4.58, 6.28, "replay held mic 1.7 s", "6.5 s held, 1.5 s of speech sent, 6.7 s silence skipped"],
+    ["you", "speech", 6.72, 7.67, "“Hey Tony, how's your progress”", "GPT-Live transcript of the replayed audio"],
+    ["voice", "voice", 7.67, 8.02, "handoff", "last word → delegation"],
+    ["brain", "model", 8.06, 9.36, "answer from context → [FINAL]", "single model call, no tools: 1.31 s; first token 0.88 s; 35.7k input, 34.9k cached"],
+    ["voice", "voice", 9.36, 10.34, "FINAL → audio", ""],
+    ["voice", "voice", 10.34, 26.03, "speaking the progress report (15.7 s)", "GPT-Live speech segment"]
+  ]
+}
+];
+
+// [group] or [label, n, p50, p90, cat, note]
+const STATS = [
+  ["GPT-Live (voice)"],
+  ["Last word → handoff to brain", 105, 0.73, 2.08, "voice", "end-of-turn detection + delegation"],
+  ["Brain [FINAL] → audio starts", 127, 0.61, 0.98, "voice", ""],
+  ["Session start on wake / restart", 31, 4.6, 7.9, "wake", "realtime start + WebRTC"],
+  ["Replay held mic after wake", 13, 1.8, 1.9, "wake", ""],
+  ["Codex brain (thread L)"],
+  ["Whole voice turn", 75, 5.4, 13.54, "model", "handoff → turn complete"],
+  ["First token of a turn", 75, 1.56, 5.03, "model", ""],
+  ["Model step after a text tool result", 1160, 1.85, 4.53, "model", "all threads"],
+  ["Model step after an image result", 109, 2.79, 10.13, "vision", "image to text happens here"],
+  ["Reasoning item", 741, 0.65, 5.34, "model", "all threads"],
+  ["Context compaction", 19, 20.07, 74.24, "overhead", "brain stalls while it runs"],
+  ["Backend tools"],
+  ["tonypi.snapshot (camera frame)", 57, 0.01, 0.01, "tool", ""],
+  ["phone.phone_snapshot", 36, 0.13, 0.34, "tool", ""],
+  ["tonypi.scan (3 head angles)", 4, 2.78, 2.79, "tool", ""],
+  ["tonypi.video (burst)", 5, 5.03, 10.03, "tool", ""],
+  ["tonypi.run_skill (body move)", 36, 1.07, 4.11, "tool", "mostly the motion itself"],
+  ["tonypi.get_state", 176, 0.07, 0.11, "tool", ""],
+  ["web.search", 13, 3.51, 4.10, "tool", ""],
+  ["Shell command", 1043, 0.0, 0.14, "tool", ""],
+  ["tonypi.trial (learning trial)", 48, 30.59, 34.11, "tool", ""],
+  ["tony_restart_voice", 4, 6.91, 11.42, "overhead", ""],
+  ["Background tasks"],
+  ["tony_start_task call", 35, 0.10, 0.25, "tool", ""],
+  ["Worker boot (start → first item)", 20, 1.20, 4.13, "overhead", "max 5.9 s"],
+  ["Whole background task", 20, 47.1, 165.4, "worker", "12 s to 278 s"],
+];
+
+const v = n => `var(${CATS[n][1]})`;
+const fmt = s => s < 0.1 && s > 0 ? (s * 1000).toFixed(0) + " ms" : s.toFixed(2) + " s";
+const esc = s => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+document.getElementById("legend").innerHTML = Object.keys(CATS).map(k => `<span><i class="sw" style="background:${v(k)}"></i>${CATS[k][0]}</span>`).join("");
+
+function render(c, idx) {
+  const work = c.steps.filter(s => !(s[0] === "voice" && /^speaking/.test(s[4]) && s[2] >= c.marks.at(-1)[0] - 0.01));
+  const maxT = Math.max(...work.map(s => s[3]), ...c.marks.map(m => m[0]));
+  const axisMax = Math.ceil(maxT + 2.5);
+  const step = axisMax > 20 ? 4 : axisMax > 10 ? 2 : 1;
+  const pct = t => Math.min(100, (t / axisMax) * 100);
+  const lanes = [...new Set(c.steps.map(s => s[0]))];
+  const order = ["you", "wake", "voice", "brain", "tool", "worker"].filter(l => lanes.includes(l));
+  const rows = order.map(l => {
+    const bars = c.steps.filter(s => s[0] === l).map(s => {
+      const [_, cat, a, b, label, det] = s; const d = b - a;
+      const tip = esc(`${label}: ${a.toFixed(2)} → ${b.toFixed(2)} s (${fmt(d)})${det ? " · " + det : ""}`);
+      if (d < 0.05) return `<i class="pt" style="left:calc(${pct(a)}% - 1px);background:${v(cat)}" title="${tip}" tabindex="0"></i>`;
+      const cont = b > axisMax;
+      const w = pct(b) - pct(a);
+      return `<span class="bar${w < 6 ? " thin" : ""}${cont ? " cont" : ""}" style="left:${pct(a)}%;width:${w}%;background:${v(cat)}" title="${tip}" tabindex="0">${w < 6 ? "" : esc(label) + (cont ? " →" : "")}</span>`;
+    }).join("");
+    return `<div class="row"><div class="lane">${LANES[l]}</div><div class="track" style="--tick:${(step / axisMax) * 100}%">${bars}</div></div>`;
+  }).join("");
+  let ticks = ""; for (let t = 0; t <= axisMax; t += step) ticks += `<span style="left:${pct(t)}%">${t}s</span>`;
+  const marks = c.marks.map(m => `<div class="mark" style="left:${pct(m[0])}%" title="${m[1]} at ${m[0]} s"></div>`).join("");
+  const sorted = [...c.steps].sort((a, b) => a[2] - b[2] || a[3] - b[3]);
+  const table = sorted.map(s => `<tr><td><span class="sw" style="background:${v(s[1])}"></span></td><td>${LANES[s[0]]}</td><td>${esc(s[4])}<div class="muted" style="font-size:12.5px">${esc(s[5] || "")}</div></td><td class="num">${s[2].toFixed(2)}</td><td class="num">${fmt(s[3] - s[2])}</td></tr>`).join("");
+  return `<article class="case" id="trace${idx + 1}">
+    <div class="case-head"><div><div class="eyebrow">Trace ${idx + 1}</div><div class="quote">“${esc(c.quote)}”</div><div class="kind">${esc(c.kind)}</div></div>
+      <div class="chips">${c.chips.map(ch => `<span class="chip">${ch[0]} <b>${ch[1].toFixed(2)} s</b></span>`).join("")}</div></div>
+    <div class="fall"><div class="fall-inner">
+      <div class="fall-body">${rows}<div class="marks">${marks}</div></div>
+      <div class="row"><div class="lane muted">t0</div><div class="axis">${ticks}</div></div>
+      <div class="row"><div></div><div class="muted" style="font-size:12px">t0 = ${esc(c.t0)} · dashed lines = ${c.marks.map(m => m[1]).join(", ")}</div></div>
+    </div></div>
+    <details><summary>Step table</summary><div class="tbl"><table><thead><tr><th></th><th>Lane</th><th>Step</th><th class="num">Start</th><th class="num">Took</th></tr></thead><tbody>${table}</tbody></table></div></details>
+  </article>`;
+}
+document.getElementById("cases").innerHTML = CASES.map(render).join("");
+
+const smax = 12;
+document.getElementById("stats").innerHTML = `<thead><tr><th>Step</th><th class="num">n</th><th class="num">p50</th><th class="num">p90</th><th style="width:34%">0 – ${smax} s</th><th>Note</th></tr></thead><tbody>` +
+  STATS.map(r => r.length === 1 ? `<tr class="group"><td colspan="6">${r[0]}</td></tr>` :
+    `<tr><td>${esc(r[0])}</td><td class="num">${r[1]}</td><td class="num">${fmt(r[2])}</td><td class="num">${fmt(r[3])}</td>
+     <td><div class="stat-bar"><i style="width:${Math.min(100, r[3] / smax * 100)}%;background:${v(r[4])}"></i><b style="width:${Math.max(0.6, Math.min(100, r[2] / smax * 100))}%;background:${v(r[4])}"></b></div></td>
+     <td class="muted">${esc(r[5])}${r[3] > smax ? (r[5] ? " · " : "") + "bar capped" : ""}</td></tr>`).join("") + "</tbody>";
+</script>

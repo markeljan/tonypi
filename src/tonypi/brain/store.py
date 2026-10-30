@@ -28,7 +28,9 @@ OPEN = ("proposed", "active", "paused", "blocked")
 GOAL_FIELDS = {"title", "why", "origin", "priority", "state", "success", "next_step", "notes", "attempts",
                "last_worked", "blocked_on", "evidence", "needs_body", "rung", "kind", "tier", "created", "closed"}
 KINDS = ("talk", "task", "goal", "autonomy", "learn", "fall", "code", "note")
-AUTONOMY_DEFAULTS = {"paused_until": 0, "body_paused_until": 0, "run_now": False, "day": "", "tokens_today": 0,
+WANDER_MIN = 30  # `tony autonomy wander` without minutes
+AUTONOMY_DEFAULTS = {"paused_until": 0, "body_paused_until": 0, "run_now": False, "wander_until": 0, "stop_at": 0,
+                     "day": "", "tokens_today": 0,
                      "sessions_today": 0, "last_session_end": 0, "goal_sessions": {}}
 
 
