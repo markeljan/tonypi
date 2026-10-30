@@ -86,7 +86,12 @@ class LocalBackend:
             elif name == "report_status":
                 self._status()
             else:
-                h.call_tool_sync("run_skill", {"skill": name, "count": count})
+                res = h.call_tool_sync("run_skill", {"skill": name, "count": count})
+                # the planner can't reason about falls: get up by rule when lying, then try the move once more
+                if res.error and ("lying down" in res.text or "FELL" in res.text) and not stopping():
+                    h.call_tool_sync("run_skill", {"skill": "get_up"})
+                    if "refused" in res.text and not stopping():
+                        h.call_tool_sync("run_skill", {"skill": name, "count": count})
 
     def _describe(self, cancel: threading.Event, request: str) -> None:
         res = self.h.call_tool_sync("snapshot", {})

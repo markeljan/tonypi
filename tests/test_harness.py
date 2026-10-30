@@ -278,6 +278,62 @@ def test_brain_written_moves(tonyd):
     asyncio.run(main())
 
 
+def test_falls_are_the_harness_job(tonyd):
+    async def main():
+        d, client = tonyd
+        guards = []
+        orig = d.body.run
+        d.body.run = lambda skill, count, say, guard_tilt=None: (guards.append((skill, guard_tilt)),
+                                                                 orig(skill, count, say))[1]
+        h, _, _ = await make(tonyd, Scripted(None))
+        r = await h.call_tool("run_skill", {"skill": "wave"})
+        assert not r.error and d.body.ran[-2:] == [("wave", 1), ("settle", 1)]  # back to a stand after a move
+        assert guards[-1] == ("wave", 70.0)
+        await h.call_tool("run_skill", {"skill": "nod"})
+        assert d.body.ran[-1] == ("nod", 1)  # head moves: no settle
+        await h.call_tool("run_skill", {"skill": "turn_left", "guard_tilt_deg": 30})
+        assert guards[-1] == ("turn_left", 30.0)
+
+        d.body.lying = lambda: True  # Tony on the floor
+        n = len(d.body.ran)
+        r = await h.call_tool("run_skill", {"skill": "walk_forward", "count": 2})
+        assert r.error and "get_up first" in r.text and len(d.body.ran) == n  # refused, nothing moved
+        r = await h.call_tool("run_skill", {"skill": "get_up"})
+        assert r.error and "Still lying" in r.text  # the fake body stays down
+        assert guards[-1] == ("get_up", None)  # no tilt guard getting up from the floor
+
+        d.body.lying = lambda: False
+        orig_wave = d.body.run
+
+        def falls(skill, count, say, guard_tilt=None):
+            ok = orig_wave(skill, count, say, guard_tilt)
+            d.body.lying = lambda: True
+            return ok
+        d.body.run = falls
+        r = await h.call_tool("run_skill", {"skill": "bow"})
+        assert r.error and "FELL" in r.text and d.body.ran[-1] == ("bow", 1)  # no settle while lying
+
+    asyncio.run(main())
+
+
+def test_no_settle_after_stop(tonyd):
+    async def script(b, text):
+        await b.tool("run_skill", skill="dance")
+
+    async def main():
+        tonyd[0].body.seconds = 5
+        brain = Scripted(script)
+        h, d, _ = await make(tonyd, brain)
+        await h.submit("dance")
+        await until(lambda: d.current is not None)
+        await h.submit("stop")
+        await until(lambda: not h.busy())
+        await asyncio.sleep(0.3)
+        assert ("settle", 1) not in d.body.ran
+
+    asyncio.run(main())
+
+
 def test_backend_order(monkeypatch):
     monkeypatch.setenv("TONYPI_BRAIN", "local,claude")
     assert [b.name for b in backends.build()] == ["local"]
