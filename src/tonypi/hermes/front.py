@@ -7,6 +7,8 @@ Peripherals (voice, the terminal socket, later the iPhone app) turn what people 
   now is stopped first, so the correction lands as soon as the model sees the cancelled result, not after a long
   walk. A steer that came too late (the model was already writing its answer) is replayed as the next turn.
 - Hermes' final reply, and commentary it writes between tool calls, is spoken; tonyd warnings are spoken when idle.
+- Falls and posture are this harness's job (tonyd no longer guards tilt or settles): keeper.BodyKeeper settles after
+  body moves and gets Tony up after a fall, without an LLM, and tells the running Hermes turn.
 Brain tiers: simple commands go to FAST (gpt-6.1-terra, no reasoning), open-ended or multi-step tasks ("find the door",
 "go to the kitchen", "think hard ...") to DEEP (gpt-6.1-sol, medium reasoning); TONYPI_HERMES_TIER forces one.
 A Hermes session holds the conversation ("again", "that one" work); after IDLE_S without a command the next one starts
@@ -27,6 +29,7 @@ from typing import Callable
 
 from tonypi.agent.brain import STOP_RE
 from tonypi.hermes.client import HermesError, HermesRuns
+from tonypi.hermes.keeper import BodyKeeper
 from tonypi.tonyd.client import TonydClient, TonydError
 
 log = logging.getLogger("tonypi.hermes")
@@ -54,6 +57,7 @@ class Front:
         self.hermes = hermes
         self.tonyd = tonyd if tonyd is not None else TonydClient(on_event=self._on_tonyd_event)
         self._speak, self._stop_speaking = speak, stop_speaking
+        self.keeper = None  # keeper.BodyKeeper, set by main()
         self.session_prefix = session_id
         self.session_id = ""
         self.last_turn = 0.0  # monotonic end of the last turn
@@ -104,6 +108,8 @@ class Front:
                     log.exception("speaking failed")
 
     def _on_tonyd_event(self, ev: dict) -> None:
+        if ev.get("event") == "job" and self.keeper is not None:
+            self.keeper.on_job(ev)
         if ev.get("event") == "warn":  # low battery / overheating, from tonyd's watchdog
             self.emit("info", text=ev["text"])
             if self.run_id is None:
@@ -145,6 +151,8 @@ class Front:
 
     def stop_all(self) -> None:
         """No LLM involved: body, speech, then the Hermes run."""
+        if self.keeper is not None:
+            self.keeper.note_stop()
         self._body_stop()
         self.hush()
         with self.lock:
@@ -229,6 +237,13 @@ class Front:
             for f in self.on_answered:
                 f(source)
 
+    def body_note(self, note: str) -> None:
+        """Something happened to the body (a fall): the running Hermes turn hears it right after its current tool."""
+        self.emit("info", text=note)
+        run_id = self.run_id
+        if run_id not in (None, "starting"):
+            self.hermes.steer(run_id, f"[Tony's body, not the user] {note}")
+
     def status(self) -> dict:
         return self.tonyd.state(fresh=True)
 
@@ -249,6 +264,8 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     speaker = None if args.no_voice else peripherals.make_speaker()
     front = Front(HermesRuns(), speak=speaker.say if speaker else None, stop_speaking=speaker.stop if speaker else None)
+    front.keeper = BodyKeeper(front.tonyd, front.say, on_fall=front.body_note)
+    front.keeper.start()
     for p in peripherals.enabled(front, speaker):
         p.start()
     if not front.hermes.health():
