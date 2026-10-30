@@ -1,0 +1,15 @@
+[Unit]
+Description=TonyPi crash check (says "System booted from a failure" if the last boot didn't end cleanly)
+After=tonypi-agent.service systemd-journald.service
+Wants=tonypi-agent.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/lib/tonypi/bootcheck start
+# runs at every clean shutdown: its marker is how the next boot tells a clean stop from a crash
+ExecStop=/usr/local/lib/tonypi/bootcheck stop
+TimeoutStartSec=240
+
+[Install]
+WantedBy=multi-user.target

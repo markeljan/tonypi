@@ -1,0 +1,7 @@
+[Unit]
+Description=Share the Hermes ChatGPT login with pi and the Codex CLI (harness bake-off; tools/share_chatgpt_login.py)
+
+[Service]
+Type=oneshot
+User=pi
+ExecStart=/usr/bin/python3 /home/pi/tonypi/tools/share_chatgpt_login.py

@@ -39,6 +39,7 @@ class Agent:
         self.clients_lock = threading.Lock()
         self.ids = itertools.count(1)
         self.busy = threading.Event()
+        self.notices: list[str] = []  # tonyd warnings that arrived mid-command
         self.debug = False  # "enable debug mode": play back what was heard and narrate every step
         self.listener = Listener(self.speaker, self._on_wake,
                                  lambda t, a=None, recording=None: self.submit(t, "voice", a, recording=recording)
@@ -112,6 +113,8 @@ class Agent:
             finally:  # tonyd switches the servos off by itself once the body is idle
                 self.busy.clear()
                 self.emit("done", id=rid)
+                while self.notices and not self.busy.is_set():
+                    self.speaker.say(self.notices.pop(0))
 
     def _execute(self, rid: int, text: str, audio: bytes | None = None, voice: bool = False,
                  recording: bytes | None = None) -> None:
@@ -216,9 +219,11 @@ class Agent:
     # ---- background checks ------------------------------------------------------------------------------------
 
     def _on_warn(self, text: str) -> None:
-        """tonyd's watchdog (low battery, overheating): say it unless a command is running."""
+        """tonyd's warnings (low battery, overheating, camera lost / back): said now, or once the command ends."""
         self.emit("info", text=text)
-        if not self.busy.is_set():
+        if self.busy.is_set():
+            self.notices.append(text)
+        else:
             self.speaker.say(text)
 
     # ---- socket server ----------------------------------------------------------------------------------------
@@ -272,7 +277,13 @@ class Agent:
         threading.Thread(target=self._serve, name="socket", daemon=True).start()
         if self.listener:
             self.listener.start()
-        self.speaker.say("Tony is ready." + (" Say hey Tony, then your command." if self.listener else ""))
+        ready = "Tony is ready." + (" Say hey Tony, then your command." if self.listener else "")
+        try:
+            if not self.body.status()["camera"]["ok"]:
+                ready += " Camera disconnected."  # tonyd's own warning came before we were listening
+        except Exception:
+            log.exception("status at startup failed")
+        self.speaker.say(ready)
         try:
             threading.Event().wait()
         finally:
