@@ -55,8 +55,14 @@ async function check(files: string[]): Promise<string | null> {
 
 export default function self(pi: ExtensionAPI) {
   pi.on("tool_call", (event: any) => {
-    if ((event.toolName === "edit" || event.toolName === "write") && !editable(String(event.input?.path ?? ""))) {
+    const path = String(event.input?.path ?? "");
+    if ((event.toolName === "edit" || event.toolName === "write") && !editable(path)) {
       return { block: true, reason: `you may only change files under ${EDITABLE.join(", ")} of ${REPO}` };
+    }
+    // read: the repo only (prompt, lessons, skills, own code, motion data). Voice requests can be room chatter
+    // (2026-10-30: a delegated "remove fish as the default shell" made it read ~/.zshrc).
+    if (event.toolName === "read" && relative(REPO, resolve(REPO, path)).startsWith("..")) {
+      return { block: true, reason: `you may only read files inside ${REPO}` };
     }
   });
 
