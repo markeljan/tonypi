@@ -70,6 +70,8 @@ case $MODE in
   gait)  # T9: the brain tunes turn_left (owner: no spotter needed, falls are fine; the fall reflex gets him up)
     start_front TONYPI_X=1
     TIMEOUT=900 b G1 "Improve your turn_left so you are steadier: all three falls today happened during turns. You're on the floor; falls are OK, you get back up. Follow your gait tuning instructions. Save your versions with the _pi suffix (never over turn_left) and tell me the numbers before and after."
+    b G2 "lie down"
+    b G3 "wave"   # lying: run_skill must get up first (tonyd no longer does)
     ;;
   steer)
     start_front TONYPI_X=1
