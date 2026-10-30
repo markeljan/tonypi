@@ -67,6 +67,10 @@ case $MODE in
     b S1 "turn left 2 steps"
     sleep 5
     ;;
+  gait)  # the brain tunes turn_left. ONLY with a person watching, ready to catch Tony (they confirm first)
+    start_front TONYPI_X=1
+    TIMEOUT=900 b G1 "Improve your turn_left so you are steadier: all three falls today happened during turns. Someone is watching and ready to catch you, and you're on the floor. Follow your gait tuning instructions. Don't override the default turn_left: save your best version as turn_left_v2 and tell me the numbers before and after."
+    ;;
   steer)
     start_front TONYPI_X=1
     b T4b "walk forward 3 steps, then turn left" "@7" "actually, turn right instead"
