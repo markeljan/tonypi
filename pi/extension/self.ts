@@ -32,9 +32,13 @@ async function changed(): Promise<string[]> {
 /** The extension must still load in a fresh pi, and the front end must still compile. */
 async function check(files: string[]): Promise<string | null> {
   try {
-    const { stderr } = await run("pi", ["--offline", "--list-models", "tony", "-nbt", "-nc", "-ns", "-ne", "--no-mcp",
+    // a broken extension doesn't fail pi (exit 0, nothing on stderr): it just loads without it. tony/brain is
+    // registered last (index.ts), so seeing it means every module loaded.
+    const { stdout, stderr } = await run("pi", ["--offline", "--list-models", "tony", "-nbt", "-nc", "-ns", "-ne", "--no-mcp",
       "-e", join(REPO, "pi/extension")], { cwd: REPO, timeout: 60_000, env: { ...process.env, TONYPI_FRONTEND: "1" } });
-    if (/error/i.test(stderr)) return `extension load: ${stderr.slice(0, 1500)}`;
+    if (!/^tony\s+brain\b/m.test(stdout) || /error/i.test(stderr)) {
+      return `the extension no longer loads (tony/brain missing). ${stderr.slice(0, 1200)}`.trim();
+    }
   } catch (e: any) {
     return `extension load failed: ${(e.stderr || e.message || "").slice(0, 1500)}`;
   }
