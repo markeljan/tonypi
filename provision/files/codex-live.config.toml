@@ -1,4 +1,5 @@
-# tonypi LIVE mode: this Codex app-server is Tony's brain behind GPT-Live (src/tonypi/voice/live.py).
+# tonypi LIVE mode: this Codex app-server is Tony's brain behind GPT-Live (src/tonypi/voice/live.py): thread L,
+# background tasks and autonomy sessions. Live copy: ~/.config/tonypi/codex-live/config.toml (keep both identical).
 # Full access is intended by the owner. Auth: access token shared from Hermes by tools/share_chatgpt_login.py
 # (placeholder refresh_token): never run codex login/logout here.
 cli_auth_credentials_store = "file"
@@ -9,18 +10,32 @@ model_reasoning_summary = "concise"
 approval_policy = "never"
 sandbox_mode = "danger-full-access"
 web_search = "live"
-project_doc_fallback_filenames = ["CLAUDE.md"]
-project_doc_max_bytes = 65536
-model_auto_compact_token_limit = 150000
+# Root AGENTS.md is the agent's self-model (it replaces the CLAUDE.md fallback for Codex; CLAUDE.md stays for Claude
+# Code). Nested AGENTS.md files load only when the cwd is inside their directory.
+project_doc_max_bytes = 32768
+# L must stay small and fast: compact at 80k instead of carrying ~130k tokens into every request.
+model_auto_compact_token_limit = 80000
+compact_prompt = """Summarize this thread so Tony's brain can continue without it. Tony is a self-improving TonyPi \
+humanoid robot; this thread is his brain (or a task / autonomy session of it). Keep, in short plain lines: \
+(1) the owner's requests still open and his exact words for decisions and preferences; \
+(2) running background tasks (ids, titles, what they wait for) and the active goal id, success criteria and progress; \
+(3) body state that matters now (posture, stop latch, last fall, battery or heat warnings, the phone's mode and \
+placement); \
+(4) measured results with their numbers (trial/compare scores, yaw per step, tilt, distances, exp ids, saved motion \
+and skill names) and commits made; \
+(5) promises Tony made and the next step. \
+Drop greetings, tool chatter, images, raw logs and anything already in MEMORY.md, the journal or goals.json. \
+Under 400 words."""
 
 [realtime]
 version = "v3"
 voice = "cove"
 
-
 [features]
 realtime_conversation = true
 multi_agent = true
+goals = true
+memories = false
 
 [agents]
 max_concurrent_threads_per_session = 3
@@ -38,13 +53,15 @@ default_tools_approval_mode = "approve"
 disabled_tools = ["say"]
 
 [mcp_servers.phone]
-# Tony's iPhone (tonypi-phone bridge, repo iPeripheral): camera, LiDAR depth, tracking and recording of Tony from
-# outside (companion mode). Optional: the brain works without it when the phone isn't connected.
+# Tony's iPhone (tonypi-phone bridge, repo iPeripheral): camera, LiDAR depth, detection, on-phone models, tracking and
+# recording of Tony from outside (companion mode). Optional: the brain works without it when the phone isn't connected.
+# phone_say is off: in companion mode the phone mic hears its own speaker and the words come back as a command.
 url = "http://127.0.0.1:8767/mcp"
 required = false
 startup_timeout_sec = 20
 tool_timeout_sec = 200
 default_tools_approval_mode = "approve"
+disabled_tools = ["phone_say"]
 
 [projects."/home/pi/tonypi"]
 trust_level = "trusted"

@@ -39,10 +39,20 @@ Status markers: [x] done · [~] in progress · [ ] todo
 ## 4. Brain
 - [x] Robot MCP server `tonypi-mcp` (Streamable HTTP :8765): list_skills, run_skill, stop, get_state, look, snapshot, say (M1)
 - [x] Local fast loop: JSON-schema plan (say + ≤6 enum actions), offline, ~2–4 s (`tonypi-agent`, 2026-10-28; LFM3-Omni since 2026-10-29)
-- [ ] `escalate(task)` → Claude Opus via Claude Agent SDK (tools=[], robot MCP, PreToolUse gate)
-- [ ] "Go get that": VLM target → head tracking → walk-to (visual servoing) loop
-- [ ] Optional: Hermes Agent attached to the same MCP server (Telegram / chat)
+- [x] Harness bake-off own / Hermes / pi (2026-10-30, `docs/archive/HARNESS_BAKEOFF.md`): retired to branches
+  `deprecated/harness-*`; live mode (GPT-Live-1 voice + Codex brain) is the one harness, LFM3 agent the offline fallback
+- [x] Live mode default at boot; root `AGENTS.md` self-model, skills in `.agents/skills/`, robot-specific compaction
+  (2026-10-30, `docs/BRAIN.md`)
+- [~] Memory, goals, journal, recall (`tony` CLI, `~/.local/share/tonypi/brain`) and the autonomy scheduler: built
+  2026-10-30, to be proven by `docs/ACCEPTANCE.md`
+- [ ] Voice relay quality: >= 9/10 spoken commands reach the brain exactly once; first motion after "wave" < 8 s
+- [ ] "Go get that": phone/camera target → turn by gyro → walk in checked legs (skill walk-to-target), then visual servoing
+- [ ] Nightly memory curation session (merge Recent into sections, dedupe, keep MEMORY.md <= 4 KB)
 
 ## 5. Better motion
+- [~] Body learning (2026-10-30, `docs/BODY_LEARNING.md`): measured `trial` / `compare` / `body_sweep`, job log,
+  ledger, body model, skill library, phone as observer; curriculum joint map → weight shift → step → turn → walk 1 m
+- [ ] Goals g1-g4: body model of 16 servos, get_up >= 9/10 both sides, walk 1 m straight 3/3, turn 90 deg +-10
+- [ ] Optimiser in the runner (ES over gait params between LLM calls) once the hand-driven loop works
 - [ ] Auto-calibration: pose capture, IMU-refined standing offsets (bounded search, harnessed)
 - [ ] MuJoCo model + system ID from logs → learned walking policy (ONNX, 50 Hz)

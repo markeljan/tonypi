@@ -144,6 +144,8 @@ async def main(route_to_harness):
 ```
 
 ## 7. Recommended architecture
+> 2026-10-30: decided. Live mode (GPT-Live + its own Codex brain, `clientManagedHandoffs:false`) is the only harness; the Hermes/pi relay below is history. See `docs/BRAIN.md`.
+
 **Shared piece:** a single `tonypi-voice` peripheral service. It owns the USB audio and runs app-server v3 plus aiortc. It sends each delegation's text to the active harness and returns the reply text. Robot motions stay serialized under the robot lock.
 
 - **Own Codex harness:** start realtime on the harness's own app-server thread, which already has the robot tools, with `clientManagedHandoffs:false`. That thread then does the work and avoids the extra skip turn. This setup is not yet tested live; the client-managed path is the fallback.

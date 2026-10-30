@@ -2,8 +2,11 @@
 
 Hiwonder TonyPi humanoid (16 bus servos + 2 PWM head servos) on a Raspberry Pi 5 8 GB, rebuilt from scratch
 on Raspberry Pi OS Lite 64-bit (trixie) with one user (`pi`). This repo replaces all Hiwonder software.
-Goal: an always-on humanoid that hears, sees, knows its orientation, gets up when knocked over, and does what
-it's told ("hey, go get that"), with local LFM models on the Pi and Claude (Opus) for harder reasoning.
+Goal: a self-thinking, self-improving humanoid that hears, sees, controls and learns its own body, upgrades its own
+code, uses the owner's iPhone and AI tools, and works on its own goals when nobody talks to it.
+**Agents:** Codex (Tony's own brain) reads `AGENTS.md`, not this file: the root `AGENTS.md` is Tony's self-model and
+indexes the nested `AGENTS.md` files and `docs/BRAIN.md` (architecture of his mind, runbook). This file is the full
+hardware/service reference for Claude Code and for Tony when he needs a detail.
 
 ## Hard rules
 - **One process owns `/dev/ttyAMA0`: `tonyd`** (`tonypi.hal.board.Board` opens it exclusively; a second open fails with EBUSY). Everything else goes through tonyd's socket or the MCP server. tonyd also owns the camera.
@@ -14,12 +17,19 @@ it's told ("hey, go get that"), with local LFM models on the Pi and Claude (Opus
   bypass: stop, temperature, torque off when idle.
 - `stop` never depends on an LLM. **Falls are the harness's job** (owner's direction, 2026-10-29): tonyd never stops a
   move for tilting, stands Tony up or settles him by itself; it reports `tilt_deg`/`lying` and `max_tilt_deg` per job,
-  and a brain can opt in to a tilt stop per job (`guard_tilt_deg`). The voice agent gets up / settles in its own code.
-- Before commanding motion, assume the robot may be standing on a table: start slow, prefer `stand_slow`, keep a hand near it the first time.
+  and a brain can opt in to a tilt stop per job (`guard_tilt_deg`). The brain runs `get_up` / `settle` itself; the
+  learning runner gets up after a fall in a trial.
+- **Safety posture** (owner's direction, 2026-10-30): Tony lives on the floor. Falling is allowed and expected while
+  learning ("it is built to fall on its own and won't be damaged"); recovery is `get_up`, then continue. Trials use
+  `guard_tilt_deg` (gaits 40, balance/new poses 30). Never ask the owner about setup, clearance, observers or fixtures:
+  verify with sensors (IMU tilt/yaw, joints, head camera at tilt −40, phone). Real limits: stop reflex + latch, servo
+  temperature (pause body work at ≥70 °C), battery < 10.9 V = no body work, the irreversible list (reboot, EEPROM
+  `servo_calibrate`, deleting user data, auth, network/boot) and safety code (`src/tonypi/tonyd/`, the voice stop
+  reflex) need the owner's yes.
 - Servo **temperature**: limit is 85 °C (servo self-protects). Measured up to 80 °C after ~1 h of holding a pose on 2026-10-28 (elbows 6/14 hottest at 78–80, right leg 66–76). **Torque is off whenever idle** (any pose, standing included: it carries no load and holds the pose limp); a thermal stop unloads instead of standing.
 - **Memory** (8 GB, 2 GB zram, no PSI): the Pi froze once (2026-10-29) with llama-server + several Claude Code sessions
   + harness Node/Hermes jobs. `earlyoom` (`provision/files/earlyoom.default`) kills dev/harness jobs first, then the
-  largest process (llama-server, `Restart=always`); tonyd (OOMScoreAdjust −900), agent and MCP (−500) are never chosen.
+  largest process (llama-server, `Restart=always`); tonyd (OOMScoreAdjust −900), voice, agent and MCP (−500) are never chosen.
   Check `free -m` before anything big (second llama-server, builds) and run it under `flock /run/lock/tonypi-robot.lock`.
 - **Hang recovery**: the `watchdog` daemon (`provision/files/watchdog.conf`, real-time, owns `/dev/watchdog`; systemd's
   RuntimeWatchdog is off) reboots the Pi if sshd stops answering for 3 min, and the hardware resets it 15 s after the
@@ -65,9 +75,8 @@ tonyd (hal + 100 Hz state: IMU filter, battery, servo temps, keys)  ← only pro
 perception: camera loop (OpenCV) + image questions to LFM3-Omni-2B (same llama-server, --mmproj)
 audio: mic → VAD → STT → text events; TTS → speaker (barge-in)
 mcp: robot MCP server (Streamable HTTP, localhost/LAN) — the stable interface for every brain
-brain: thin local loop (LFM3-Omni-2B, few tools, fast, offline) + escalate() to Claude Opus via Claude Agent SDK
+brain: live mode (GPT-Live-1 voice + Codex brain, docs/BRAIN.md); offline fallback: LFM3-Omni-2B agent
 ```
-Hermes Agent (Nous) can attach to the same MCP server later (it needs ≥64K context, so not for the local 2B tier).
 
 ## tonyd (body daemon, `tonypi-tonyd.service`, since M1 2026-10-29)
 `src/tonypi/tonyd/` — the only process on `/dev/ttyAMA0` and the camera. **Stop it (`sudo systemctl stop tonypi-tonyd`)
@@ -94,39 +103,49 @@ before `tools/bench.py`** or anything else that opens the board.
   state has `heading_deg` (drifts slowly: use differences).
 - Looking around: tonyd `scan {pans, tilt_deg}` (one photo per head angle, each taken after the head settled, head
   returns; ~2.8 s for 3) and `burst {frames, seconds}` (a short "video"); MCP `scan` / `video` return labelled images.
+- Every finished job is appended to `~/.local/share/tonypi/jobs.jsonl` (wall-clock times, tilt, yaw, temps, battery);
+  op `job {id}` reads one (last 200 in memory); `trace: true` writes an IMU trace to `~/.local/share/tonypi/traces/`.
 - MCP: `tonypi-mcp.service` → `http://127.0.0.1:8765/mcp` (Streamable HTTP, no auth, localhost only by default). Tools:
-  `list_skills, run_skill, stop, get_state, look, snapshot (image), say`. `.mcp.json` in the repo points Claude Code at it.
+  body (`list_skills, run_skill, wait_motion, get_job, stop, get_state, look`), camera (`snapshot, scan, video`),
+  authoring (`get_joints, play_frames, set_pose, set_torque, *_motion, *_skill, calibration, servo_calibrat*,
+  tether`), learning (`trial, compare, body_sweep, ledger, body_model, library`; `src/tonypi/learn/`,
+  docs/BODY_LEARNING.md), `say`. `.mcp.json` in the repo points Claude Code at it.
 
-## Voice (`tonypi-voice.service`, 2026-10-29): shared ears + mouth for any harness
-`src/tonypi/voice/` owns the USB mic + speaker (conflicts with tonypi-agent: starting one stops the other; harness
-slots `sudo systemctl start tonypi-voice`, then `start tonypi-agent` to restore). GPT-Live-1 (`gpt-live-1-codex`) via
-`codex app-server` realtime v3 over WebRTC (aiortc) on the shared ChatGPT login (CODEX_HOME `~/.config/tonypi/codex-voice`,
-docs/GPT_LIVE.md); falls back to local wake word + ASR + Piper. Socket `/run/tonypi/voice.sock` (`VoiceClient`): attach,
-heard, reply, say, ask, barge_in, transcript, status, inject (a WAV as if the user spoke; tests). Half duplex by default
-(mic silenced while Tony talks: no echo cancellation). Live 2026-10-29: request heard ~1 s after the user stops,
-replies and unprompted speech spoken by GPT-Live, `ask` answered from the transcript.
+## Voice (`tonypi-voice.service`, enabled at boot): Tony's ears + mouth
+`src/tonypi/voice/` owns the USB mic + speaker (conflicts with tonypi-agent: starting one stops the other).
+GPT-Live-1 (`gpt-live-1-codex`) via `codex app-server` realtime v3 over WebRTC (aiortc) on the shared ChatGPT login
+(docs/GPT_LIVE.md); falls back to local wake word + ASR + Piper. Socket `/run/tonypi/voice.sock` (`VoiceClient`): say,
+text (typed request), status, tasks, ping, inject (a WAV as if the user spoke; tests). Half duplex by
+default (mic silenced while Tony talks: no echo cancellation). "Stop" / "halt" / "freeze" is caught by the voice
+service itself and stops tonyd directly with a latch (motion refused until the user speaks again), whatever the brain
+does.
 
-## Switching the brain (harness bake-off, 2026-10-30)
-One harness at a time as `tonypi-brain@{own,hermes,pi}.service` (`tools/e2e.sh <name>`: start pose, robot lock,
-tonypi-voice, the harness). Say "switch to pi / Hermes / our own / local" (voice service and tonypi-agent both handle
-it, loosely matched: ASR hears "which Khermes"), or `tools/switch.sh own|hermes|pi|off|status`. "Stop" / "halt" /
-"freeze" is caught by the voice service itself and stops tonyd directly, whatever the brain does.
+## Live mode (default, 2026-10-30): GPT-Live-1 + Tony's own Codex brain, full access
+Architecture, data files and runbook: **docs/BRAIN.md** (docs/LIVE_MODE_SPEC.md is the older spec; BRAIN.md wins).
+`src/tonypi/voice/live.py`: GPT-Live is the voice (prompt `prompts/live_voice.md`: delegate every request); with
+`clientManagedHandoffs:false` its Codex app-server thread L (gpt-6.1-terra, effort low, fast tier,
+`danger-full-access`, approval never, CODEX_HOME `~/.config/tonypi/codex-live`, config =
+provision/files/codex-live.config.toml, keep both identical) is the brain: shell, file edits incl. its own code, live
+web search, images, subagents (`.codex/agents/`), skills (`.agents/skills/`), the robot MCP and the phone MCP. L reads
+root `AGENTS.md` + `prompts/codex_developer.md` + a memory snapshot; it is persistent (`~/.local/share/tonypi/live/
+state.json`), compacts at 80k tokens and rotates after 20 h. Codex speaks its `[FINAL]` messages (bemTags). Tools
+`tony_*`: speak now, background tasks (persistent worker threads, tier terra/sol, optional Codex goal; result spoken
+once), steer/cancel tasks, restart its own voice. The voice service merges utterance fragments and bridges requests
+GPT-Live or Codex missed.
+- **Autonomy** (`src/tonypi/voice/autonomy.py`): after ~75 s of quiet a session thread works on the next goal
+  (owner goals first, then self goals / the curriculum); owner speech ends it within 2 s. `tony autonomy pause [MIN]`.
+- **Memory** (`src/tonypi/brain/`, `~/.local/share/tonypi/brain/`, local git): MEMORY.md, goals.json, journal,
+  inbox, curriculum, learning ledger, FTS recall; the `tony` CLI (`tony memory|remember|journal|goal|recall|inbox|say|
+  autonomy|history`).
+- **Learning**: docs/BODY_LEARNING.md. Acceptance checks: docs/ACCEPTANCE.md.
+Logs: `~/.local/share/tonypi/live/conversation.jsonl`, `tasks.jsonl`, the brain journal. Typed: `{"op":"text"}` on
+voice.sock. Auth: Hermes stays installed only as the ChatGPT token refresher (`tools/share_chatgpt_login.py`); never
+`codex login/logout` in a tonypi CODEX_HOME.
 
-## Live mode (`switch to live`, 2026-10-30): GPT-Live-1 + its own Codex agent, full access
-`src/tonypi/voice/live.py` (spec: docs/LIVE_MODE_SPEC.md). GPT-Live is the voice; with `clientManagedHandoffs:false` its
-Codex app-server thread L (gpt-6.1-sol, `danger-full-access`, approval never, CODEX_HOME `~/.config/tonypi/codex-live`,
-config in provision/files/codex-live.config.toml) is the brain: shell, file edits incl. its own code, live web search,
-image viewing, subagents, and the robot MCP (camera images are seen by the model). L is persistent (resumed via
-`~/.local/share/tonypi/live/state.json`), gets every request as `<realtime_delegation>` with the transcript since the
-last one, and Codex speaks its `[FINAL]` messages (bemTags). Voice-service tools `tony_*`: speak now, background worker
-threads (concurrent jobs, result spoken + injected into L), steer/cancel tasks, switch brain, restart its own voice.
-Live-tested: wave, "what do you see" (camera answer ~11 s), a background task, march then "stop".
-Known: GPT-Live sometimes answers without handing off, and Codex's own link to the call sometimes misses a delegation
-or stalls; the voice service bridges both (it sees every transcript/delegation and hands the request to L itself).
-Seeding past turns as real items made GPT-Live imitate them, so history goes in as one developer note. Prompt variant
-`TONYPI_LIVE_PROMPT=legacy` (default; the spec's `core` prompt delegated less). Stop: the voice service stops tonyd
-with a latch (motion refused until the user speaks again) and interrupts L's turn and body tasks. Typed:
-`{"op":"text"}` on voice.sock. Log: `~/.local/share/tonypi/live/conversation.jsonl`.
+## Fallback: switch to local / live
+The bake-off harnesses (own, Hermes, pi) were retired 2026-10-30 to branches `deprecated/harness-{own,hermes,pi}`
+(docs/archive/HARNESS_BAKEOFF.md). "Switch to local" (or `tools/switch.sh local`) starts the offline LFM3 agent
+(`tonypi-agent`, which stops the voice); "switch to live" (or `tools/switch.sh live`) starts tonypi-voice again.
 
 ## Phone (`tonypi-phone.service`, 2026-10-30): Tony's iPhone as a peripheral
 Bridge from the iPeripheral repo (deployed from the Mac with its `deploy/install.sh` to `/home/pi/iPeripheral`; protocol in
@@ -134,7 +153,8 @@ that repo's `docs/protocol.md`). WebSocket :8766 on the LAN for the phone (token
 `http://127.0.0.1:8767/mcp` (in live mode's Codex config as server `phone`, `required = false`), `/live` MJPEG of the phone
 camera. Tools: camera, LiDAR depth/obstacles, detection, on-phone LFM3 (`phone_locate`, `phone_look_and_ask`), speaker,
 and `phone_mode` mounted (on Tony) / companion (on a stand watching Tony: `phone_track`, `phone_record_jobs`,
-`phone_episode_review`, the observer for docs/BODY_EXPERIMENTS.md). It never moves Tony: on tonyd.sock it only
+`phone_episode_review`, the observer for docs/BODY_LEARNING.md). `phone_say` is disabled for the brain (companion
+echo). It never moves Tony: on tonyd.sock it only
 subscribes, reads state/skills/joints (≈2 Hz while recording) and sends plain `stop` (no latch); on voice.sock `say`
 and, in companion mode only, commands the phone heard as `text` with source `phone_mic` (`phone_app` = typed is
 reserved; the bridge doesn't send it yet). live.py drops a `phone_mic` request when Tony's own mic heard the user within
@@ -142,7 +162,7 @@ reserved; the bridge doesn't send it yet). live.py drops a `phone_mic` request w
 Phone speech does not clear the stop latch (only Tony's own mic does). Codex connects to the phone MCP when the voice
 starts and doesn't retry: if the bridge was down then, `sudo systemctl restart tonypi-voice` once it is up.
 
-## Agent (live: `tonypi-agent.service`, since 2026-10-28)
+## Agent (offline fallback: `tonypi-agent.service`, since 2026-10-28)
 `src/tonypi/agent/` — voice + terminal front end. Owns the mic and speaker; every move goes through tonyd (`body_link.py`).
 - Input: terminal (`tonypi-chat` → `/run/tonypi/agent.sock`, JSON lines) and voice ("hey Tony …": sherpa-onnx KWS
   gigaspeech 3.3M → streaming zipformer en-2023-06-26 with hotwords; mic gain at max). Newest command preempts;
