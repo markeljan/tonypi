@@ -48,6 +48,7 @@ def front() -> daemon.Front:
     f.tonyd, f.pi = FakeTonyd(), FakePi()
     f.ids = iter(range(1, 100))
     f.cmd, f.running, f.tools_running, f.restarting, f.reload = None, False, 0, False, None
+    f.asking, f.voice, f.voice_mode = None, None, "none"
     f.last_settled = time.monotonic()
     f.lock = threading.RLock()
     f.clients, f.clients_lock = set(), threading.Lock()
@@ -180,3 +181,84 @@ def test_fall_reflex_decisions():
     assert not r.check(lying, 10)                                # gave up: wait for help
     r.check({"lying": False}, 11)
     assert not r.gave_up
+
+
+
+class FakeVoice:
+    attached = True
+
+    def __init__(self) -> None:
+        self.sent: list[tuple] = []
+
+    def reply(self, id_, text, final=True):
+        self.sent.append(("reply", id_, text, final))
+
+    def say(self, text):
+        self.sent.append(("say", text))
+
+    def ask(self, text, timeout_s=30):
+        self.sent.append(("ask", text))
+        return "go around it"
+
+
+def test_voice_service_replies_go_to_the_request():
+    f = front()
+    f.voice = FakeVoice()
+    f.submit("walk to the chair", "voice", voice_id=7)
+    f._on_pi({"type": "tool_execution_start", "toolName": "say", "args": {"text": "On my way."}})
+    f._on_pi({"type": "message_end", "message": {"role": "assistant", "stopReason": "stop", "provider": "x",
+                                                 "model": "y", "content": [{"type": "text", "text": "I'm there."}]}})
+    f.say_out("Oops, I fell over. Getting up.")
+    assert f.voice.sent == [("reply", 7, "On my way.", False), ("reply", 7, "I'm there.", True),
+                            ("say", "Oops, I fell over. Getting up.")]
+
+
+def test_ask_user_through_the_voice_service():
+    f = front()
+    f.voice = FakeVoice()
+    assert f.ask("I'm stuck at the rug edge, what should I do?") == "go around it"
+
+
+def test_ask_user_without_voice_takes_the_next_command_as_the_answer():
+    f = front()
+    got = []
+    t = threading.Thread(target=lambda: got.append(f.ask("What's going on?", timeout_s=5)))
+    t.start()
+    wait_for(lambda: f.asking is not None)
+    f.submit("the rug edge is too high, go around it", "terminal")
+    t.join(5)
+    assert got == ["the rug edge is too high, go around it"]
+    assert f.pi.sent == []  # not sent to pi as a new command
+
+
+def test_voice_service_client_protocol(tmp_path):
+    import json
+    import socket as so
+
+    from tonypi.pi_front.voice import VoiceService
+    path = str(tmp_path / "voice.sock")
+    srv = so.socket(so.AF_UNIX, so.SOCK_STREAM)
+    srv.bind(path)
+    srv.listen(1)
+    got: list[dict] = []
+    heard: list[tuple] = []
+
+    def serve():
+        conn, _ = srv.accept()
+        f = conn.makefile("r")
+        got.append(json.loads(f.readline()))                      # attach
+        conn.sendall(b'{"event": "heard", "id": 3, "text": "find my shoes"}\n')
+        got.append(json.loads(f.readline()))                      # reply
+        got.append(json.loads(f.readline()))                      # ask
+        conn.sendall(b'{"answer": "under the desk"}\n')
+        time.sleep(0.5)
+
+    threading.Thread(target=serve, daemon=True).start()
+    v = VoiceService(lambda i, t: heard.append((i, t)), path=path).start()
+    wait_for(lambda: heard)
+    assert heard == [(3, "find my shoes")]
+    v.reply(3, "Looking.", final=False)
+    assert v.ask("Where should I look?", timeout_s=5) == "under the desk"
+    assert got[0] == {"op": "attach", "name": "pi"}
+    assert got[1] == {"op": "reply", "id": 3, "text": "Looking.", "final": False}
+    assert got[2]["op"] == "ask" and got[2]["text"] == "Where should I look?"

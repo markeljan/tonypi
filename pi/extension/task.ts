@@ -23,11 +23,36 @@ const ACTING = new Set(["run_skill", "play_frames", "set_pose", "save_skill"]);
 
 const readOr = (path: string, fallback = "") => { try { return readFileSync(path, "utf8").trim(); } catch { return fallback; } };
 
+// Stuck check (owner's lesson, 2026-10-29: a harness kept failing to step up onto the rug). The third identical
+// body action in a task, or a second failure in a row, gets this appended to its result.
+const STUCK = "[stuck check] Stop repeating this. 1) Gather data: look down at your feet (look tilt_deg -35), take a "
+  + "video while trying once more, compare turned/max tilt, get_joints. 2) Say out loud what you think is wrong. "
+  + "3) Try something genuinely different: another angle, a side-step or back-up, or author a new motion (e.g. a "
+  + "higher step to clear an edge; see the motion-authoring skill). 4) If you don't know, ask the user out loud with "
+  + "ask_user and use the answer. When something works, save it as a _pi skill and add a line to pi/LESSONS.md.";
+const BODY = new Set(["run_skill", "play_frames", "set_pose"]);
+const FAILED = /\b(failed|refused|stopped because|not started|tilted past|0 of \d+ steps)\b/i;
+
 export default function task(pi: ExtensionAPI) {
   let started = 0;
   let acted = false;
   let done = false;
   let nudges = 0;
+  let tries = new Map<string, number>();
+  let failsInRow = 0;
+
+  pi.on("tool_result", (event: any) => {
+    const name = event.toolName;
+    if (!BODY.has(name)) return;
+    const sig = `${name}:${JSON.stringify(event.input ?? {})}`;
+    const n = (tries.get(sig) ?? 0) + 1;
+    tries.set(sig, n);
+    const text = (event.content ?? []).filter((c: any) => c.type === "text").map((c: any) => c.text).join(" ");
+    failsInRow = event.isError || FAILED.test(text) ? failsInRow + 1 : 0;
+    if (n >= 3 || failsInRow >= 2) {
+      return { content: [...(event.content ?? []), { type: "text", text: `${STUCK} (same action ${n}x, failures in a row ${failsInRow})` }] };
+    }
+  });
 
   pi.on("before_agent_start", (event: any) => {
     const o = event.systemPromptOptions;
@@ -42,6 +67,8 @@ export default function task(pi: ExtensionAPI) {
       if (!text.startsWith("[body]")) {  // "[body] you fell, continue the task" keeps the task's budget
         started = Date.now();
         nudges = 0;
+        tries = new Map();
+        failsInRow = 0;
       }
       acted = false;
       done = false;

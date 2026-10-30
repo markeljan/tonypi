@@ -23,9 +23,12 @@ import socket
 import sys
 import threading
 import time
+from concurrent.futures import Future
+from concurrent.futures import TimeoutError as FutureTimeout
 from pathlib import Path
 
 from tonypi.agent.brain import STOP_RE
+from tonypi.pi_front import voice as voice_service
 from tonypi.pi_front.rpc import PiRpc
 from tonypi.tonyd.client import TonydClient, TonydError
 
@@ -134,7 +137,7 @@ class FallReflex:
         log.warning("fall reflex: Tony is lying and wasn't told to; getting up")
         f.emit("info", text="fall detected: getting up (reflex, no model)")
         f.stop_all()
-        f.speech.say("Oops, I fell over. Getting up.")
+        f.say_out("Oops, I fell over. Getting up.")
         for attempt in (1, 2):
             try:
                 job = f.tonyd.run("get_up", timeout=60)
@@ -149,7 +152,7 @@ class FallReflex:
                     f.continue_after_fall(task)
                 return
         self.gave_up = True
-        f.speech.say("I can't get up by myself. Please help me stand.")
+        f.say_out("I can't get up by myself. Please help me stand.")
         f.emit("info", text="fall reflex gave up: still lying after 2 get_up attempts")
 
     def loop(self) -> None:
@@ -171,6 +174,7 @@ class Command:
     def __init__(self, rid: int, text: str, source: str) -> None:
         self.rid, self.text, self.source = rid, text, source
         self.goal = text  # the user's task (a fall re-prompt keeps the original)
+        self.voice_id: int | None = None  # the voice service's request id: answers go back as replies to it
         self.t0 = time.monotonic()
         self.marks: dict[str, float] = {}
         self.tools: list[str] = []
@@ -189,12 +193,19 @@ class Command:
 
 
 class Front:
-    def __init__(self, voice: bool = True, speak: bool = True, model: str = "tony/brain") -> None:
+    def __init__(self, voice: str = "auto", speak: bool = True, model: str = "tony/brain") -> None:
+        """voice: "service" (the shared tonypi-voice peripheral: GPT-Live-1, owns mic + speaker), "local" (this
+        process's own wake word + ASR + Piper), "none" (typed only), "auto" (service if it's up, else local)."""
+        if voice == "auto":
+            voice = "service" if voice_service.available() else "local"
+        self.voice_mode = voice
+        self.voice = voice_service.VoiceService(self._on_voice_heard, self._on_barge_in) if voice == "service" else None
         speaker = None
-        if speak or voice:
+        if voice == "local" or (voice == "none" and speak):
             from tonypi.agent.speech import Speaker
             speaker = Speaker()
         self.speech = Speech(speaker)
+        self.asking: Future | None = None  # ask_user waiting for the next words (when there's no voice service)
         self.fall = FallReflex(self)
         self.tonyd = TonydClient(on_event=self._on_tonyd)
         self.pi = PiRpc(self._on_pi, model=model, session=os.environ.pop("TONYPI_PI_RESUME", None))
@@ -209,7 +220,7 @@ class Front:
         self.clients: set[socket.socket] = set()
         self.clients_lock = threading.Lock()
         self.listener = None
-        if voice:
+        if voice == "local":
             self.listener = fast_stop_listener()(speaker, lambda: self.emit("wake"),
                                                  lambda t, a=None, recording=None: self.submit(t, "voice"))
             self.listener.on_stop = self.stop_all
@@ -229,7 +240,7 @@ class Front:
 
     # ---- commands -------------------------------------------------------------------------------------------
 
-    def submit(self, text: str, source: str) -> int:
+    def submit(self, text: str, source: str, voice_id: int | None = None) -> int:
         rid = next(self.ids)
         text = text.strip()
         self.emit("heard", id=rid, source=source, text=text)
@@ -241,9 +252,15 @@ class Front:
             self.emit("action", id=rid, name="stop", count=1)
             self.emit("done", id=rid)
             return rid
+        if self.asking is not None and not self.asking.done():  # the answer to ask_user, not a new command
+            self.asking.set_result(text)
+            self.emit("info", id=rid, text="taken as the answer to Tony's question")
+            self.emit("done", id=rid)
+            return rid
         self.speech.stop()  # barge-in
         with self.lock:
             old, self.cmd = self.cmd, Command(rid, text, source)
+            self.cmd.voice_id = voice_id
             if self.running and old is not None:
                 if self.tools_running:
                     self.cmd.how = "steer"  # the motion tool returns at its next step; the model reads this next
@@ -318,7 +335,7 @@ class Front:
                 if name in MOTION_TOOLS:
                     cmd.mark("first_motion")
             if name == "say":
-                self._say(args.get("text", ""), cmd)
+                self._say(args.get("text", ""), cmd, final=False)
             else:
                 self.emit("action", id=cmd and cmd.rid, name=name if name != "run_skill" else args.get("skill"),
                           count=args.get("count", 1), args=args)
@@ -400,11 +417,46 @@ class Front:
         self.pi = PiRpc(self._on_pi, model=self.pi.model, session=session)
         self.pi.start()
 
-    def _say(self, text: str, cmd: Command | None) -> None:
+    def _say(self, text: str, cmd: Command | None, final: bool = True) -> None:
+        """final: the answer to a command; else a progress note (the say tool)."""
         if cmd:
             cmd.mark("first_speech")
         self.emit("say", id=cmd and cmd.rid, text=text)
-        self.speech.say(text)
+        if self.voice and self.voice.attached:
+            if cmd and cmd.voice_id is not None:
+                self.voice.reply(cmd.voice_id, text, final)
+            else:
+                self.voice.say(text)
+        else:
+            self.speech.say(text)
+
+    def say_out(self, text: str) -> None:
+        """Unprompted speech (reflexes, warnings)."""
+        self._say(text, None)
+
+    def ask(self, text: str, timeout_s: float = 30) -> str | None:
+        """ask_user: out loud through the voice service, or spoken locally with the next typed/heard words as the
+        answer."""
+        self.emit("ask", text=text)
+        if self.voice and self.voice.attached:
+            answer = self.voice.ask(text, timeout_s)
+        else:
+            self.asking = Future()
+            self.speech.say(text)
+            try:
+                answer = self.asking.result(timeout_s)
+            except FutureTimeout:
+                answer = None
+            finally:
+                self.asking = None
+        self.emit("info", text=f"asked {text!r}; answer: {answer!r}")
+        return answer
+
+    def _on_voice_heard(self, voice_id: int, text: str) -> None:
+        self.submit(text, "voice", voice_id=voice_id)
+
+    def _on_barge_in(self) -> None:
+        self.emit("info", text="barge-in: the user talks over Tony")
 
     def _finish(self, cmd: Command, superseded: bool = False, error: bool = False) -> None:
         cmd.mark("done")
@@ -437,7 +489,7 @@ class Front:
         if ev.get("event") == "warn":  # overheating / low battery: no model needed
             self.emit("info", text=ev.get("text", ""))
             if not self.running:
-                self.speech.say(ev.get("text", ""))
+                self.say_out(ev.get("text", ""))
 
     # ---- socket (tonypi-chat protocol) ---------------------------------------------------------------------
 
@@ -472,6 +524,15 @@ class Front:
                     self._say(msg.get("text", ""), None)
                     conn.sendall(b'{"type": "accepted", "op": "say"}\n')
                     continue
+                if msg.get("op") == "ask":  # from the extension's ask_user tool
+                    def answer(conn=conn, msg=msg) -> None:
+                        a = self.ask(str(msg.get("text", "")), float(msg.get("timeout_s", 30)))
+                        try:
+                            conn.sendall((json.dumps({"type": "answer", "answer": a}) + "\n").encode())
+                        except OSError:
+                            pass
+                    threading.Thread(target=answer, daemon=True).start()
+                    continue
                 if msg.get("text") == "/status":
                     st = self.tonyd.state(fresh=True)
                     self.emit("status", **st)
@@ -492,7 +553,11 @@ class Front:
             threading.Thread(target=self.fall.loop, name="fall-reflex", daemon=True).start()
         if self.listener:
             self.listener.start()
-        self.speech.say("Tony is ready.")
+        if self.voice:
+            self.voice.start()
+        log.info("voice: %s", self.voice_mode)
+        if not self.voice:
+            self.speech.say("Tony is ready.")
         try:
             threading.Event().wait()
         finally:
@@ -503,7 +568,10 @@ class Front:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--no-voice", action="store_true", help="no mic (typed commands only)")
+    ap.add_argument("--no-voice", action="store_true", help="no mic (typed commands only); = --voice none")
+    ap.add_argument("--voice", default=os.environ.get("TONYPI_VOICE_BACKEND", "auto"),
+                    choices=["auto", "service", "local", "none"],
+                    help="service = shared tonypi-voice (GPT-Live-1); local = own wake word + ASR; auto = service if up")
     ap.add_argument("--mute", action="store_true", help="no speaker either (text benchmarks)")
     ap.add_argument("--model", default=os.environ.get("TONYPI_PI_MODEL", "tony/brain"))
     args = ap.parse_args()
@@ -511,7 +579,7 @@ def main() -> None:
     # set TONYPI_ASR_URL=http://127.0.0.1:8080/v1/chat/completions to bring the second pass back)
     os.environ.setdefault("TONYPI_ASR_URL", "")
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    Front(voice=not args.no_voice, speak=not args.mute, model=args.model).run()
+    Front(voice="none" if args.no_voice else args.voice, speak=not args.mute, model=args.model).run()
 
 
 def chat() -> None:

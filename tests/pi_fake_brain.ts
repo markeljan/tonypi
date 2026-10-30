@@ -16,6 +16,11 @@ function decide(context: any) {
   const calls = msgs.filter((m: any) => m.role === "assistant").flatMap((m: any) => m.content.filter((c: any) => c.type === "toolCall"));
   const did = (skill: string) => calls.some((c: any) => c.arguments?.skill === skill);
   const run = (skill: string, count: number) => fauxAssistantMessage(fauxToolCall("run_skill", { skill, count }), { stopReason: "toolUse" });
+  if (users.some((u: any) => /step onto the rug/i.test(text(u)))) {  // keeps trying the same thing
+    const all = JSON.stringify(context.messages);
+    if (all.includes("[stuck check]")) return fauxAssistantMessage(fauxText("Stuck: asking for help."));
+    return run("step_in_place", 1);
+  }
   if (users.some((u: any) => /walk to the box/i.test(text(u)))) {
     const all = JSON.stringify(context.messages);
     if (!did("walk_forward")) return run("walk_forward", 1);

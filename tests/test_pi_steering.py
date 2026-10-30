@@ -190,3 +190,16 @@ def test_task_loop_sends_the_model_back_until_task_done(tmp_path: Path, monkeypa
     assert len(nudges) == 1 and done, [e.get("type") for e in events]
     assert done[0]["result"]["details"]["success"] is True
     assert [s for _, s, _ in body.runs].count("walk_forward") == 1
+
+
+def test_stuck_check_after_the_same_move_three_times(tmp_path: Path, monkeypatch):
+    body = FakeTonyd(str(tmp_path / "tonyd.sock"))
+    pi, events, settled = start_pi(tmp_path, monkeypatch, str(tmp_path / "tonyd.sock"))
+    try:
+        pi.send("prompt", message="step onto the rug")
+        assert settled.wait(30), "pi never settled"
+    finally:
+        pi.close()
+    results = [e["result"]["content"] for e in events if e.get("type") == "tool_execution_end" and e["toolName"] == "run_skill"]
+    texts = [" ".join(c.get("text", "") for c in r) for r in results]
+    assert len(texts) == 3 and "[stuck check]" not in texts[1] and "[stuck check]" in texts[2], texts
