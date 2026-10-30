@@ -19,6 +19,14 @@ const Frame = Type.Object({
   pos: Type.Record(Type.String(), Type.Integer({ minimum: 0, maximum: 1000 }), { description: "servo id -> position" }),
 });
 const json = (o: unknown) => JSON.stringify(o);
+// bake-off rule: the user layer (~/.local/share/tonypi) is shared by every harness, so this one saves only names
+// ending in its suffix and never overrides a default (turn_left stays the factory turn until a winner is promoted).
+// Set TONYPI_STUDIO_SUFFIX="" to lift it.
+const SUFFIX = process.env.TONYPI_STUDIO_SUFFIX ?? "_pi";
+function own(name: string) {
+  if (SUFFIX && !name.endsWith(SUFFIX))
+    throw new Error(`save it as "${name}${SUFFIX}": motions and skills saved here must end in "${SUFFIX}" (the library is shared; defaults stay as they are)`);
+}
 
 export default function studio(pi: ExtensionAPI) {
   const op = (name: string, label: string, description: string, parameters: any, run: (p: any) => Promise<any>,
@@ -79,26 +87,25 @@ export default function studio(pi: ExtensionAPI) {
   op("get_motion", "Get motion", "A motion's keyframes, to study or copy before writing your own version.",
     Type.Object({ name: Type.String() }), ({ name }) => tonyd.call("motion_get", { name }));
 
-  op("save_motion", "Save motion", "Save keyframes as a named motion (lowercase, digits, _). Using a default's name "
-    + "overrides it everywhere; delete_motion restores the default. Prefer a new name (e.g. turn_left_v2) until "
-    + "it's tested.",
+  op("save_motion", "Save motion", "Save keyframes as a named motion (lowercase, digits, _). The name "
+    + `must end in "${SUFFIX}" (e.g. turn_left_v2${SUFFIX}); defaults can't be overridden from here.`,
     Type.Object({ name: Type.String(), frames: Type.Array(Frame, { minItems: 1, maxItems: 400 }),
       description: Type.Optional(Type.String()) }),
-    ({ name, frames, description = "" }) => tonyd.call("motion_save", { name, frames, description }));
+    ({ name, frames, description = "" }) => (own(name), tonyd.call("motion_save", { name, frames, description })));
 
   op("delete_motion", "Delete motion", "Delete a user motion (restores the default of that name, if any).",
-    Type.Object({ name: Type.String() }), ({ name }) => tonyd.call("motion_delete", { name }));
+    Type.Object({ name: Type.String() }), ({ name }) => (own(name), tonyd.call("motion_delete", { name })));
 
   op("save_skill", "Save skill", "Define a skill as a motion sequence; \"*name\" repeats with count. E.g. a new "
-    + "turn: save_skill(\"turn_left_v2\", [\"*turn_left_v2\"]); to replace the default, save it as \"turn_left\". "
+    + `turn: save_skill("turn_left_v2${SUFFIX}", ["*turn_left_v2${SUFFIX}"]). Names must end in "${SUFFIX}". `
     + "upright: get up first if lying. settle: stand before going limp afterwards.",
     Type.Object({ name: Type.String(), motions: Type.Array(Type.String(), { minItems: 1 }),
       description: Type.Optional(Type.String()), upright: Type.Optional(Type.Boolean()), settle: Type.Optional(Type.Boolean()) }),
     ({ name, motions, description = "", upright = true, settle = true }) =>
-      tonyd.call("skill_save", { name, motions, description, upright, settle }));
+      (own(name), tonyd.call("skill_save", { name, motions, description, upright, settle })));
 
   op("delete_skill", "Delete skill", "Delete a user skill (restores the default skill of that name, if any).",
-    Type.Object({ name: Type.String() }), ({ name }) => tonyd.call("skill_delete", { name }));
+    Type.Object({ name: Type.String() }), ({ name }) => (own(name), tonyd.call("skill_delete", { name })));
 
   op("calibration", "Calibration", "Read (no arguments) or change calibration: trim = counts added to every target "
     + "of a servo (-200..200, 0 removes), limits = soft [lo, hi] every target is clamped to (null removes). "

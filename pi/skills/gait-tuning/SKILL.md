@@ -40,16 +40,17 @@ opposite directions around 500. Check against the default before assuming.
    - the step ends away from the stand pose, so the next step starts off balance: make the last frame
      match the first.
 3. **Small change, new name.** Copy the frames, change only what the hypothesis says (at most about 20 counts per
-   servo, or one timing change), and `save_motion` under a new name, e.g. `turn_left_v2`. Make it a skill:
-   `save_skill("turn_left_v2", ["*turn_left_v2"], "...")`. Never edit the default name first.
-4. **Test.** `run_skill("turn_left_v2", 1)` three times, the same as the baseline. Compare the max tilts and the
+   servo, or one timing change), and `save_motion` under a new name ending in `_pi`, e.g. `turn_left_v2_pi`.
+   Make it a skill: `save_skill("turn_left_v2_pi", ["*turn_left_v2_pi"], "...")`. The motion library is shared
+   with other brains on this robot, so names you save must end in `_pi`, and defaults are never overwritten.
+4. **Test.** `run_skill("turn_left_v2_pi", 1)` three times, the same as the baseline. Compare the max tilts and the
    turn amount. Then try `count` 2 or 3, still watching the tilt.
 5. **Keep or revert.** Better means a lower or equal max tilt on every trial, no aborts, and still a useful turn.
    If it's worse, go back to the previous version and try a different hypothesis. Three to five rounds is plenty.
-6. **Adopt** only when it is clearly better, and only after telling the person: `save_skill("turn_left",
-   ["*turn_left_v2"], "...")` overrides the default for every brain on this robot. Undo with
-   `delete_skill("turn_left")`. Put the evidence in the description, e.g.
-   `"v2: frames x1.3 slower; max tilt 6-8 deg vs default 14-19 (3 trials, 2026-10-29)"`.
+6. **Recommend, don't replace.** Keep the best version under its `_pi` name and put the evidence in its
+   description, e.g. `"v2: frames x1.3 slower; max tilt 6-8 deg vs default 14-19 (3 trials, 2026-10-29)"`.
+   The owner promotes a winner to the default name later. Use your version by name (`run_skill("turn_left_v2_pi")`)
+   when steadiness matters.
 
 ## Calibration
 

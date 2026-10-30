@@ -27,6 +27,7 @@ class FakeTonyd:
         self.path = path
         self.runs: list[tuple[float, str, int]] = []
         self.plays: list[dict] = []
+        self.saves: list[dict] = []
         self.stops: list[float] = []
         self.cancel = threading.Event()
         self.t0 = time.monotonic()
@@ -56,6 +57,8 @@ class FakeTonyd:
                 conn.sendall((json.dumps({"rid": rid, "ok": True, "skills": {k: v["description"] for k, v in details.items()},
                                           "details": details}) + "\n").encode())
                 continue
+            if op in ("motion_save", "skill_save"):
+                self.saves.append(msg)
             if op == "play":
                 self.plays.append(msg)
                 reply = {"job": {"id": 99, "skill": "_play", "count": 1, "said": [], "error": None, "state": "done",
@@ -109,8 +112,11 @@ def test_studio_play_and_a_saved_stepped_skill(tmp_path: Path, monkeypatch):
         pi.close()
     assert body.plays and body.plays[0]["frames"] == [{"ms": 300, "pos": {"5": 520, "13": 480}}]
     assert [(s, c) for _, s, c in body.runs if s == "my_turn"] == [("my_turn", 1), ("my_turn", 1)]  # one step per job
-    results = {e["toolName"]: e["result"]["content"][0]["text"] for e in events if e.get("type") == "tool_execution_end"}
+    ends = {e["toolName"]: e for e in events if e.get("type") == "tool_execution_end"}
+    results = {k: e["result"]["content"][0]["text"] for k, e in ends.items()}
     assert "max tilt 4.2" in results["play_frames"], results
+    assert ends["save_motion"]["isError"] and "turn_left_pi" in results["save_motion"]  # shared library: own suffix
+    assert not body.saves
 
 
 def test_steer_mid_walk_turns_right_instead(tmp_path: Path, monkeypatch):
