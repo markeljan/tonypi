@@ -2,3 +2,4 @@
 - 2026-10-29: a fast deep hip bend (hip pitch 4/12 to 900/100 in 250 ms) tips Tony onto his front; the fall reflex gets him up in about 6.5 s.
 - 2026-10-29: guard_tilt_deg trips only if the tilt stays past it for 0.3 s; single peaks can exceed it.
 - When someone says "the base", they mean my charging spot by the wall.
+- Grounded jumping jack: 30-count mirrored hip/ankle roll peaked at 48.4 deg; reducing to 10 counts with 1200 ms transitions completed at 13.9–30.1 deg. Keep spreads small; brief peaks can exceed the guard.
