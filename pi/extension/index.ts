@@ -4,6 +4,7 @@
 // front end handle them without the model.
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import battery from "./peripherals/battery.ts";
 import body from "./peripherals/body.ts";
 import camera from "./peripherals/camera.ts";
 import context from "./context.ts";
@@ -15,7 +16,7 @@ import router from "./router.ts";
 import self from "./self.ts";
 import task from "./task.ts";
 
-export const PERIPHERALS = { body, studio, camera, sensors, speech, iphone };
+export const PERIPHERALS = { body, studio, camera, sensors, battery, speech, iphone };
 
 export default async function tonypi(pi: ExtensionAPI) {
   const only = process.env.TONYPI_PERIPHERALS?.split(",");
