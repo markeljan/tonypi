@@ -7,7 +7,8 @@ Peripherals (voice, the terminal socket, later the iPhone app) turn what people 
   now is stopped first, so the correction lands as soon as the model sees the cancelled result, not after a long
   walk. A steer that came too late (the model was already writing its answer) is replayed as the next turn.
 - Hermes' final reply, and commentary it writes between tool calls, is spoken; tonyd warnings are spoken when idle.
-One Hermes session ("tonypi-home") holds the conversation; Hermes' compression and memory keep it bounded.
+A Hermes session holds the conversation ("again", "that one" work); after IDLE_S without a command the next one starts
+a fresh session, so requests stay small (the local fallback has an 8K window). Lasting facts live in Hermes memory.
 """
 
 from __future__ import annotations
@@ -26,7 +27,8 @@ from tonypi.hermes.client import HermesError, HermesRuns
 from tonypi.tonyd.client import TonydClient, TonydError
 
 log = logging.getLogger("tonypi.hermes")
-SESSION = os.environ.get("TONYPI_HERMES_SESSION", "tonypi-home")
+SESSION = os.environ.get("TONYPI_HERMES_SESSION", "tonypi")  # prefix; the session id is SESSION-<start time>
+IDLE_S = float(os.environ.get("TONYPI_HERMES_IDLE_S", "300"))
 
 
 class Front:
@@ -35,7 +37,9 @@ class Front:
         self.hermes = hermes
         self.tonyd = tonyd if tonyd is not None else TonydClient(on_event=self._on_tonyd_event)
         self._speak, self._stop_speaking = speak, stop_speaking
-        self.session_id = session_id
+        self.session_prefix = session_id
+        self.session_id = ""
+        self.last_turn = 0.0  # monotonic end of the last turn
         self.listeners: list[Callable[[dict], None]] = []  # peripherals' event sinks
         self.on_answered: list[Callable[[str], None]] = []  # called with the source when a turn ends normally
         self.ids = itertools.count(1)
@@ -154,6 +158,9 @@ class Front:
         rid = self.rids[0]
         self.emit("thinking", id=rid)
         pending = ""
+        if not self.session_id or time.monotonic() - self.last_turn > IDLE_S:
+            self.session_id = f"{self.session_prefix}-{time.strftime('%Y%m%d-%H%M%S')}"
+            self.emit("info", id=rid, text=f"new Hermes session {self.session_id}")
         try:
             run_id = self.hermes.start(text, self.session_id)
             with self.lock:
@@ -189,6 +196,7 @@ class Front:
             self.emit("info", id=rid, text=str(e))
             self.say("I can't reach my brain right now.", rid)
         finally:
+            self.last_turn = time.monotonic()
             with self.lock:
                 rids, source, stopped = self.rids, self.source, self.stopped
                 self.run_id, self.rids = None, []

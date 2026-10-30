@@ -3,7 +3,7 @@
 #
 #   hermes/setup.sh [--brain codex|anthropic|local] [--model NAME] [--mcp-url URL]
 #
-#   codex      ChatGPT subscription (default). Log in once:  tonypi auth add openai-codex --type oauth --no-browser
+#   codex      ChatGPT subscription (default model gpt-6.1-terra; this account: gpt-6.1-sol/terra, gpt-6-luna, gpt-5.6-*). Log in once:  tonypi auth add openai-codex --type oauth --no-browser
 #   anthropic  ANTHROPIC_API_KEY in ~/.hermes/profiles/tonypi/.env (or Claude Max OAuth: tonypi auth add anthropic)
 #   local      LFM3-Omni-2B on tonypi-llm (:8080) only
 # Cloud brains get LFM3 as fallback_providers. Writes the API server key to /home/pi/.config/tonypi/secrets.env.
@@ -42,7 +42,7 @@ repo, out, brain, model, mcp_url = sys.argv[1:]
 cfg = yaml.safe_load(open(f"{repo}/hermes/config.yaml").read().replace("__REPO__", repo))
 cfg["mcp_servers"]["tonypi"]["url"] = mcp_url
 if brain == "codex":
-    cfg["model"] = {"default": model or "gpt-5.5", "provider": "openai-codex"}
+    cfg["model"] = {"default": model or "gpt-6.1-terra", "provider": "openai-codex"}
 elif brain == "anthropic":
     cfg["model"] = {"default": model or "claude-sonnet-5-5", "provider": "anthropic"}
 elif brain == "local":

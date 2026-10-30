@@ -29,7 +29,7 @@ fallback_providers:
 compression:
   enabled: true
   # absolute trigger, applied to every model including fallbacks: the real local window is 8,192 tokens/slot
-  threshold_tokens: 6000
+  threshold_tokens: 7000
   protect_first_n: 0
   protect_last_n: 8
 
@@ -62,6 +62,7 @@ memory:
 
 agent:
   max_turns: 40
+  reasoning_effort: low     # a robot waiting to move: speed over depth (LFM3 ignores it)
 
 display:
   # Telegram etc.: a new message while Tony works is delivered into the running turn after the current tool call
@@ -84,3 +85,10 @@ gateway:
   # Tony's gateway is its own process (API server :8642 for the voice front end, Telegram later), not folded into
   # the default profile's multiplexer, so it can run as a systemd unit beside the robot services.
   standalone: true
+
+auxiliary:
+  # side tasks follow the main provider (Codex); the session title would be one more model call per session
+  title_generation:
+    enabled: false
+  compression:
+    reasoning_effort: low
