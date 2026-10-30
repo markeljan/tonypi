@@ -46,26 +46,39 @@ def wait_attached(name: str = "own", timeout: float = 60) -> dict:
     raise SystemExit(f"the harness never attached to tonypi-voice as {name!r}: {voice_status()}")
 
 
-def run(category: str, text: str, timeout: float = 420) -> dict:
+def run(category: str, text: str, timeout: float = 180) -> dict:
     wav = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
     subprocess.run(["espeak-ng", "-s", "125", "-w", wav, f"Hey Tony. Please {text}."], check=True)
     h = socket.socket(socket.AF_UNIX)
     h.connect(HARNESS)
     events = h.makefile("r")
     t0 = time.time()
+    print("voice before:", voice_status(), flush=True)
     print(f"## {category}: {text!r} -> inject {inject(wav)}", flush=True)
+    import threading
+
+    def later(dt: float) -> None:
+        time.sleep(dt)
+        print(f"voice +{dt:.0f}s:", voice_status(), flush=True)
+    for dt in (10, 30):
+        threading.Thread(target=later, args=(dt,), daemon=True).start()
     rec = {"category": category, "spoken": text, "when": time.strftime("%Y-%m-%dT%H:%M:%S")}
     h.settimeout(timeout)
-    for line in events:
-        e = json.loads(line)
-        if e["type"] in ("heard", "say", "ask", "fall", "stuck") or (e["type"] == "action" and e.get("name")):
-            print(f'{e["t"] - t0:6.1f} {e["type"]} {e.get("name") or ""} {(e.get("text") or "")[:160]}', flush=True)
-        if e["type"] == "heard":
-            rec["heard"] = e["text"]
-            rec["heard_after_s"] = round(e["t"] - t0, 2)
-        if e["type"] == "task_log":
-            rec.update({k: v for k, v in e.items() if k not in ("type", "t")})
-            break
+    try:
+        for line in events:
+            e = json.loads(line)
+            if e["type"] in ("heard", "say", "ask", "fall", "stuck") or (e["type"] == "action" and e.get("name")):
+                print(f'{e["t"] - t0:6.1f} {e["type"]} {e.get("name") or ""} {(e.get("text") or "")[:160]}', flush=True)
+            if e["type"] == "heard":
+                rec["heard"] = e["text"]
+                rec["heard_after_s"] = round(e["t"] - t0, 2)
+            if e["type"] == "task_log":
+                rec.update({k: v for k, v in e.items() if k not in ("type", "t")})
+                break
+    except TimeoutError:
+        rec["status"] = f"no task within {timeout:.0f} s"
+    rec["voice_after"] = voice_status()
+    print("voice after:", rec["voice_after"], flush=True)
     runs = json.loads(RUNS.read_text()) if RUNS.exists() else {}
     runs[f"voice-{category}"] = rec
     RUNS.write_text(json.dumps(runs, indent=1))
