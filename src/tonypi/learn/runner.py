@@ -350,7 +350,8 @@ class Lab:
         note, rec = None, False
         if phone_on:
             try:
-                self.phone.record_start(f"exp-{exp}", max_s=(p.get("ms") or 30_000 * p["count"]) / 1000 + 10)
+                # Skills have no known duration here; cover the 120 s job timeout and recording tail.
+                self.phone.record_start(f"exp-{exp}", max_s=max(130, (p.get("ms") or 0) / 1000 + 10))
                 rec = True
             except PhoneError as e:
                 note = str(e)
