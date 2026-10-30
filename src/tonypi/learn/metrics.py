@@ -13,6 +13,8 @@ Every objective returns the same metric fields plus `score` (higher is better) a
 
 from __future__ import annotations
 
+from math import isfinite
+
 OBJECTIVES = ("walk", "turn", "balance", "pose", "recover", "generic")
 FELL_TILT_DEG = 45
 # default guard_tilt_deg (recover starts lying, so any tilt guard would trip at once)
@@ -68,6 +70,16 @@ def score(objective: str, job: dict, before: dict | None = None, after: dict | N
     elif objective == "recover":
         m["basis"] = "steps"
         m["recovered"] = done and not f
+        # Goal evidence is stricter than the historical ranking/recovered fields; unknowns never prove recovery.
+        duration = job.get("seconds")
+
+        def measured(v):
+            return isinstance(v, (int, float)) and not isinstance(v, bool) and isfinite(v)
+
+        m["recovery_goal_eligible"] = (
+            done and not f and (before or {}).get("lying") is True and (after or {}).get("lying") is False
+            and measured(end_tilt) and 0 <= end_tilt < 10 and measured(duration) and duration >= 0
+        )
         s = -float(end_tilt or 0.0) / 10 - 0.05 * secs - (not done) - penalty
     elif objective == "pose":
         m["basis"] = "steps"

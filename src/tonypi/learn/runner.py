@@ -300,6 +300,7 @@ class Lab:
     def _one(self, p: dict, phone_on: bool) -> dict:
         self._n += 1
         exp = f"{self.session}-{self._n}"
+        setup = None
         if p["settle"]:
             self._check()
             job = self.tonyd.run("settle", timeout=30)
@@ -307,7 +308,8 @@ class Lab:
                 raise Interrupted("settle was cancelled (stop, or another brain moved)")
         if p.get("setup"):
             self._check()
-            job = self.tonyd.run(p["setup"], timeout=90)
+            job = self.tonyd.run(p["setup"], timeout=90, trace=p["trace"] or None)
+            setup = {"skill": p["setup"], "job": job}
             if job["state"] == "cancelled":
                 raise Interrupted(f"setup {p['setup']} was cancelled (stop, or another brain moved)")
             if job["state"] != "done":
@@ -346,6 +348,7 @@ class Lab:
                "skill": p["skill"], "what": p["what"], "cand": p["cand"], "params": p["params"], "count": p["count"],
                "objective": p["objective"], "guard_tilt_deg": p["guard"], "metrics": m, "score": m["score"],
                "episode": (episode or {}).get("id"), "job": job.get("id"), "trace": job.get("trace"),
+               "before": {k: before.get(k) for k in ("lying", "tilt_deg")}, "setup": setup,
                "verdict": verdict, "said": job.get("said") or None, "phone": note,
                "battery_mv": after.get("battery_mv"), "hottest": after.get("hottest")}
         row["note"] = (f"{p['what']} x{p['count']} ({p['objective']}): score {m['score']}, {verdict}, "

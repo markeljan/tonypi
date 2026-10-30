@@ -174,6 +174,48 @@ def test_episode_summary_reads_the_tracked_path(tmp_path):
     assert episode_summary(tmp_path / "missing")["error"]
 
 
+def test_recovery_goal_eligibility_preserves_ranking_and_legacy_recovered():
+    job = {"state": "done", "seconds": 6.33, "end_tilt_deg": 4.0}
+    before, after = {"lying": True}, {"lying": False, "tilt_deg": 3.0}
+    result = metrics.score("recover", job, before, after)
+    assert result["recovery_goal_eligible"] and result["recovered"]
+    assert result["score"] == pytest.approx(-0.6165)
+    # Completed upright poses remain useful for ranking, but cannot prove a recovery from lying.
+    standing = metrics.score("recover", job, {"lying": False}, after)
+    assert standing["recovered"] and standing["score"] == result["score"]
+    assert not standing["recovery_goal_eligible"]
+    assert metrics.score("recover", job, before, {"lying": False})["recovery_goal_eligible"]
+    assert not metrics.score("recover", {"state": "done"}, before, after)["recovery_goal_eligible"]
+
+
+@pytest.mark.parametrize("job_changes,before,after", [
+    ({}, None, {"lying": False, "tilt_deg": 3.0}),
+    ({}, {}, {"lying": False, "tilt_deg": 3.0}),
+    ({}, {"lying": True}, None),
+    ({}, {"lying": True}, {"tilt_deg": 3.0}),
+    ({}, {"lying": True}, {"lying": True, "tilt_deg": 3.0}),
+    ({"state": "cancelled"}, {"lying": True}, {"lying": False, "tilt_deg": 3.0}),
+    ({"seconds": None}, {"lying": True}, {"lying": False, "tilt_deg": 3.0}),
+    ({"seconds": float("nan")}, {"lying": True}, {"lying": False, "tilt_deg": 3.0}),
+    ({"seconds": -1.0}, {"lying": True}, {"lying": False, "tilt_deg": 3.0}),
+    ({}, {"lying": True}, {"lying": False}),
+    ({}, {"lying": True}, {"lying": False, "tilt_deg": None}),
+    ({}, {"lying": True}, {"lying": False, "tilt_deg": 10.0}),
+    ({}, {"lying": True}, {"lying": False, "tilt_deg": -1.0}),
+    ({}, {"lying": True}, {"lying": False, "tilt_deg": float("nan")}),
+    ({"lying_after": True}, {"lying": True}, {"lying": False, "tilt_deg": 3.0}),
+])
+def test_recovery_goal_eligibility_requires_complete_measured_evidence(job_changes, before, after):
+    job = {"state": "done", "seconds": 6.33, **job_changes}
+    assert not metrics.score("recover", job, before, after)["recovery_goal_eligible"]
+
+
+def test_recovery_goal_tilt_threshold_is_strict():
+    job = {"state": "done", "seconds": 6.33}
+    assert metrics.score("recover", job, {"lying": True},
+                         {"lying": False, "tilt_deg": 9.999})["recovery_goal_eligible"]
+
+
 # ---- runner --------------------------------------------------------------------------------------------------------
 
 def test_batch_runs_guarded_labelled_trials_and_records_them(lab):
@@ -272,6 +314,40 @@ def test_setup_measures_get_up_from_lying(lab):
     assert r["trials"][0]["verdict"] == "fell" and not _ledger(lab)[-1]["metrics"]["recovered"]
     with pytest.raises(LabError, match="setup"):
         lab.prepare({"skill": "wave", "setup": "fly"})
+
+
+def test_trial_records_actual_start_and_setup_trace(lab):
+    original_call, original_job = lab.tonyd.call, lab.tonyd._job
+
+    def call(op, timeout=10, **kw):
+        if op == "skills":
+            return {"details": {k: {"motions": [f"*{k}"]} for k in ("get_up", "lie_down", "wave")}}
+        return original_call(op, timeout, **kw)
+
+    def job(skill, count, kw, frames=None):
+        result = original_job(skill, count, kw, frames)
+        if kw.get("trace"):
+            result["trace"] = f"/traces/{result['id']}.jsonl"
+        return result
+
+    lab.tonyd.call, lab.tonyd._job = call, job
+    lab.batch({"skill": "get_up", "setup": "lie_down", "objective": "recover", "trace": True}, 1)
+    row = _ledger(lab)[0]
+    assert row["before"] == {"lying": True, "tilt_deg": 88.0}
+    assert row["setup"]["skill"] == "lie_down" and row["setup"]["job"]["state"] == "done"
+    assert row["setup"]["job"]["id"] != row["job"]
+    assert row["setup"]["job"]["trace"] == "/traces/1.jsonl"
+    assert lab.tonyd.ran[0][2]["trace"] is True
+    assert row["metrics"]["recovery_goal_eligible"]
+
+
+def test_trial_preserves_unknown_start_measurements_without_setup(lab):
+    state = lab.tonyd.state
+    lab.tonyd.state = lambda fresh=False: {k: v for k, v in state(fresh).items() if k not in ("lying", "tilt_deg")}
+    lab.batch({"skill": "wave", "start": "as_is", "objective": "recover"}, 1)
+    row = _ledger(lab)[0]
+    assert row["before"] == {"lying": None, "tilt_deg": None} and row["setup"] is None
+    assert not row["metrics"]["recovery_goal_eligible"]
 
 
 def test_batch_marks_the_robot_lock_as_the_labs(lab):
