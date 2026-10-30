@@ -35,6 +35,8 @@ TASKS = {
 TASKS["T8"] = ("find the door and walk toward it", [(15.0, "stop")])  # stop mid-task; T6 runs the full minute
 # T4 with the correction 1.5 s after the first step started (T4's fixed 2 s can land before the walk begins)
 TASKS["T4m"] = ("walk forward 3 steps, then turn left", [("move+1.5", "actually, turn right instead")])
+# T8 without the camera: "stop" 1 s into a walk
+TASKS["T8w"] = ("walk forward 5 steps", [("move+1.0", "stop")])
 
 
 class Conn:
