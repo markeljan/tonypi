@@ -334,15 +334,16 @@ def test_gyro_heading_learns_bias_while_still_and_integrates_turns():
     b = Body.__new__(Body)
     b.player = NS(playing=None)
     b.heading_deg, b.rot_deg, b._bias, b._imu_t = 0.0, [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], None
+    b._grav = None
     t = 0.0
     for _ in range(500):  # still at a bias of +1 deg/s on X
         t += 0.01
-        b._on_imu(NS(t=t, gyro=(1.0, 0.0, 0.0)))
+        b._on_imu(NS(t=t, gyro=(1.0, 0.0, 0.0), accel=(-1.0, 0.0, 0.0)))
     assert abs(b._bias[0] - 1.0) < 0.05 and b.heading_deg == 0.0
     b.player.playing = "turn_left"
     for _ in range(100):  # 1 s at -9 deg/s above bias = 9 deg to the left
         t += 0.01
-        b._on_imu(NS(t=t, gyro=(-8.0, 0.0, 0.0)))
+        b._on_imu(NS(t=t, gyro=(-8.0, 0.0, 0.0), accel=(-1.0, 0.0, 0.0)))
     assert abs(b.heading_deg - 9.0) < 0.5  # + = left
 
 
@@ -368,3 +369,34 @@ def test_scan_and_burst_with_a_fake_camera(monkeypatch, tmp_path):
     assert all(t is not None for t in d.camera.calls)  # every view waits for a frame taken after the head moved
     b = d.burst(frames=3, seconds=0.4)
     assert len(b["frames"]) == 3 and b["frames"][-1]["t_s"] >= 0.35
+
+
+def test_fused_tilt_ignores_short_accelerometer_spikes_but_follows_real_leans():
+    import math
+    from types import SimpleNamespace as NS
+
+    from tonypi.tonyd.body import Body
+
+    b = Body.__new__(Body)
+    b.player = NS(playing="jumping_jack")
+    b.heading_deg, b.rot_deg, b._bias, b._imu_t, b._grav = 0.0, [0.0] * 3, [0.0] * 3, None, None
+    b.board = NS(imu=None)
+    t = 0.0
+
+    def feed(n, accel, gyro=(0.0, 0.0, 0.0)):
+        nonlocal t
+        for _ in range(n):
+            t += 0.01
+            b.board.imu = NS(t=t, accel=accel, gyro=gyro)
+            b._on_imu(b.board.imu)
+
+    feed(50, (-1.0, 0.0, 0.0))
+    assert b.tilt_deg() < 1
+    feed(20, (-0.6, 0.0, 0.9))  # 0.2 s arm-swing jolt: the raw tilt says ~56 deg, the body didn't rotate
+    assert b.tilt_raw_deg() > 50 and b.tilt_deg() < 15
+    feed(100, (-1.0, 0.0, 0.0))
+    # a real 45 deg lean: the gyro rotates about Y over 0.5 s, and the accelerometer agrees
+    for i in range(50):
+        ang = math.radians(45 * (i + 1) / 50)
+        feed(1, (-math.cos(ang), 0.0, math.sin(ang)), gyro=(0.0, -90.0, 0.0))
+    assert 35 < b.tilt_deg() < 55
