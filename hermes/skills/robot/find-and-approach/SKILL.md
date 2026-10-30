@@ -18,3 +18,6 @@ metadata:
 4. Repeat 3 until the target fills most of the picture or is at your feet (look down: `look(0, -30)`), then stop and say
    you're there. At most ~10 rounds.
 5. Anything in the way (wall, furniture, an edge or drop): stop and say so. Never walk off a table edge.
+6. Be quick: one snapshot per decision is enough (the floor ahead is in it). Don't look down or re-check before every
+   step, and move within the first few tool calls: a minute of looking without moving is a failure.
+7. Finish with `run_skill("settle")` so Tony goes limp from a stable stance.
