@@ -128,6 +128,16 @@ Seeding past turns as real items made GPT-Live imitate them, so history goes in 
 with a latch (motion refused until the user speaks again) and interrupts L's turn and body tasks. Typed:
 `{"op":"text"}` on voice.sock. Log: `~/.local/share/tonypi/live/conversation.jsonl`.
 
+## Phone (`tonypi-phone.service`, 2026-10-30): Tony's iPhone as a peripheral
+Bridge from the iPeripheral repo (deployed from the Mac with its `deploy/install.sh` to `/home/pi/iPeripheral`; protocol in
+that repo's `docs/protocol.md`). WebSocket :8766 on the LAN for the phone (token auth, Bonjour), MCP
+`http://127.0.0.1:8767/mcp` (in live mode's Codex config as server `phone`, `required = false`), `/live` MJPEG of the phone
+camera. Tools: camera, LiDAR depth/obstacles, detection, on-phone LFM3 (`phone_locate`, `phone_look_and_ask`), speaker,
+and `phone_mode` mounted (on Tony) / companion (on a stand watching Tony: `phone_track`, `phone_record_jobs`,
+`phone_episode_review`, the observer for docs/BODY_EXPERIMENTS.md). It never moves Tony: on tonyd.sock it only
+subscribes, reads state/skills/joints (≈2 Hz while recording) and sends plain `stop` (no latch); on voice.sock `say`
+and, in companion mode only, `text` with source `phone_mic` (heard by the phone) or `phone_app` (typed).
+
 ## Agent (live: `tonypi-agent.service`, since 2026-10-28)
 `src/tonypi/agent/` — voice + terminal front end. Owns the mic and speaker; every move goes through tonyd (`body_link.py`).
 - Input: terminal (`tonypi-chat` → `/run/tonypi/agent.sock`, JSON lines) and voice ("hey Tony …": sherpa-onnx KWS

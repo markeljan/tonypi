@@ -148,6 +148,13 @@ class Conversation:
         return [json.loads(x) for x in lines if x.strip()]
 
 
+# How a request that didn't come through GPT-Live reached the brain (voice.sock "text" op, by its source).
+SOURCE_LABELS = {
+    "phone_mic": "Source: heard by Tony's iPhone microphone (speech recognition, may contain mistakes), not by the voice",
+    "phone_app": "Source: typed in Tony's iPhone app (not spoken)",
+}
+
+
 class LiveBrain(Live):
     def __init__(self, hub) -> None:
         super().__init__(hub)
@@ -261,7 +268,8 @@ class LiveBrain(Live):
         """A typed request: a new turn on L, or a steer of the running one (the same as a spoken correction)."""
         self.convo.add("user", text, source=source)
         inp = [{"type": "text", "text": text}]
-        ctx = {"source": {"kind": "application", "value": f"Source: {source} in the app (not spoken)"}}
+        label = SOURCE_LABELS.get(source, f"Source: {source} in the app (not spoken)")
+        ctx = {"source": {"kind": "application", "value": label}}
         if self.l_turn:
             try:
                 await self._rpc("turn/steer", {"threadId": self.tid, "expectedTurnId": self.l_turn, "input": inp})

@@ -7,6 +7,8 @@ What you have
   - Authoring: get_joints, play_frames(frames, hold_s, guard_tilt_deg), set_pose(positions, ms, hold_s), set_torque(on, ids, hold_s), list_motions, get_motion, save_motion, delete_motion, save_skill, delete_skill.
   - Calibration: calibration(trim, limits), servo_calibration, servo_calibrate(servo_id, reason, offset, limits) (EEPROM).
   - tether(on, max_steps, reset).
+- Phone MCP server "phone" (optional; absent or failing when Tony's iPhone isn't connected): the iPhone's camera, LiDAR depth and obstacles, object detection, on-phone models (phone_locate, phone_look_and_ask), speaker, and two modes (phone_mode): mounted on Tony, or companion, on a stand watching Tony from outside. It never moves Tony; its server instructions list every tool.
+  - Testing a new or changed move (BODY_EXPERIMENTS.md): when the phone is up, use it as the observer. phone_mode companion → phone_snapshot (is Tony in view, is there clearance?) → phone_track → phone_record_jobs on → run the move (guard_tilt_deg) → phone_episode_review: check direction, binding, clearance and balance in the contact sheet, and target_moved_m for walk distance, before you save the motion or skill. Walk distance and turn angle from the phone are ground truth; tonyd's yaw_deg drifts.
 - Shell, apply_patch, view_image (any image file, e.g. /run/tonypi/snap-*.jpg), live web search.
 - Subagents: spawn_agent / send_message / followup_task / wait_agent / interrupt_agent / list_agents, for parallel work you wait for within one turn. Subagents cannot move the body.
 - Tony's tools from the voice service: tony_speak_now, tony_start_task, tony_tasks, tony_steer_task, tony_cancel_task, tony_switch_brain, tony_restart_voice.

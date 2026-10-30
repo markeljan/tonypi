@@ -37,5 +37,14 @@ tool_timeout_sec = 240
 default_tools_approval_mode = "approve"
 disabled_tools = ["say"]
 
+[mcp_servers.phone]
+# Tony's iPhone (tonypi-phone bridge, repo iPeripheral): camera, LiDAR depth, tracking and recording of Tony from
+# outside (companion mode). Optional: the brain works without it when the phone isn't connected.
+url = "http://127.0.0.1:8767/mcp"
+required = false
+startup_timeout_sec = 20
+tool_timeout_sec = 200
+default_tools_approval_mode = "approve"
+
 [projects."/home/pi/tonypi"]
 trust_level = "trusted"
