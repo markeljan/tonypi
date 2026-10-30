@@ -10,7 +10,6 @@ import json
 import logging
 import os
 import socket
-import time
 from contextlib import contextmanager
 
 from mcp.server.mcpserver import MCPServer
@@ -131,37 +130,6 @@ def video(seconds: float = 2.0, frames: int = 4) -> list:
 
 
 @mcp.tool()
-def video(seconds: float = 2.0, frames: int = 4) -> list[Image]:
-    """A short clip: `frames` JPEGs (2-8) spread evenly over `seconds` (0.5-10), oldest first. Use it to see
-    motion or to look while a skill runs (start the skill with wait=False first)."""
-    frames = max(2, min(8, int(frames)))  # tonyd keeps the last 10 snapshot files
-    gap = max(0.5, min(10.0, float(seconds))) / (frames - 1)
-    out = []
-    with _robot():
-        for i in range(frames):
-            if i:
-                time.sleep(gap)
-            with open(tonyd.snapshot()["path"], "rb") as f:
-                out.append(Image(data=f.read(), format="jpeg"))
-    return out
-
-
-@mcp.tool()
-def scan(tilt_deg: float = 0.0) -> list:
-    """Look around without moving the body: photos with the head at 50° left, straight ahead and 50° right (in that
-    order, each labelled with its pan angle), then the head returns to centre. One call instead of six."""
-    out: list = []
-    with _robot():
-        try:
-            for pan in (50.0, 0.0, -50.0):
-                tonyd.head(pan, tilt_deg)
-                time.sleep(0.5)  # head move (400 ms) + a fresh frame
-                with open(tonyd.snapshot()["path"], "rb") as f:
-                    out += [f"pan_deg={pan:+.0f} ({'left' if pan > 0 else 'right' if pan < 0 else 'ahead'}):",
-                            Image(data=f.read(), format="jpeg")]
-        finally:
-            tonyd.head(0.0, 0.0)
-    return out
 def get_joints() -> dict:
     """Current bus servo positions: `pos` in motion space (what motions use) and `raw` servo counts."""
     with _robot():
