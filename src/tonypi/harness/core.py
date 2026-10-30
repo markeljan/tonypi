@@ -221,6 +221,12 @@ class Harness:
         failed: set[str] = set()
         continues = pushbacks = 0
         timer = asyncio.create_task(self._deadline(t0))
+        for p in self.peripherals.values():  # e.g. head centred: every task starts from the same view
+            if hasattr(p, "task_start"):
+                try:
+                    await asyncio.to_thread(p.task_start)
+                except Exception as e:
+                    log.warning("%s task_start: %s", p.name, e)
         try:
             while msg is not None and not self.stopped:
                 backend = self.backend = await self._pick(failed)

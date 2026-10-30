@@ -368,6 +368,7 @@ def test_task_loop_persists_until_done(tonyd, tasklog):
         await h.submit("find the chair")
         await until(lambda: not h.busy())
         assert len(brain.texts) == 3 and brain.texts[1].startswith("[Harness: the task isn't done yet")
+        assert d.body.board.heads and d.head_deg == {"pan": 0.0, "tilt": 0.0}  # head centred at task start
         assert lessons == [("scan before walking", "find the chair")]
         rec = json.loads(tasklog.read_text().splitlines()[-1])
         assert rec["status"] == "done" and rec["continues"] == 2 and rec["tool_calls"] == 3
