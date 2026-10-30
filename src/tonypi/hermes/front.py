@@ -238,6 +238,9 @@ class Front:
 
 
 def main() -> None:
+    # voice: streaming transcripts only unless TONYPI_ASR_URL is set (LFM3 re-transcription is off while the cloud
+    # brain is the only model in use); read by tonypi.agent.speech at import
+    os.environ.setdefault("TONYPI_ASR_URL", "")
     from tonypi.hermes import peripherals
 
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])

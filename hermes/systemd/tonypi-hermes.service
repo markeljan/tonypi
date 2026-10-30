@@ -1,0 +1,21 @@
+[Unit]
+Description=TonyPi front end with Hermes as the brain (voice "hey Tony" + /run/tonypi/agent.sock; stop goes straight to tonyd)
+# replaces tonypi-agent: both own the mic, the speaker and agent.sock
+Conflicts=tonypi-agent.service
+After=tonypi-tonyd.service tonypi-hermes-gateway.service sound.target
+Wants=tonypi-tonyd.service tonypi-hermes-gateway.service
+
+[Service]
+User=pi
+RuntimeDirectory=tonypi
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
+Environment=PYTHONUNBUFFERED=1
+# streaming ASR only (no LFM3 re-transcription on :8080); set TONYPI_ASR_URL to re-enable it
+Environment=TONYPI_ASR_URL=
+ExecStart=/home/pi/tonypi/.venv/bin/tonypi-hermes
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,21 @@
+[Unit]
+Description=Hermes Agent gateway, profile "tonypi" (API server :8642 for the voice front end; Telegram etc. if configured)
+After=network-online.target tonypi-mcp.service
+Wants=network-online.target tonypi-mcp.service
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+User=pi
+Environment=PYTHONUNBUFFERED=1
+# exit 75 = "the host gateway still serves this profile, retry": systemd restarts it until the standalone flag is live
+ExecStart=/home/pi/.local/bin/tonypi gateway run --external-supervisor
+Restart=on-failure
+RestartSec=15
+# measured ~0.3-0.45 GB; the Pi has no RAM to spare (two freezes on 2026-10-29)
+MemoryMax=1200M
+MemorySwapMax=0
+Nice=5
+
+[Install]
+WantedBy=multi-user.target
