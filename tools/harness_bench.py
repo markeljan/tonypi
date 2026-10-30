@@ -35,6 +35,10 @@ TASKS = {
 TASKS["T8"] = ("find the door and walk toward it", [("walk+1.5", "stop")])  # stop 1.5 s into its first walk
 # T4 with the correction 1.5 s after the first step started (T4's fixed 2 s can land before the walk begins)
 TASKS["T4m"] = ("walk forward 3 steps, then turn left", [("move+1.5", "actually, turn right instead")])
+# movement authoring (2026-10-29: Tony fell three times during turns): the brain tunes its own turn_left
+TASKS["T9"] = ("Your turn_left has made you fall over today. Make it steadier: first measure the default with two "
+               "single turns, then try small changes one at a time, and only adopt a version that has a clearly lower "
+               "max tilt over two trials and still turns. Tell me what you changed and the numbers.", [])
 # T8 without the camera: "stop" 1 s into a walk
 TASKS["T8w"] = ("walk forward 5 steps", [("move+1.0", "stop")])
 

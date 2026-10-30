@@ -2,6 +2,7 @@
 
 import asyncio
 import base64
+import json
 import tempfile
 import threading
 import time
@@ -11,6 +12,7 @@ import pytest
 from test_tonyd import _Body
 
 from tonypi.harness import backends
+from tonypi.motion.library import DATA_DIR as DATA
 from tonypi.harness.backends.claude import ClaudeBackend
 from tonypi.harness.core import BrainUnavailable, Harness
 from tonypi.harness.peripherals import Result
@@ -253,6 +255,29 @@ def test_non_injecting_brain_is_cut_and_replans(tonyd):
     asyncio.run(main())
 
 
+def test_brain_written_moves(tonyd):
+    async def main():
+        d, client = tonyd
+        h, _, _ = await make(tonyd, Scripted(None))
+        motion = json.loads((await h.call_tool("get_motion", {"name": "turn_left"})).text)
+        assert motion["source"] == "default" and all(set(f["pos"]) <= {str(i) for i in range(1, 17)}
+                                                     for f in motion["frames"])
+        raw = json.loads((DATA / "turn_left.json").read_text())["frames"]  # a factory frame, 17/18 included
+        assert (await h.call_tool("play_frames", {"frames": raw[:2]})).text.startswith("play_frames: done")
+        r = await h.call_tool("save_motion", {"name": "my_step", "frames": motion["frames"]})
+        assert not r.error, r.text
+        assert not (await h.call_tool("save_skill", {"name": "my_turn", "motions": ["*my_step"]})).error
+        assert "my_turn" in json.loads((await h.call_tool("list_skills", {})).text)
+        r = await h.call_tool("run_skill", {"skill": "my_turn", "count": 3})
+        assert r.text.startswith("my_turn: 3 of 3 steps done")
+        assert d.body.ran.count(("my_turn", 1)) == 3  # walked one step per job, like the built-in gaits
+        bad = await h.call_tool("save_motion", {"name": "Bad Name", "frames": motion["frames"]})
+        assert bad.error and bad.text.startswith("refused")
+        assert (await h.call_tool("run_skill", {"skill": "fly"})).error
+
+    asyncio.run(main())
+
+
 def test_backend_order(monkeypatch):
     monkeypatch.setenv("TONYPI_BRAIN", "local,claude")
     assert [b.name for b in backends.build()] == ["local"]
@@ -330,7 +355,7 @@ def test_codex_tool_loop_and_speech(tonyd, fake_codex):
         await h.submit("wave")
         await until(lambda: any(e["type"] == "done" for e in events), 10)
         assert ("wave", 1) in d.body.ran
-        assert [e["text"] for e in events if e["type"] == "say"] == ["Hi! wave: done"]
+        assert [e["text"] for e in events if e["type"] == "say"][0].startswith("Hi! wave: done, max tilt")
         assert any(e["type"] == "usage" and e["input"] == 50 and e["cache_read"] == 50 for e in events)
         await h.submit("look")
         await until(lambda: sum(e["type"] == "done" for e in events) == 2, 10)
