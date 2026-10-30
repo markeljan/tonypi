@@ -73,6 +73,7 @@ class Job:
     hold_s: float = 0.0  # keep torque on this long after the job (a pose being held) before going limp
     guard_tilt_deg: float | None = None  # opt-in: stop the job if Tony tilts past this (falls are the brain's job)
     max_tilt_deg: float | None = None  # how far Tony leaned during the job (judging a new gait)
+    max_tilt_raw_deg: float | None = None  # the same from the accelerometer alone (spikes on fast moves)
     yaw_deg: float | None = None  # how far he turned during the job, from the gyro (+ = left)
     rot_deg: list[float] | None = None  # gyro integral on each axis during the job (x, y, z)
     frames: list | None = field(default=None, repr=False)  # a brain's own keyframes ("_play")
@@ -202,6 +203,7 @@ class Tonyd:
                         ok = self.body.run(job.skill, job.count, job.said.append, job.guard_tilt_deg)
                     state = "done" if ok else ("cancelled" if self.body.cancelled.is_set() else "failed")
                     job.max_tilt_deg = getattr(self.body, "max_tilt", None)  # before _finish: waiters reply then
+                    job.max_tilt_raw_deg = getattr(self.body, "max_tilt_raw", None)
                     if heading0 is not None:
                         job.yaw_deg = round(self.body.heading_deg - heading0, 1)
                         job.rot_deg = [round(a - b, 1) for a, b in zip(self.body.rot_deg, rot0)]
@@ -231,6 +233,8 @@ class Tonyd:
             "busy": cur is not None or not self.queue.empty(),
             "job": cur.public() if cur else None,
             "tilt_deg": None if tilt is None else round(tilt, 1),
+            "tilt_raw_deg": None if getattr(b, "tilt_raw_deg", None) is None or b.tilt_raw_deg() is None
+            else round(b.tilt_raw_deg(), 1),
             "heading_deg": None if getattr(b, "heading_deg", None) is None else round(b.heading_deg, 1),
             "lying": b.lying(),
             "asleep": b.asleep,
