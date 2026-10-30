@@ -60,8 +60,10 @@ class Scripted:
         task = asyncio.create_task(self.script(self, text))
         cut = asyncio.create_task(self.cut_ev.wait())
         await asyncio.wait([task, cut], return_when=asyncio.FIRST_COMPLETED)
-        task.cancel()
         cut.cancel()
+        if task.done() and not task.cancelled():
+            return task.result()
+        task.cancel()
 
     async def tool(self, name, **args):
         r = await self.h.call_tool(name, args, inject=self.injects)
@@ -331,6 +333,72 @@ def test_no_settle_after_stop(tonyd):
         await until(lambda: not h.busy())
         await asyncio.sleep(0.3)
         assert ("settle", 1) not in d.body.ran
+
+    asyncio.run(main())
+
+
+@pytest.fixture(autouse=True)
+def tasklog(monkeypatch, tmp_path):
+    from tonypi.harness import tasks
+    monkeypatch.setattr(tasks, "LOG", tmp_path / "tasks.jsonl")
+    return tmp_path / "tasks.jsonl"
+
+
+def test_task_loop_persists_until_done(tonyd, tasklog):
+    from tonypi.harness.tasks import Outcome
+
+    async def script(b, text):
+        await b.tool("run_skill", skill="wave")
+        if len(b.texts) < 3:
+            return Outcome("continue", "", "still looking", "")
+        return Outcome("done", "Found it.", "scanned, turned, walked", "scan before walking")
+
+    async def main():
+        brain = Scripted(script)
+        h, d, events = await make(tonyd, brain)
+        lessons = []
+        h.on_lesson = lambda lesson, task: lessons.append((lesson, task))
+        await h.submit("find the chair")
+        await until(lambda: not h.busy())
+        assert len(brain.texts) == 3 and brain.texts[1].startswith("[Harness: the task isn't done yet")
+        assert lessons == [("scan before walking", "find the chair")]
+        rec = json.loads(tasklog.read_text().splitlines()[-1])
+        assert rec["status"] == "done" and rec["continues"] == 2 and rec["tool_calls"] == 3
+        assert rec["summary"] == "scanned, turned, walked" and rec["first_action_s"] is not None
+
+    asyncio.run(main())
+
+
+def test_give_up_is_pushed_back_twice(tonyd, tasklog):
+    from tonypi.harness.tasks import Outcome
+
+    async def script(b, text):
+        return Outcome("give_up", "I can't.", "looked around once", "")
+
+    async def main():
+        brain = Scripted(script)
+        h, _, _ = await make(tonyd, brain)
+        await h.submit("find the red cup")
+        await until(lambda: not h.busy())
+        assert len(brain.texts) == 3 and brain.texts[1].startswith("[Harness: don't give up yet")
+        assert json.loads(tasklog.read_text().splitlines()[-1])["status"] == "give_up"
+
+    asyncio.run(main())
+
+
+def test_task_cap_cuts_the_brain(tonyd, tasklog, monkeypatch):
+    from tonypi.harness import core
+
+    async def script(b, text):
+        await asyncio.sleep(30)
+
+    async def main():
+        monkeypatch.setattr(core, "TASK_CAP_S", 0.3)
+        brain = Scripted(script)
+        h, _, _ = await make(tonyd, brain)
+        await h.submit("go to the door")
+        await until(lambda: not h.busy())
+        assert brain.cuts == 1 and json.loads(tasklog.read_text().splitlines()[-1])["status"] == "timeout"
 
     asyncio.run(main())
 

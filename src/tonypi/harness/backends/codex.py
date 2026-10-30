@@ -25,6 +25,7 @@ import time
 from pathlib import Path
 
 from tonypi.harness.core import BrainUnavailable
+from tonypi.harness.tasks import OUTCOME_SCHEMA, Outcome
 
 log = logging.getLogger(__name__)
 
@@ -100,6 +101,7 @@ class CodexBackend:
         self.did_tools = 0
         self.failed_tools = 0  # failed steps (not steering refusals) in the last turn: the next one escalates
         self.tier = "fast"
+        self.outcome: Outcome | None = None
         self.down_until = 0.0
         self.probe_ok_until = 0.0
         self._lock: asyncio.Lock | None = None
@@ -256,7 +258,12 @@ class CodexBackend:
         elif method == "item/completed":
             item = p.get("item", {})
             if item.get("type") == "agentMessage" and item.get("text", "").strip():
-                self.h.say(item["text"])
+                if (out := Outcome.parse(item["text"])) is not None:  # the turn's final status (tasks.py)
+                    self.outcome = out
+                    if out.say.strip():
+                        self.h.say(out.say)
+                else:
+                    self.h.say(item["text"])
         elif method == "error":
             err = p.get("error") or {}
             info = err.get("codexErrorInfo") or {}
@@ -279,7 +286,7 @@ class CodexBackend:
 
     # ---- turns ------------------------------------------------------------------------------------------------
 
-    async def run(self, text: str, source: str) -> None:
+    async def run(self, text: str, source: str) -> Outcome | None:
         try:
             await self._connect()
         except BrainUnavailable:
@@ -290,15 +297,18 @@ class CodexBackend:
             raise BrainUnavailable(f"can't start codex app-server ({e})") from e
         self.turn_done.clear()
         self.first.clear()
-        # a follow-up within the same task keeps an advanced tier, and escalates after a failed step (recovery);
-        # a new task starts from its own words
-        followup = text.startswith("[New words from the user")
-        self.tier = "advanced" if followup and self.tier == "advanced" else \
-            tier_for(text, followup and self.failed_tools > 0)
+        # a new task starts from its own words; within a task (new words, the harness's "carry on" / "don't give
+        # up") the tier only goes up, and a failed step or a push-back escalates to advanced (recovery)
+        if text.startswith(("[New words from the user", "[Harness:")):
+            rank = list(TIERS)
+            new = tier_for(text, self.failed_tools > 0 or text.startswith("[Harness: don't give up"))
+            self.tier = max(self.tier, new, key=rank.index)
+        else:
+            self.tier = tier_for(text)
         model, _, effort = TIERS[self.tier].partition(":")
         self.h.emit("info", text=f"codex tier {self.tier}: {model}, effort {effort or 'default'}")
-        self.turn, self.fatal, self.did_tools, self.failed_tools = None, None, 0, 0
-        params = {"threadId": self.thread_id, "model": model,
+        self.turn, self.fatal, self.did_tools, self.failed_tools, self.outcome = None, None, 0, 0, None
+        params = {"threadId": self.thread_id, "model": model, "outputSchema": OUTCOME_SCHEMA,
                   "input": [{"type": "text", "text": f"[{source}] {text}" if source == "voice" else text}]}
         if effort:
             params["effort"] = effort
@@ -320,6 +330,9 @@ class CodexBackend:
         if (self.turn or {}).get("status") == "failed" and not self.did_tools:
             self._down(str((self.turn.get("error") or {}).get("message")))
             raise BrainUnavailable(f"turn failed: {(self.turn.get('error') or {}).get('message')}")
+        if (self.turn or {}).get("status") == "interrupted":
+            return None  # cut (stop, steering, deadline): the harness decides what comes next
+        return self.outcome or Outcome("done")
 
     async def steer(self, msgs: list[str]) -> bool:
         """Words for the running turn (Codex reads them at its next step). False: no turn to steer."""

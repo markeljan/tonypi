@@ -27,6 +27,8 @@ from typing import Callable
 
 from tonypi.agent.brain import STOP_RE
 from tonypi.harness.peripherals import Ctx, Peripheral, Result, Tool
+from tonypi.harness.tasks import (CONTINUE_PROMPT, LOOP_PROMPT, MAX_CONTINUES, MAX_PUSHBACKS, PUSHBACK_PROMPT,
+                                  TASK_CAP_S, TaskLog)
 
 log = logging.getLogger("tonypi.harness")
 STEER_GRACE_S = 0.3
@@ -84,16 +86,24 @@ class Harness:
         self.told: tuple[float, list[str]] = (0.0, [])  # when new words last went out in a tool result, and which
         self.tools_running = 0
         self.stopped = False
+        self.timed_out = False
+        self.tasklog: TaskLog | None = None
+        self.on_lesson: Callable[[str, str], None] | None = None  # (lesson, task text): self-update (learning.py)
+        self.extra_prompt: Callable[[], str] | None = None  # learned instructions, appended to the system prompt
 
     # ---- plumbing ---------------------------------------------------------------------------------------------
 
     def emit(self, type_: str, **kw) -> None:
         if type_ in ("action", "say", "info", "plan") and "id" not in kw and self.task_ids:
             kw["id"] = self.task_ids[0]
+        if self.tasklog is not None:
+            self.tasklog.on_event(type_, kw)
         self._emit(type_, **kw)
 
     def system_prompt(self) -> str:
-        parts = [SYSTEM] + [p.prompt for p in self.peripherals.values() if p.prompt]
+        parts = [SYSTEM, LOOP_PROMPT] + [p.prompt for p in self.peripherals.values() if p.prompt]
+        if self.extra_prompt and (extra := self.extra_prompt()):
+            parts.append(extra)
         return "\n\n".join(parts)
 
     def say(self, text: str) -> None:
@@ -197,17 +207,21 @@ class Harness:
         return self.backends[-1]
 
     async def _run(self, text: str, source: str) -> None:
+        """One task: turns until the brain reports it done (verified), the user says stop, or the cap (tasks.py)."""
         self.stopped = False
         t0 = time.monotonic()
+        tl = self.tasklog = TaskLog(text, source)
         self.emit("thinking")
         msg: str | None = text
         failed: set[str] = set()
+        continues = pushbacks = 0
+        timer = asyncio.create_task(self._deadline(t0))
         try:
             while msg is not None and not self.stopped:
                 backend = self.backend = await self._pick(failed)
                 self.emit("info", text=f"brain: {backend.name}")
                 try:
-                    await backend.run(msg, source)
+                    outcome = await backend.run(msg, source)
                 except BrainUnavailable as e:
                     if backend is self.backends[-1]:
                         raise
@@ -215,20 +229,68 @@ class Harness:
                     failed.add(backend.name)
                     continue  # same words, next backend
                 msgs = self.take_pending()
-                msg = backend.followup_text(msgs) if msgs and not self.stopped else None
+                if msgs and not self.stopped:
+                    tl.steers += 1
+                    msg = backend.followup_text(msgs)
+                    continue
+                msg = None
+                if outcome is None:  # a backend without the status contract (LFM3): one turn is the task
+                    tl.status = "done" if not self.stopped else tl.status
+                    break
+                tl.summary = outcome.summary or tl.summary
+                if outcome.lesson.strip():
+                    tl.lessons.append(outcome.lesson.strip())
+                    if self.on_lesson:
+                        self.on_lesson(outcome.lesson.strip(), text)
+                elapsed = time.monotonic() - t0
+                if self.timed_out or self.stopped:
+                    break
+                if outcome.status == "continue" and continues < MAX_CONTINUES:
+                    continues += 1
+                    tl.continues = continues
+                    msg = CONTINUE_PROMPT.format(elapsed=elapsed, cap=TASK_CAP_S)
+                elif outcome.status == "give_up" and pushbacks < MAX_PUSHBACKS and elapsed < TASK_CAP_S - 30:
+                    pushbacks += 1
+                    tl.pushbacks = pushbacks
+                    msg = PUSHBACK_PROMPT.format(left=TASK_CAP_S - elapsed, summary=outcome.summary)
+                else:
+                    tl.status = outcome.status if outcome.status != "continue" else "unfinished"
         except Exception as e:
             log.exception("task failed")
             self.emit("info", text=f"error: {e}")
+            tl.status = "error"
         finally:
+            timer.cancel()
+            if self.stopped:
+                tl.status = "stopped"
+            elif self.timed_out:
+                tl.status = "timeout"
             body = self.peripherals.get("body")
             if body is not None and not self.stopped:
                 await asyncio.to_thread(body.settle)
-            self.emit("info", text=f"task finished in {time.monotonic() - t0:.1f} s")
+            tl.t_done = time.time()
+            self.tasklog = None
+            rec = tl.write()
+            self.emit("task_log", **{k: rec[k] for k in ("status", "total_s", "first_action_s", "tool_calls",
+                                                          "falls", "continues", "pushbacks", "created", "summary")})
+            self.emit("info", text=f"task finished in {time.monotonic() - t0:.1f} s ({tl.status})")
             ids, self.task_ids = self.task_ids, []
             for i in ids:
                 self.emit("done", id=i)
             if self.on_task_done:
                 self.on_task_done(source)
+
+    async def _deadline(self, t0: float) -> None:
+        """The task cap: cut the brain mid-turn when time is up (the owner may extend it: TONYPI_TASK_CAP_S)."""
+        self.timed_out = False
+        await asyncio.sleep(TASK_CAP_S)
+        self.timed_out = True
+        self.emit("info", text=f"task cap of {TASK_CAP_S:.0f} s reached")
+        self.say("I've run out of time for this one.")
+        for p in self.peripherals.values():
+            p.stop()
+        if self.backend:
+            await self.backend.cut()
 
     # ---- tools (called by backends) ---------------------------------------------------------------------------
 
