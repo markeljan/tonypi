@@ -47,6 +47,12 @@ tests/test_harness.py when behaviour changes. Run `{python} -m pytest -q -x test
 Don't commit (the harness does). End with one paragraph: what you changed and why."""
 
 
+def _similar(a: str, b: str) -> bool:
+    """The same lesson in other words (the brain often saves it via learn() and again in the turn's "lesson")."""
+    wa, wb = (set("".join(c for c in x.lower() if c.isalnum() or c.isspace()).split()) for x in (a, b))
+    return bool(wa and wb) and len(wa & wb) / len(wa | wb) >= 0.6
+
+
 def git(*args: str, check: bool = True) -> str:
     return subprocess.run(["git", *args], cwd=REPO, capture_output=True, text=True, check=check).stdout.strip()
 
@@ -102,7 +108,7 @@ class Learning(Peripheral):
     def add_lesson(self, lesson: str, task: str = "") -> bool:
         lesson = " ".join(lesson.split())[:300]
         ls = self.lessons()
-        if not lesson or any(lesson.lower() == x.lower() for x in ls):
+        if not lesson or any(_similar(lesson, x) for x in ls):
             return False
         ls = (ls + [lesson])[-MAX_LESSONS:]
         LESSONS.write_text("# Lessons Tony learned (harness-own; written by the harness, one per line)\n\n"

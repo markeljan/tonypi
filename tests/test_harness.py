@@ -439,6 +439,8 @@ def test_lessons_persist_commit_and_reach_the_brain(repo):
     lp.attach(h)
     assert lp.add_lesson("Scan before walking toward a target.", "go to the chair")
     assert not lp.add_lesson("scan before walking toward a target.")  # dedupe
+    assert not lp.add_lesson("Before walking toward a target, scan.")  # same lesson, other words
+    assert lp.add_lesson("Turn steps vary: check the gyro after each one.")
     assert "Scan before walking" in h.system_prompt() and h.notes and "Scan before walking" in h.notes[0]
     assert "learned" in learning.git("log", "-1", "--format=%s")
 
