@@ -49,9 +49,8 @@ mcp_servers:
       prompts: false
 
 skills:
+  # robot skills are copied from hermes/skills by setup.sh (Hermes may refine its copy; the repo stays the source)
   creation_nudge_interval: 15
-  external_dirs:
-    - __REPO__/hermes/skills   # robot skills, read-only; skills Hermes writes itself go to the profile
 
 memory:
   memory_enabled: true
@@ -62,6 +61,7 @@ memory:
 
 agent:
   max_turns: 40
+  image_input_mode: native  # snapshot/video frames go to the main model as images
   reasoning_effort: low     # default when a request names none; the voice front end picks per task (front.py TIERS)
 
 display:
@@ -90,8 +90,9 @@ auxiliary:
   # Side tasks pinned to the ChatGPT login, never "auto": auto walks the main fallback chain and so ends up on LFM3
   # (seen: a 2-call compression summary on LFM3 took 200 s). An explicit provider only falls back on capacity /
   # connection errors, i.e. when the cloud is really unreachable. setup.sh rewrites these for --brain local.
+  # No `vision:` entry: an explicit vision backend makes Hermes hand tool images to the model as file paths, not
+  # pixels (agent.image_input_mode auto → text); the main model sees snapshots natively.
   compression: {provider: openai-codex, model: gpt-6.1-terra, reasoning_effort: low}
-  vision: {provider: openai-codex, model: gpt-6.1-terra, reasoning_effort: low}
   background_review: {provider: openai-codex, model: gpt-6.1-terra, reasoning_effort: low}
   mcp: {provider: openai-codex, model: gpt-6.1-terra, reasoning_effort: low}
   approval: {provider: openai-codex, model: gpt-6.1-terra, reasoning_effort: low}
