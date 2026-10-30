@@ -24,6 +24,9 @@ export function loadSkills(): Record<string, string> {
 const STEPPED = new Set(["walk_forward", "walk_backward", "turn_left", "turn_right", "step_left", "step_right",
   "step_in_place"]);
 const MAX_STEPS = 10;
+// skills after which Tony settles into a neutral stand once the agent is done (the voice agent's rule); a stand left
+// mid-gait can tip over once the servos unload
+const NO_SETTLE = /^(look_|nod$|shake_head$|settle$|stand$|lie_down$|sleep$|get_up$)/;
 const POLL_MS = 100;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -58,6 +61,15 @@ async function job(skill: string, count: number, ctx: ExtensionContext, signal: 
 export default function body(pi: ExtensionAPI) {
   const skills = loadSkills();
   const names = Object.keys(skills);
+  let moved = false;
+
+  // reflex, no model: when pi has nothing left to do after body moves, settle. Not after an abort ("stop", or a
+  // new command replacing the task): stop means stop, and a new command moves the body anyway.
+  pi.on("agent_settled", (event: any) => {
+    if (!moved) return;
+    moved = false;
+    if (!event.aborted) tonyd.run("settle", 1, 30).catch(() => {});
+  });
 
   pi.registerTool(defineTool({
     name: "run_skill",
@@ -79,6 +91,7 @@ export default function body(pi: ExtensionAPI) {
       let why: string | null = null;
       let state = "done";
       const steps = STEPPED.has(skill) ? count : 1;
+      if (!NO_SETTLE.test(skill)) moved = true;
       for (let i = 0; i < steps; i++) {
         const r = await job(skill, STEPPED.has(skill) ? 1 : Math.min(count, 5), ctx, signal, STEPPED.has(skill));
         said.push(...r.job.said);
@@ -102,6 +115,7 @@ export default function body(pi: ExtensionAPI) {
     description: "Stop all body motion immediately.",
     parameters: Type.Object({}),
     async execute() {
+      moved = false;
       await tonyd.stop();
       return text("Stopped.", undefined);
     },

@@ -90,6 +90,9 @@ def test_steer_mid_walk_turns_right_instead(tmp_path: Path, monkeypatch):
         t_steer = time.monotonic() - body.t0
         pi.send("steer", message="actually, turn right instead")
         assert settled.wait(30), "pi never settled"
+        deadline = time.monotonic() + 5
+        while body.runs[-1][1] != "settle" and time.monotonic() < deadline:
+            time.sleep(0.02)
     finally:
         pi.close()
 
@@ -97,7 +100,7 @@ def test_steer_mid_walk_turns_right_instead(tmp_path: Path, monkeypatch):
     skills = [s for _, s, _ in body.runs]
     assert skills.count("walk_forward") == 1, body.runs  # the first step finishes, the other two never start
     assert "turn_left" not in skills
-    assert skills[-1] == "turn_right"
+    assert skills[-2:] == ["turn_right", "settle"], body.runs  # settles once pi is done
     t_turn = next(t for t, s, _ in body.runs if s == "turn_right")
     assert t_turn - t_steer < STEP_S + 1.5, f"steer took {t_turn - t_steer:.2f} s to land"
     results = [e for e in events if e.get("type") == "tool_execution_end" and e["toolName"] == "run_skill"]

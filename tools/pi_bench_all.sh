@@ -62,6 +62,11 @@ case $MODE in
     b T3 "look left and tell me if there's a chair"
     $PY -c "from tonypi.tonyd.client import TonydClient as T; T().head(0, 0)"
     ;;
+  settle)  # auto-settle after body moves
+    start_front TONYPI_X=1
+    b S1 "turn left 2 steps"
+    sleep 5
+    ;;
   steer)
     start_front TONYPI_X=1
     b T4b "walk forward 3 steps, then turn left" "@7" "actually, turn right instead"
