@@ -225,12 +225,13 @@ def snap(tonyd: TonydClient, name: str = "") -> bytes:
     return jpeg
 
 
-def turn_trials(tonyd: TonydClient, skill: str) -> list[dict]:
-    """T9 measurement: 3 x count 1 + 1 x count 3, each from a settled stand with the head centred: max tilt, yaw."""
+def turn_trials(tonyd: TonydClient, skill: str, trials: list[int] = T9_TRIALS) -> list[dict]:
+    """T9 measurement, each trial from a settled stand: max tilt, yaw from the gyro (tonyd's per-job yaw_deg, + =
+    left; since main 7478f56) and, as a cross-check, from the photos before/after."""
     out = []
     tonyd.head(0, 15)  # a bit up: furniture and walls to match, not the rug right in front of the feet
     stamp = time.strftime("%H%M%S")
-    for i, n in enumerate(T9_TRIALS):
+    for i, n in enumerate(trials):
         fell = False
         if tonyd.state()["lying"]:
             tonyd.run("get_up")
@@ -243,7 +244,8 @@ def turn_trials(tonyd: TonydClient, skill: str) -> list[dict]:
         tonyd.run("settle")
         yaw, inliers = yaw_deg(a, snap(tonyd, f"{stamp}-{skill}-{i}-after"))
         out.append({"skill": skill, "count": n, "state": job["state"], "max_tilt_deg": job.get("max_tilt_deg"),
-                    "yaw_deg": yaw, "inliers": inliers, "fell": fell, "said": job.get("said")})
+                    "yaw_deg": job.get("yaw_deg"), "yaw_photo_deg": yaw, "inliers": inliers, "fell": fell,
+                    "said": job.get("said")})
         print(json.dumps(out[-1]), flush=True)
     return out
 
