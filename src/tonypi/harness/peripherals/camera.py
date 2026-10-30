@@ -42,6 +42,11 @@ class CameraPeripheral(Peripheral):
             Tool("watch", "Short video: `frames` photos (2-6, 320x240) spread over `seconds` (1-5).", self.watch,
                  {"seconds": {"type": "number", "minimum": 1, "maximum": 5},
                   "frames": {"type": "integer", "minimum": 2, "maximum": MAX_FRAMES}}, ordered=True),
+            Tool("scan", "Look around with the head only (the body doesn't move): one photo (320x240) per pan angle "
+                 "(+ = left, -60..60; default 60, 30, 0, -30, -60), each labelled, then the head goes back. With the "
+                 "current heading. To see behind you, turn the body and scan again.", self.scan,
+                 {"pans": {"type": "array", "items": {"type": "number"}}, "tilt_deg": {"type": "number"}},
+                 ordered=True),
         ]
 
     def grab(self) -> tuple[bytes, dict]:
@@ -52,6 +57,14 @@ class CameraPeripheral(Peripheral):
         jpeg, snap = self.grab()
         h = snap["head_deg"]
         return Result(f"photo, head pan {h['pan']:.0f} tilt {h['tilt']:.0f}", [jpeg])
+
+    def scan(self, args: dict, ctx: Ctx) -> Result:
+        pans = [max(-60.0, min(60.0, float(p))) for p in (args.get("pans") or (60, 30, 0, -30, -60))][:7]
+        r = self.tonyd.scan(pans, args.get("tilt_deg"))
+        views = r["views"]
+        text = f"scan, heading {r.get('heading_deg')} deg; photos in order: " + ", ".join(
+            f"pan {v['pan_deg']:+.0f} (+ = left)" for v in views)
+        return Result(text, [shrink(Path(v["path"]).read_bytes()) for v in views])
 
     def watch(self, args: dict, ctx: Ctx) -> Result:
         seconds = max(1.0, min(5.0, float(args.get("seconds") or 2)))

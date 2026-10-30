@@ -287,7 +287,7 @@ def test_falls_are_the_harness_job(tonyd):
         orig = d.body.run
         d.body.run = lambda skill, count, say, guard_tilt=None: (guards.append((skill, guard_tilt)),
                                                                  orig(skill, count, say))[1]
-        h, _, _ = await make(tonyd, Scripted(None))
+        h, _, events = await make(tonyd, Scripted(None))
         r = await h.call_tool("run_skill", {"skill": "wave"})
         await until(lambda: d.body.ran[-1] == ("settle", 1))
         assert not r.error and d.body.ran[-2:] == [("wave", 1), ("settle", 1)]  # back to a stand after a move
@@ -308,13 +308,20 @@ def test_falls_are_the_harness_job(tonyd):
         d.body.lying = lambda: False
         orig_wave = d.body.run
 
-        def falls(skill, count, say, guard_tilt=None):
+        def falls(skill, count, say, guard_tilt=None):  # bow knocks him over, get_up works
             ok = orig_wave(skill, count, say, guard_tilt)
-            d.body.lying = lambda: True
+            down = skill != "get_up"
+            d.body.lying = lambda: down
             return ok
         d.body.run = falls
         r = await h.call_tool("run_skill", {"skill": "bow"})
-        assert r.error and "FELL" in r.text and d.body.ran[-1] == ("bow", 1)  # no settle while lying
+        assert r.error and "FELL" in r.text and "got you up again" in r.text  # the harness got him up, no model
+        assert [s for s, _ in d.body.ran[-2:]] == ["bow", "get_up"]
+        assert any(e["type"] == "fall" and e["recovered"] for e in events)
+
+        r = await h.call_tool("trial", {"skill": "bow", "trials": 2})  # measured trials: each from a stand
+        res = json.loads(r.text)
+        assert len(res["trials"]) == 2 and res["falls"] == 2 and all(t["fell"] for t in res["trials"])
 
     asyncio.run(main())
 
