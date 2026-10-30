@@ -49,7 +49,8 @@ it's told ("hey, go get that"), with local LFM models on the Pi and Claude (Opus
 
 ## Joint map (`src/tonypi/config/robot.yaml`)
 L/R: 1/9 ankle roll · 2/10 ankle pitch · 3/11 knee · 4/12 hip pitch · 5/13 hip roll · 6/14 elbow · 7/15 shoulder roll · 8/16 shoulder pitch.
-Positions 0–1000, 500 = centre, ≈0.24°/count. Stand pose in robot.yaml (servo 15: 200 there vs 160 in `stand.json` — pick one on the robot).
+Positions 0–1000, 500 = centre, ≈0.24°/count. Stand pose in robot.yaml. Right shoulder roll (servo 15) is 200 in every stand pose (owner-tuned; `stand`/`stand_slow`
+were 160 from the factory files until 2026-10-29, which pulled the right arm out after every turn/walk).
 
 ## Motion library
 `data/motions/*.json` — 83 keyframe motions converted from the factory `.d6a` files (`{"frames":[{"ms":..,"pos":{"1":..}}]}`).
