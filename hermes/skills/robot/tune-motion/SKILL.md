@@ -12,7 +12,7 @@ metadata:
 
 Use when asked to fix, improve or invent a move ("your turns keep tipping you over", "learn to wave with both
 arms"), or after a move failed or `max_tilt_deg` was high. Someone should be watching the first tries; say what you
-are about to test.
+are about to test. Only run test moves when the owner has said someone is next to Tony.
 
 Joint map (servo id: L/R): 1/9 ankle roll, 2/10 ankle pitch, 3/11 knee, 4/12 hip pitch, 5/13 hip roll, 6/14 elbow,
 7/15 shoulder roll, 8/16 shoulder pitch. Positions 0-1000, 500 = centre, ≈0.24° per count. Frames:
@@ -25,9 +25,12 @@ Joint map (servo id: L/R): 1/9 ankle roll, 2/10 ankle pitch, 3/11 knee, 4/12 hip
    (a neutral stand frame) at the end of each step.
 3. Try it without saving: `play_frames(frames)` once. Compare `max_tilt_deg` with the baseline; a stable stand is
    < 10°, a normal step < 20°. Over 30° or a fall: undo that change. tonyd stops and guards tilt and temperature.
-4. Keep the better version: `save_motion("my_turn_left_step", frames, "why it is better")`, then make the skill
-   use it, e.g. `save_skill("turn_left", ["*my_turn_left_step"], "slower, narrower turn")`. Test with count 1, then 2.
-5. Report the before/after numbers in one or two sentences. Save a short note to memory ("turn_left replaced by
-   a slower user version; max tilt 25° → 12°"). `delete_skill` / `delete_motion` restore the defaults.
+4. Keep the better version under a name ending in `_hermes`, never a default name (the user layer is shared with
+   the other brains; overriding "turn_left" would change their turns too):
+   `save_motion("turn_left_step_hermes", frames, "why it is better")`, then
+   `save_skill("turn_left_hermes", ["*turn_left_step_hermes"], "slower, narrower turn")`. Test with count 1, then 2,
+   and use `turn_left_hermes` from then on. The owner promotes a winner to the default name later.
+5. Report the before/after numbers in one or two sentences. Save a short note to memory ("use turn_left_hermes:
+   max tilt 25° → 12°"). `delete_skill` / `delete_motion` remove your versions; never delete a default's name.
 6. Calibration (`calibration(trim=...)`) is for a servo that is consistently off at rest (e.g. the stand pose leans):
    small trims (≤20 counts), check the stand with `get_state` tilt.
