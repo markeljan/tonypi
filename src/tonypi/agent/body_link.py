@@ -47,7 +47,8 @@ class BodyLink:
             job = self.tonyd.run(skill, count)
         except TonydError as e:
             log.error("run %s: %s", skill, e)
-            say("I can't reach my body right now.")
+            say("I'm plugged into my charger, so I can't walk any further." if "tethered" in str(e)
+                else "I can't reach my body right now.")
             return False
         for line in job["said"]:
             say(line)

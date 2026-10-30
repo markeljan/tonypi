@@ -306,3 +306,21 @@ def test_body_plays_user_skills_with_calibration():
     body.reload_calibration()
     assert body.run("tiny_walk", 3, lambda s: None)
     assert body.board.moves == [{4: 610}] * 3
+
+
+def test_tether_caps_walking_steps(robot):
+    d, c = robot
+    assert c.call("tether")["tether"] == {"on": True, "max_steps": 10, "walked": 0}
+    c.run("walk_forward", 5)
+    c.run("turn_left", 5)  # turns don't count
+    c.run("step_left", 4)
+    with pytest.raises(TonydError, match="tethered"):
+        c.run("walk_backward", 2)
+    c.run("walk_backward", 1)  # exactly 10
+    assert c.state()["tether"]["walked"] == 10
+    c.call("tether", reset=True)
+    c.run("walk_forward", 2)
+    c.call("tether", on=False)
+    c.run("walk_forward", 5)
+    c.run("walk_forward", 5)
+    assert c.state()["tether"] == {"on": False, "max_steps": 10, "walked": 0}
