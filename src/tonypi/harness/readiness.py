@@ -43,7 +43,7 @@ def run() -> int:
 
     from tonypi.harness.peripherals.voicelink import SOCK, VoiceLink
     if VoiceLink.available():
-        link = VoiceLink(lambda i, t: None, name="own-check")
+        link = VoiceLink(lambda i, t: None, attach=False)  # never take the voice from whoever has it
         st = link.status() if link.connected.wait(3) else {"connected": False}
         voice_ok, ev = bool(st.get("connected")), f"tonypi-voice at {SOCK}: {st}"
     else:

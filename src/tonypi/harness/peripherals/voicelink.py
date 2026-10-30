@@ -32,8 +32,8 @@ MAX_CHARS = 400
 
 class VoiceLink:
     def __init__(self, on_heard: Callable[[int, str], None], on_barge_in: Callable[[], None] | None = None,
-                 path: str = SOCK, name: str = NAME) -> None:
-        self.path, self.name = path, name
+                 path: str = SOCK, name: str = NAME, attach: bool = True) -> None:
+        self.path, self.name, self.attach = path, name, attach  # attach=False: status only (don't take the voice)
         self.on_heard, self.on_barge_in = on_heard, on_barge_in
         self.sock: socket.socket | None = None
         self.wlock = threading.Lock()
@@ -56,7 +56,8 @@ class VoiceLink:
                 s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
                 s.connect(self.path)
                 self.sock = s
-                self._send({"op": "attach", "name": self.name})
+                if self.attach:
+                    self._send({"op": "attach", "name": self.name})
                 self.connected.set()
                 log.info("voice service attached as %r", self.name)
                 for line in s.makefile("r", encoding="utf-8"):
