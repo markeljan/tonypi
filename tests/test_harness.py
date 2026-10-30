@@ -140,6 +140,26 @@ def test_batched_calls_after_new_words_are_refused(tonyd):
     asyncio.run(main())
 
 
+def test_parallel_calls_queued_behind_a_cut_walk_are_refused(tonyd):
+    async def script(b, text):
+        if text.startswith("NEW"):
+            return
+        await asyncio.gather(b.tool("run_skill", skill="walk_forward", count=3),
+                             b.tool("run_skill", skill="turn_left"))
+
+    async def main():
+        brain = Scripted(script)
+        h, d, _ = await make(tonyd, brain)
+        await h.submit("walk forward 3 steps, then turn left")
+        await asyncio.sleep(0.45)
+        await h.submit("actually, turn right instead")
+        await until(lambda: not h.busy())
+        assert ("turn_left", 1) not in d.body.ran
+        assert d.body.ran.count(("walk_forward", 1)) == 2
+
+    asyncio.run(main())
+
+
 def test_motion_held_back_when_words_are_pending(tonyd):
     async def script(b, text):
         await asyncio.sleep(0.2)  # "thinking"

@@ -237,20 +237,36 @@ class Harness:
         tool = self.tools.get(name)
         if tool is None:
             return Result(f"unknown tool {name}", error=True)
+        if tool.ordered:  # checked once it is this call's turn: words may have come while it queued
+            async with self.world:
+                return await self._call(tool, args, inject)
+        return await self._call(tool, args, inject)
+
+    def _refuse(self, tool: Tool, inject: bool) -> Result | None:
+        if not tool.moves:
+            return None
+        if self.stopped:
+            return Result("not done: the user said stop", error=True)
+        if inject and self.pending:
+            msgs = self.take_pending()
+            self.told = (time.monotonic(), msgs)
+            return Result(f"NOT done: before it started, the user said: {_quote(msgs)}. "
+                          "Follow the newest instruction.", error=True)
+        if inject and time.monotonic() - self.told[0] < STALE_CALL_S:
+            self.told = (time.monotonic(), self.told[1])
+            return Result(f"NOT done: this was planned before you read the user's new words: "
+                          f"{_quote(self.told[1])}. Re-plan from them.", error=True)
+        return None
+
+    async def _call(self, tool: Tool, args: dict, inject: bool) -> Result:
+        name = tool.name
+        if refused := self._refuse(tool, inject):
+            self.emit("refused", name=name, args=args, text=refused.text)
+            return refused
         if name == "run_skill":
             self.emit("action", name=args.get("skill"), count=int(args.get("count") or 1))
         elif name != "say":
             self.emit("action", name=name, count=1, args=args)
-        if self.stopped and tool.moves:
-            return Result("not done: the user said stop", error=True)
-        if inject and tool.moves and self.pending:
-            msgs = self.take_pending()
-            return Result(f"NOT done: before it started, the user said: {_quote(msgs)}. "
-                          "Follow the newest instruction.", error=True)
-        if inject and tool.moves and time.monotonic() - self.told[0] < STALE_CALL_S:
-            self.told = (time.monotonic(), self.told[1])
-            return Result(f"NOT done: this was planned before you read the user's new words: {_quote(self.told[1])}. "
-                          "Re-plan from them.", error=True)
         self.tools_running += 1
         steer = threading.Event()
         if self.pending:
@@ -258,11 +274,7 @@ class Harness:
         self.active.add(steer)
         t = time.monotonic()
         try:
-            if tool.ordered:
-                async with self.world:
-                    res = await asyncio.to_thread(tool.handler, args, Ctx(steer, self.emit))
-            else:
-                res = await asyncio.to_thread(tool.handler, args, Ctx(steer, self.emit))
+            res = await asyncio.to_thread(tool.handler, args, Ctx(steer, self.emit))
         except Exception as e:
             log.exception("tool %s failed", name)
             res = Result(f"error: {e}", error=True)
