@@ -25,6 +25,27 @@ def inject(wav: str) -> dict:
     return json.loads(s.makefile().readline())
 
 
+def voice_status() -> dict:
+    s = socket.socket(socket.AF_UNIX)
+    try:
+        s.connect(VOICE)
+        s.sendall(b'{"op": "status", "rid": 1}\n')
+        return json.loads(s.makefile().readline())
+    except OSError:
+        return {}
+    finally:
+        s.close()
+
+
+def wait_attached(name: str = "own", timeout: float = 60) -> dict:
+    end = time.time() + timeout
+    while time.time() < end:
+        if (st := voice_status()).get("attached") == name:
+            return st
+        time.sleep(1)
+    raise SystemExit(f"the harness never attached to tonypi-voice as {name!r}: {voice_status()}")
+
+
 def run(category: str, text: str, timeout: float = 420) -> dict:
     wav = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
     subprocess.run(["espeak-ng", "-s", "140", "-w", wav, f"Tony, {text}"], check=True)
@@ -52,6 +73,7 @@ def run(category: str, text: str, timeout: float = 420) -> dict:
 
 
 if __name__ == "__main__":
+    print("voice:", wait_attached(), flush=True)
     a = sys.argv[1:]
     for cat, text in zip(a[::2], a[1::2]):
         print(json.dumps(run(cat, text)), flush=True)

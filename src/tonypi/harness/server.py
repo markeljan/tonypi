@@ -61,7 +61,7 @@ class Frontend:
         # voice: the shared tonypi-voice service (GPT-Live-1) when it runs, else the local "hey Tony" listener
         from tonypi.harness.peripherals.voicelink import VoiceLink
         use_service = voice and os.environ.get("TONYPI_HARNESS_VOICE_SERVICE", "auto") != "off" and (
-            VoiceLink.available() or os.environ.get("TONYPI_HARNESS_VOICE_SERVICE") == "on")
+            VoiceLink.wanted() or os.environ.get("TONYPI_HARNESS_VOICE_SERVICE") == "on")
         if use_service:
             self.link = VoiceLink(self._from_voice, lambda: self.emit("info", text="barge-in"))
         elif sound or voice:

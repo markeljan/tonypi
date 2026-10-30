@@ -45,6 +45,13 @@ class VoiceLink:
         threading.Thread(target=self._loop, name="voicelink", daemon=True).start()
 
     @staticmethod
+    def wanted(path: str = SOCK) -> bool:
+        """Use the shared service: it is running, or starting (it takes a few seconds; the link keeps retrying)."""
+        import subprocess
+        state = subprocess.run(["systemctl", "is-active", "tonypi-voice"], capture_output=True, text=True).stdout
+        return state.strip() in ("active", "activating") or VoiceLink.available(path)
+
+    @staticmethod
     def available(path: str = SOCK) -> bool:
         """The service is up (a stale socket file doesn't count)."""
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
