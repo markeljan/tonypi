@@ -20,6 +20,10 @@ class FakeTonyd:
     def stop(self) -> None:
         self.stops += 1
 
+    def head(self, pan_deg=0.0, tilt_deg=0.0, ms=400):
+        self.calls.append(("head", {"pan_deg": pan_deg, "tilt_deg": tilt_deg}))
+        return {"pan": pan_deg, "tilt": tilt_deg}
+
     def state(self, fresh: bool = False) -> dict:
         return {"battery_mv": 12000}
 
@@ -205,6 +209,7 @@ def test_deep_task_gives_up_at_the_cap(monkeypatch, state_dir):
         h.finish()
     assert wait(lambda: f.run_id is None)
     assert len(h.started) == 3 and any("out of time" in s for s in said)
+    assert ("head", {"pan_deg": 0.0, "tilt_deg": 0.0}) in f.tonyd.calls  # a task starts looking straight ahead
 
 
 def test_tether_reset_at_task_start(monkeypatch):

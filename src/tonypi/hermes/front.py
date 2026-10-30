@@ -269,6 +269,11 @@ class Front:
                 self.tonyd.call("tether", reset=True)
             except TonydError as e:
                 log.warning("tether reset: %s", e)
+        if tier == "deep":  # every task starts looking straight ahead (a previous task may have left the head turned)
+            try:
+                self.tonyd.head(0.0, 0.0)
+            except TonydError as e:
+                log.warning("head centre: %s", e)
         before = self._authored()
         falls0 = len(self.keeper.events) if self.keeper is not None else 0
         prompt, report = text, None
