@@ -32,7 +32,9 @@ CODEX_HOME_LIVE = os.environ.get("TONYPI_LIVE_CODEX_HOME", "/home/pi/.config/ton
 DATA = Path(os.environ.get("TONYPI_LIVE_DIR", "/home/pi/.local/share/tonypi/live"))
 PROMPTS = Path(__file__).parent / "prompts"
 REPO = "/home/pi/tonypi"
-MODEL = os.environ.get("TONYPI_LIVE_MODEL", "gpt-6.1-sol")
+MODEL = os.environ.get("TONYPI_LIVE_MODEL", "gpt-6.1-terra")
+# Codex calls Fast mode "fast" in config and sends it as the priority service tier.
+SERVICE_TIER = os.environ.get("TONYPI_LIVE_SERVICE_TIER", "fast")
 MAX_WORKERS = 3
 PROMPT_MODULES = os.environ.get("TONYPI_LIVE_PROMPT_MODULES", "m1_style,m2_language,m3_unclear,m4_pronounce,m5_reuse")
 
@@ -184,7 +186,9 @@ class LiveBrain(Live):
     def _l_settings(self) -> dict:
         return {"cwd": REPO, "model": MODEL, "sandbox": "danger-full-access", "approvalPolicy": "never",
                 "developerInstructions": _text("codex_developer.md"),
-                "config": {"model_reasoning_effort": "low", "model_reasoning_summary": "concise"}}
+                "serviceTier": SERVICE_TIER,
+                "config": {"model_reasoning_effort": "low", "model_reasoning_summary": "concise",
+                           "service_tier": SERVICE_TIER}}
 
     async def setup_thread(self) -> str:
         st = self._load_state()
@@ -494,18 +498,19 @@ class LiveBrain(Live):
         if uses_body and any(w["uses_body"] for w in running):
             return "refused: another background task already uses the body; cancel it first"
         task_id = f"t{next(self.task_ids)}"
-        effort = a.get("effort") or "medium"
+        effort = a.get("effort") or "low"
         cfg = {"model_reasoning_effort": effort, "model_reasoning_summary": "concise",
-               "features.multi_agent": False}
+               "features.multi_agent": False, "service_tier": SERVICE_TIER}
         if a.get("full_context"):
             r = await self._rpc("thread/fork", {"threadId": self.tid, "ephemeral": True, "excludeTurns": True,
+                                                "model": MODEL, "serviceTier": SERVICE_TIER,
                                                 "sandbox": "danger-full-access", "approvalPolicy": "never",
                                                 "developerInstructions": _text("codex_worker.md"), "config": cfg},
                                 timeout=60)
         else:
             r = await self._rpc("thread/start", {"cwd": REPO, "model": MODEL, "sandbox": "danger-full-access",
                                                  "approvalPolicy": "never", "ephemeral": True,
-                                                 "serviceName": "tonypi-live-worker",
+                                                 "serviceName": "tonypi-live-worker", "serviceTier": SERVICE_TIER,
                                                  "developerInstructions": _text("codex_worker.md"), "config": cfg},
                                 timeout=60)
         thread = r["thread"]["id"]

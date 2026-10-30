@@ -2,7 +2,8 @@
 # Full access is intended by the owner. Auth: access token shared from Hermes by tools/share_chatgpt_login.py
 # (placeholder refresh_token): never run codex login/logout here.
 cli_auth_credentials_store = "file"
-model = "gpt-6.1-sol"
+model = "gpt-6.1-terra"
+service_tier = "fast"
 model_reasoning_effort = "low"
 model_reasoning_summary = "concise"
 approval_policy = "never"

@@ -801,8 +801,27 @@ Verified for this revision (codex-cli 0.166.0 schema/source/binary): ThreadResum
 - [route-ok, deferred] Separate app-server unit over unix:// WebSocket (phase 2; experimental transport).
 - [route-ok, deferred] Echo cancellation for full duplex (PipeWire module-echo-cancel / WebRTC AEC on the USB card): phase 2; the local stop KWS covers the safety-critical case now.
 - [route-ok, deferred] Audio holdback gate for unconfirmed success claims: transcripts lag audio, so holding costs latency; phase 2 only if the claim metric exceeds 2%.
-- [unclear, deferred] service_tier priority/ultrafast (serviceTierForTurn): more usage; A/B after the base works.
+- [adopted 2026-10-30] Fast mode: `service_tier="fast"` / app-server `serviceTier="fast"` (maps to priority); ultrafast remains unused.
 - [skipped: risk] MCP 'say' tool (disabled_tools): targets tonypi-agent's socket, not running in live mode; tony_speak_now instead.
 - [skipped: risk] Thread goals on L (features.goals=false for L): automatic continuation without a user request.
 - [skipped: risk] Live-session probes of public event names: any server `error` ends the Codex session; tools/live_probe.py throwaway sessions only.
 - [skipped: not adopted] Forcing tether on by default in live mode: tether is the charger-cable step budget the owner sets; unattended motion is covered by motion grants and the stop latch.
+
+## Responsiveness settings (2026-10-30)
+
+The owner requested Terra with low reasoning and Fast mode. Live brain and worker threads now default to
+`gpt-6.1-terra`, low reasoning, and `fast` service tier, including resumed brain threads and forked workers.
+Workers previously defaulted to medium effort; explicit worker effort overrides remain available.
+`TONYPI_LIVE_MODEL` and `TONYPI_LIVE_SERVICE_TIER` override the defaults. The provisioning config and installed
+Codex config match these settings; voice must restart before its running brain adopts the changes.
+
+The local Codex model catalog (fetched 2026-10-30 09:09 UTC) advertises `gpt-6.1-terra` and `gpt-6-luna`,
+low effort and Fast mode for both. The installed app-server schema accepts model/serviceTier on start,
+resume and fork. [Official model guidance](https://developers.openai.com/api/docs/guides/latest-model)
+confirms these model IDs; the [Codex config reference](https://learn.chatgpt.com/docs/config-file/config-reference)
+documents `service_tier="fast"` mapping to priority. Fast mode may consume more usage.
+
+No measured end-to-end speedup is claimed yet. The 3-second missing-handoff fallback and 5-second watchdog
+poll (30-second stale-turn threshold) are recovery paths, not per-tool delays; they remain unchanged.
+Stop handling, motion timing and safety guards remain unchanged. Request-building tests cover start/resume,
+new/forked workers and explicit effort overrides without opening audio or robot connections.
