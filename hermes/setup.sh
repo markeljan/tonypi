@@ -38,6 +38,8 @@ fi
 install -m 600 "$REPO/hermes/SOUL.md" "$PROFILE/SOUL.md"
 # robot skills: the repo copy replaces Hermes' copy of the same skill (skills Hermes wrote itself are kept). Not an
 # external_dirs entry: Hermes' background review edited those files in place.
+# first facts for Hermes memory, only into an empty memory (what Hermes learns later is kept)
+[ -s "$PROFILE/memories/MEMORY.md" ] || { mkdir -p "$PROFILE/memories"; cp "$REPO/hermes/memory-seed.md" "$PROFILE/memories/MEMORY.md"; }
 mkdir -p "$PROFILE/skills"
 cp -r "$REPO/hermes/skills/." "$PROFILE/skills/"
 python3 - "$REPO" "$PROFILE/config.yaml" "$BRAIN" "$MODEL" "$MCP_URL" <<'PY'
