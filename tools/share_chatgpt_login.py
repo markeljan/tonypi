@@ -19,7 +19,7 @@ from pathlib import Path
 
 HERMES = Path("/home/pi/.hermes/profiles/tonypi/auth.json")
 PI = Path("/home/pi/.pi/agent/auth.json")
-CODEX_HOMES = [Path("/home/pi/.config/tonypi/codex-own")]
+CODEX_HOMES = [Path("/home/pi/.config/tonypi/codex-own"), Path("/home/pi/.config/tonypi/codex-voice")]  # harness, voice
 NO_REFRESH = "shared-from-hermes-no-refresh"  # deliberately invalid: only Hermes may refresh
 REFRESH_BEFORE_H = 48
 
