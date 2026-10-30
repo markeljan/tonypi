@@ -96,6 +96,7 @@ def test_steering_lands_between_walk_steps(tonyd):
             return
         await b.tool("run_skill", skill="walk_forward", count=5)
         if "turn right" in b.results[-1]:
+            await asyncio.sleep(0.6)  # a real brain needs a moment to read the words (see STALE_CALL_S)
             await b.tool("run_skill", skill="turn_right", count=1)
 
     async def main():
@@ -106,13 +107,35 @@ def test_steering_lands_between_walk_steps(tonyd):
         t = time.monotonic()
         await h.submit("actually, turn right instead")
         await until(lambda: ("turn_right", 1) in d.body.ran)
-        assert time.monotonic() - t < 0.6  # the step in progress finishes, nothing more
+        assert time.monotonic() - t < 1.2  # the step in progress finishes (+ the brain's 0.6 s), nothing more
         await until(lambda: not h.busy())
         assert "2 of 5 steps done" in brain.results[0] and '"actually, turn right instead"' in brain.results[0]
         walks = [s for s, _ in d.body.ran if s == "walk_forward"]
         assert len(walks) == 2 and d.body.ran[-1] == ("settle", 1)
         assert [e["id"] for e in events if e["type"] == "done"] == [1, 2]
         assert len(brain.texts) == 1  # words came in the tool result: no second turn
+
+    asyncio.run(main())
+
+
+def test_batched_calls_after_new_words_are_refused(tonyd):
+    async def script(b, text):
+        if text.startswith("NEW"):
+            return
+        await b.tool("run_skill", skill="walk_forward", count=3)  # one JS cell / one batch: no thinking between
+        await b.tool("run_skill", skill="turn_left")
+        await asyncio.sleep(0.6)  # the brain read the words and decided
+        await b.tool("run_skill", skill="turn_right")
+
+    async def main():
+        brain = Scripted(script)
+        h, d, _ = await make(tonyd, brain)
+        await h.submit("walk forward 3 steps, then turn left")
+        await asyncio.sleep(0.1)
+        await h.submit("actually, turn right instead")
+        await until(lambda: not h.busy())
+        assert brain.results[1].startswith("NOT done") and "turn right instead" in brain.results[1]
+        assert ("turn_left", 1) not in d.body.ran and ("turn_right", 1) in d.body.ran
 
     asyncio.run(main())
 

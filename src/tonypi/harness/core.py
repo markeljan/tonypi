@@ -6,7 +6,8 @@ Flow for each utterance (typed, spoken, later from the iPhone app):
   - busy: it steers the running task. The words go to a pending slot and `steer` is raised:
       * a tool that is running sees its `ctx.steer`, stops at a safe point (walking: after the current step) and its
         result carries the new words to the brain ("[While this ran, the user said: ...]");
-      * a motion tool that is about to start is held back and returns the new words instead;
+      * a motion tool that is about to start is held back and returns the new words instead, and so is one that
+        follows a tool result carrying new words faster than the brain could have read them (STALE_CALL_S);
       * if no tool picks them up within STEER_GRACE_S (the model is mid-thought), the backend is cut
         (interrupt) and the words are sent as the next message of the same session, or (STEER_MODE=steer)
         passed into the running turn (Codex turn/steer).
@@ -32,6 +33,9 @@ STEER_GRACE_S = 0.3
 # words that arrive while the brain thinks (no tool running): "cut" = interrupt + send them as the next message;
 # "steer" = hand them to the running turn (backends with steer(), e.g. Codex turn/steer), cut if that fails
 STEER_MODE = os.environ.get("TONYPI_STEER_MODE", "cut")
+# a motion call this soon after new words went out in a tool result was issued before the brain read them (several
+# calls in one go: Codex runs them from one JS cell, Claude can batch them): refused, the words repeated
+STALE_CALL_S = 0.5
 
 SYSTEM = """You are Tony, a small (35 cm) humanoid robot, a Hiwonder TonyPi with a Raspberry Pi 5 inside. You live \
 with your owner at home. People talk to you by voice ("hey Tony, ...") or by text; voice comes through \
@@ -77,6 +81,7 @@ class Harness:
         self.pending: list[str] = []
         self.active: set[threading.Event] = set()  # ctx.steer of each running tool call
         self.world = asyncio.Lock()  # Tool.ordered: one at a time, FIFO (look, then the photo)
+        self.told: tuple[float, list[str]] = (0.0, [])  # when new words last went out in a tool result, and which
         self.tools_running = 0
         self.stopped = False
 
@@ -242,6 +247,10 @@ class Harness:
             msgs = self.take_pending()
             return Result(f"NOT done: before it started, the user said: {_quote(msgs)}. "
                           "Follow the newest instruction.", error=True)
+        if inject and tool.moves and time.monotonic() - self.told[0] < STALE_CALL_S:
+            self.told = (time.monotonic(), self.told[1])
+            return Result(f"NOT done: this was planned before you read the user's new words: {_quote(self.told[1])}. "
+                          "Re-plan from them.", error=True)
         self.tools_running += 1
         steer = threading.Event()
         if self.pending:
@@ -263,7 +272,9 @@ class Harness:
         self.emit("tool_result", name=name, text=res.text[:300], images=len(res.images),
                   seconds=round(time.monotonic() - t, 2))
         if inject and self.pending:
-            res.text += (f"\n\n[While this ran, the user said: {_quote(self.take_pending())}. The newest instruction "
+            msgs = self.take_pending()
+            self.told = (time.monotonic(), msgs)
+            res.text += (f"\n\n[While this ran, the user said: {_quote(msgs)}. The newest instruction "
                          "wins: if it changes the task, drop the old plan.]")
         return res
 
