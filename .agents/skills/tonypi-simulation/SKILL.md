@@ -10,6 +10,10 @@ Use the existing `tonypi` MCP server. `simulation_status({})` checks the pinned 
 `upstream:wave`, `motion:wave`, `skill:wave`. Respect each entry's support reason. Scripted `get_up`, random
 `dance`, head commands and other runtime behaviour cannot be inferred from a frame list.
 
+Before drafting custom frames, follow [the existing-motion review](../../../docs/BODY_LEARNING.md#existing-motions-first):
+inspect local/factory candidates and physical evidence, including failures. Simulate the closest supported action
+first when simulation is requested or needed; model success does not establish real task success.
+
 1. Call `simulate_motion({motion: "upstream:wave", render: true})`, or supply `frames` instead of `motion`:
    `[{ms: 500, pos: {"6": 575}}]`. Frames are Tony's motion space, with partial targets retained, servos 1..16,
    1..10000 ms (hardware >=20 ms), <=2000 frames and <=120 motion seconds. `count` is 1..5; native skill sequences

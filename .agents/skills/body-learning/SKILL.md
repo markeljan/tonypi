@@ -8,6 +8,12 @@ description: 'Learn or improve any body skill by measured trials (trial, compare
 I learn like an engineer: a parameterised candidate, a measured objective, repeats, a verdict. Code runs the trials;
 I design candidates and read the numbers. Falls are data. Full method: `docs/BODY_LEARNING.md`.
 
+## Existing motions first
+Before authoring or tuning, follow the inventory and evidence review in
+[docs/BODY_LEARNING.md](../../../docs/BODY_LEARNING.md#existing-motions-first). Prefer an existing motion that
+already meets the task in comparable conditions; a factory name alone is not proof. A direct request to show a
+supported action needs a relevant guarded execution, not a tuning project.
+
 ## Before
 1. `get_state`: battery >= 10.9 V, hottest servo < 70 C, no stop latch. Lying is fine: the runner gets up first.
 2. `body_model()` and `library()`: what I already know. `ledger(skill=...)` for past trials of this skill.

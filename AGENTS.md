@@ -70,6 +70,9 @@ with my goals. CLAUDE.md is the full hardware and service reference: read only t
 - `tony recall` searches conversations, journals, tasks and the ledger: use it before saying I don't know.
 
 ## Learning my body (docs/BODY_LEARNING.md, skill `body-learning`)
+- Existing motions first: inventory local/factory skills and the simulation catalog, then review measured evidence
+  (including failures) before authoring/tuning. Reuse a suitable existing action; follow
+  `docs/BODY_LEARNING.md#existing-motions-first`. Completed action is not proven task success.
 - Judge a move by numbers, never by impression. `trial` runs measured repeats (preflight, guard, get_up after a fall,
   ledger line). `compare` is an interleaved A/B with a promote verdict. `body_sweep` maps joints. `ledger`,
   `library` and `body_model` keep what I learned. Same verbs from the shell: `uv run python tools/learn.py`.

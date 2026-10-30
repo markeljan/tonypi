@@ -5,6 +5,11 @@ description: 'Make an existing gait or move better (steadier, faster, straighter
 
 # Gait tuning
 
+## Review existing options first
+Follow [the inventory and evidence review](../../../docs/BODY_LEARNING.md#existing-motions-first) before
+creating frames or tuning parameters. Reuse an adequate measured or factory motion first; author/tune only when
+its measured shortfall, lack of a suitable supported action, or the owner's explicit request calls for it.
+
 ## Baseline
 1. `library()` and `ledger(skill=...)`: maybe it's already measured.
 2. `trial(skill="<skill>", count=1, trials=3, objective=...)` plus `trial(skill, count=3, trials=1)` from a settled

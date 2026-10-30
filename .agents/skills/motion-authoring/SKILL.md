@@ -8,6 +8,11 @@ description: 'Create a move I don''t have yet (a gesture, jumping jack, high ste
 Loop: draft -> trial with a guard -> read the numbers (and the phone contact sheet) -> change one thing -> save.
 Expect 2-4 rounds. A fall during a trial is information, not a reason to stop.
 
+## Review existing options first
+Follow [the inventory and evidence review](../../../docs/BODY_LEARNING.md#existing-motions-first) before
+creating frames or tuning parameters. Reuse an adequate measured or factory motion first; author/tune only when
+its measured shortfall, lack of a suitable supported action, or the owner's explicit request calls for it.
+
 ## 1. Start from something close
 `list_skills`, `list_motions`, then `get_motion` of the nearest default (`wave`, `both_arms_up`, `squat`,
 `left_move`, `climb_stairs`, `left_shot`...). Joint table, stand pose and mirror rules: `data/motions/AGENTS.md`.

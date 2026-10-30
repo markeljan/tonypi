@@ -17,6 +17,38 @@ How Tony learns and improves movement. Replaces the procedure in `docs/BODY_EXPE
 - Today's lesson (2026-10-30): +-10-count joint jiggles, one LLM turn each, produced nothing. Sweeps of +-150 counts
   and batches of scored trials do.
 
+## Existing motions first
+Before authoring or tuning, and when choosing an action for a task:
+1. Define the actual outcome: showing an action, turning a measured angle, crossing an edge, or holding balance.
+   Do not silently turn a request to demonstrate a built-in action into a development project.
+2. Inventory `list_skills()` and `list_motions()` (local/factory), plus `simulation_catalog()` for supported
+   PAB47/TonyPi actions. Inspect the nearest candidate with `get_motion`; check catalog support reasons before
+   assuming an upstream action is executable. Use the `tonypi-simulation` skill for imported actions.
+3. Review `library()`, `ledger(skill=...)`, relevant `get_job` records and `tony recall <task or motion>`.
+   Match exact variant, count, starting pose, surface/obstacle and objective; include failures and recent
+   contradictory results. Rank comparable measured task success first (factory or custom), then suitable factory
+   actions with limited evidence, then unmeasured modified/custom candidates. Do not treat a factory label as a reliability rating.
+4. Use an adequate existing option first. With body authorization, check state and surroundings using sensors,
+   then test only relevant candidates with a guard (gaits 40 degrees, balance/new poses 30), stable finish and
+   observation suited to the outcome. No exhaustive action sweep for an unrelated task. For a demonstration,
+   one guarded execution may answer the request; for reliability, use 3–5 measured trials. Simulation requested
+   or needed for a candidate comes before its authorized hardware test and remains model-only evidence.
+5. Author or tune only after identifying the missing capability or measured shortfall, or when explicitly asked
+   for a new action. Reuse stable segments of the nearest action and state the hypothesis before the next batch.
+
+Report evidence at its actual level: **available**, **simulation passed**, **hardware action completed**, or
+**measured task success** (criteria, conditions, successes/trials, falls and job/experiment IDs). A done job and
+upright finish do not prove stair ascent, foot clearance, rug crossing, distance or repeatable reliability.
+Use gyro for heading and validated phone tracking for distance; post-move images can support obstacle/foot
+observations but cannot establish distance. Missing or conflicting evidence stays unverified.
+
+### Stair evidence, 2026-10-30
+The requested built-in `climb_stairs` demonstration is associated with job 327 (`_play`, 13 frames, 8.3 s inputs):
+done, peak tilt 24.8 degrees, end tilt 3.5 degrees, lying false. This establishes one upright completion, not
+reliable stair climbing or rug crossing. Task 1030-t2's journal records **a modified half-amplitude stair
+candidate**, not the identical factory action, falling 3/3 (jobs 154/157/160) at the later weight transfer.
+Keep those variants distinct; neither result erases the other. Rug crossing remains unverified.
+
 ## Tools
 | MCP (`tonypi`) | Shell (`uv run python tools/learn.py ...`) | What |
 |---|---|---|
