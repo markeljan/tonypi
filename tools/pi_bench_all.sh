@@ -80,6 +80,10 @@ case $MODE in
     tether_reset; TIMEOUT=200 b E1 "walk to the door" "@180" "stop"
     tether_reset; TIMEOUT=200 b E3 "do a jumping jack" "@180" "stop"
     ;;
+  e3)  # authoring dry run only
+    start_front TONYPI_X=1
+    TIMEOUT=200 b E3 "do a jumping jack" "@180" "stop"
+    ;;
   getup)  # a body move while lying gets up first
     start_front TONYPI_X=1
     b G2 "lie down"
