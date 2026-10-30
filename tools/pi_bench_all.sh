@@ -67,9 +67,9 @@ case $MODE in
     b S1 "turn left 2 steps"
     sleep 5
     ;;
-  gait)  # the brain tunes turn_left. ONLY with a person watching, ready to catch Tony (they confirm first)
+  gait)  # T9: the brain tunes turn_left (owner: no spotter needed, falls are fine; the fall reflex gets him up)
     start_front TONYPI_X=1
-    TIMEOUT=900 b G1 "Improve your turn_left so you are steadier: all three falls today happened during turns. Someone is watching and ready to catch you, and you're on the floor. Follow your gait tuning instructions. Save your versions with the _pi suffix (never over turn_left) and tell me the numbers before and after."
+    TIMEOUT=900 b G1 "Improve your turn_left so you are steadier: all three falls today happened during turns. You're on the floor; falls are OK, you get back up. Follow your gait tuning instructions. Save your versions with the _pi suffix (never over turn_left) and tell me the numbers before and after."
     ;;
   steer)
     start_front TONYPI_X=1

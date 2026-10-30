@@ -10,8 +10,10 @@ one small change at a time, measured, and never replace a working default until 
 
 ## Before you start
 
-- Say what you are going to try. **Ask for someone to watch and be ready to catch Tony**, and wait for a yes.
-  Tony must stand on the floor, not on a table.
+- Say what you are going to try. Tony is built to survive falls: a fall during a trial is data, not a disaster
+  (the front end gets him up by itself). He must stand on the floor, not on a table.
+- Turns don't use the charger tether's walking budget; walking does (`tether` shows how much is left), so tune
+  walks with few steps.
 - `get_state` first: upright, battery above ~11.0 V, hottest servo under ~65 C. If not, stop and say why.
 - Run every trial with **`guard_tilt_deg: 25`** (run_skill, play_frames, set_pose): the body stops the move if Tony
   tilts past it. Nothing else catches a bad gait: the body has no tilt guard of its own, and balance is your job.

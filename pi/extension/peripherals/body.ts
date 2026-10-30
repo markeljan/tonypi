@@ -135,7 +135,15 @@ export default async function body(pi: ExtensionAPI) {
       let tilt: number | null = null;
       if (!NO_SETTLE.test(skill)) moved = true;
       for (let i = 0; i < (stepped ? count : 1); i++) {
-        const r = await job(() => tonyd.run(skill, stepped ? 1 : Math.min(count, 5), o), ctx, signal, stepped);
+        let r: Awaited<ReturnType<typeof job>>;
+        try {
+          r = await job(() => tonyd.run(skill, stepped ? 1 : Math.min(count, 5), o), ctx, signal, stepped);
+        } catch (e) {  // refused mid-way (e.g. the charger tether's step budget): report what got done
+          if (!done) throw e;
+          why = `the body refused: ${(e as Error).message}`;
+          state = "failed";
+          break;
+        }
         said.push(...r.job.said);
         state = r.job.state;
         if (r.job.max_tilt_deg != null) tilt = Math.max(tilt ?? 0, r.job.max_tilt_deg);

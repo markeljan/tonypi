@@ -18,10 +18,25 @@ export function summary(st: any): string {
   parts.push(st.busy ? `busy with ${st.job?.skill}` : "idle");
   parts.push(`camera ${st.camera?.ok ? "ok" : "not working"}`);
   parts.push(`head pan ${st.head_deg?.pan}, tilt ${st.head_deg?.tilt}`);
+  if (st.tether?.on) parts.push(`tethered to the charger: ${st.tether.walked} of ${st.tether.max_steps} walking steps used`);
   return parts.join("; ");
 }
 
 export default function sensors(pi: ExtensionAPI) {
+  pi.registerTool(defineTool({
+    name: "tether",
+    label: "Tether",
+    description: "Charging-cable tether. While on, walking (walk_*, side steps, any skill with walk in its name) may "
+      + "use at most max_steps steps in total so the cable isn't dragged; turns don't count. No arguments = read it. "
+      + "reset=true after walking back to the charger; on=false only when someone says Tony is unplugged.",
+    parameters: Type.Object({ on: Type.Optional(Type.Boolean()), max_steps: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+      reset: Type.Optional(Type.Boolean()) }),
+    async execute(_id, { on, max_steps, reset = false }) {
+      const t = (await tonyd.call("tether", { on, max_steps, reset })).tether;
+      return { content: [{ type: "text", text: JSON.stringify(t) }], details: t };
+    },
+  }));
+
   pi.registerTool(defineTool({
     name: "get_state",
     label: "State",
