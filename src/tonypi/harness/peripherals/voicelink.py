@@ -101,6 +101,8 @@ class VoiceLink:
         ev = msg.get("event")
         if ev == "heard":
             self.on_heard(int(msg["id"]), str(msg.get("text", "")))
+        elif ev == "transcript":  # what GPT-Live heard (informational)
+            log.info("voice transcript: %s", msg.get("text"))
         elif ev == "barge_in":
             if self.on_barge_in:
                 self.on_barge_in()

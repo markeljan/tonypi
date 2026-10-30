@@ -48,7 +48,7 @@ def wait_attached(name: str = "own", timeout: float = 60) -> dict:
 
 def run(category: str, text: str, timeout: float = 420) -> dict:
     wav = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
-    subprocess.run(["espeak-ng", "-s", "140", "-w", wav, f"Tony, {text}"], check=True)
+    subprocess.run(["espeak-ng", "-s", "125", "-w", wav, f"Hey Tony. Please {text}."], check=True)
     h = socket.socket(socket.AF_UNIX)
     h.connect(HARNESS)
     events = h.makefile("r")
@@ -74,6 +74,7 @@ def run(category: str, text: str, timeout: float = 420) -> dict:
 
 if __name__ == "__main__":
     print("voice:", wait_attached(), flush=True)
+    time.sleep(8)  # let the GPT-Live session settle before the first request
     a = sys.argv[1:]
     for cat, text in zip(a[::2], a[1::2]):
         print(json.dumps(run(cat, text)), flush=True)
