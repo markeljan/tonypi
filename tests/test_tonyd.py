@@ -256,6 +256,10 @@ def test_user_motion_and_skill_round_trip(robot):
     assert r["frames"] == 2 and not r["overrides_default"]
     assert any(m["name"] == "my_step" and m["source"] == "user" for m in c.call("motions")["motions"])
     assert c.call("motion_get", name="my_step")["frames"] == STEP
+    # a factory motion copied verbatim (it carries the absent grippers 17/18) saves fine
+    wave = c.call("motion_get", name="wave")["frames"]
+    assert any("17" in f["pos"] for f in wave)
+    assert c.call("motion_save", name="my_wave", frames=wave)["frames"] == len(wave)
     with pytest.raises(TonydError, match="no motion"):
         c.call("skill_save", name="shuffle", motions=["nope"])
     c.call("skill_save", name="shuffle", motions=["*my_step"], description="shuffle forward")
