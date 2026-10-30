@@ -150,9 +150,13 @@ class Conversation:
 
 # How a request that didn't come through GPT-Live reached the brain (voice.sock "text" op, by its source).
 SOURCE_LABELS = {
-    "phone_mic": "Source: heard by Tony's iPhone microphone (speech recognition, may contain mistakes), not by the voice",
+    "phone_mic": "Source: heard by Tony's iPhone on its stand (companion mode; its speech recognition may contain "
+                 "mistakes). Tony's own mic heard no speech around then, so this is not a copy of a voice request",
     "phone_app": "Source: typed in Tony's iPhone app (not spoken)",
 }
+# A companion phone and Tony's own mic often hear the same words: a phone_mic request is dropped if Tony's mic heard
+# user speech from PHONE_ECHO_S before it arrived until PHONE_WAIT_S after (by then GPT-Live has its own copy).
+PHONE_ECHO_S, PHONE_WAIT_S = 8.0, 2.5
 
 
 class LiveBrain(Live):
@@ -175,6 +179,7 @@ class LiveBrain(Live):
         self.l_turn_input = ""
         self.last_delegation: tuple[str, str] | None = None
         self.last_delegation_t = 0.0
+        self.last_user_speech_t = 0.0  # Tony's own mic: last user transcript piece
         self._utt = {"user": [], "assistant": []}
 
     # ---- thread L ------------------------------------------------------------------------------------------
@@ -266,13 +271,20 @@ class LiveBrain(Live):
 
     async def send_text(self, text: str, source: str = "typed") -> dict:
         """A typed request: a new turn on L, or a steer of the running one (the same as a spoken correction)."""
+        if source == "phone_mic":
+            arrived = time.monotonic()
+            await asyncio.sleep(PHONE_WAIT_S)
+            if self.last_user_speech_t >= arrived - PHONE_ECHO_S:
+                log.info("phone_mic %r dropped: Tony's own mic heard the user too", text)
+                return {"dropped": "Tony's own microphone heard the user at the same time; the voice has it"}
         self.convo.add("user", text, source=source)
         inp = [{"type": "text", "text": text}]
         label = SOURCE_LABELS.get(source, f"Source: {source} in the app (not spoken)")
         ctx = {"source": {"kind": "application", "value": label}}
         if self.l_turn:
             try:
-                await self._rpc("turn/steer", {"threadId": self.tid, "expectedTurnId": self.l_turn, "input": inp})
+                await self._rpc("turn/steer", {"threadId": self.tid, "expectedTurnId": self.l_turn, "input": inp,
+                                               "additionalContext": ctx})
                 return {"steered": self.l_turn}
             except Exception as e:
                 log.info("steer failed (%s): starting a turn", e)
@@ -308,6 +320,7 @@ class LiveBrain(Live):
             return True
         if typ == "input_transcript.added":
             self._utt["user"].append(item.get("text", ""))
+            self.last_user_speech_t = time.monotonic()
             return False  # the Hub's transcript reflexes (stop, switch) still run
         if typ == "output_transcript.added":
             self._utt["assistant"].append(item.get("text", ""))

@@ -94,3 +94,39 @@ def test_bare_stop_stops_the_body_without_any_model(monkeypatch):
         return w.lines
     lines = asyncio.run(run())
     assert stopped == [1] and any(l.get("text") == "stop" and l.get("stopped_body") for l in lines)
+
+
+def test_phone_mic_requests_are_dropped_when_tonys_own_mic_heard_the_user(monkeypatch):
+    """A companion phone and Tony's mic often hear the same words; the voice already has its copy. Requests the phone
+    alone heard go to the brain labelled, also when they steer a running turn."""
+    import time
+
+    from tonypi.voice import live
+
+    monkeypatch.setattr(live, "PHONE_WAIT_S", 0.0)
+    brain = object.__new__(live.LiveBrain)
+    calls, logged = [], []
+    brain.convo = type("C", (), {"add": lambda self, role, text, source=None: logged.append((text, source))})()
+    brain.tid, brain.l_turn = "L", None
+
+    async def rpc(method, params, timeout=None):
+        calls.append((method, params))
+        return {"turn": {"id": "T1"}}
+    brain._rpc = rpc
+
+    async def go():
+        brain.last_user_speech_t = time.monotonic() - 1.0  # Tony's mic heard speech a second ago
+        r = await brain.send_text("tony walk forward to steps", "phone_mic")
+        assert "dropped" in r and not calls and not logged
+
+        brain.last_user_speech_t = time.monotonic() - 60.0  # only the phone heard it
+        assert await brain.send_text("tony wave", "phone_mic") == {"turn": "T1"}
+        method, params = calls[-1]
+        assert method == "turn/start" and "iPhone" in params["additionalContext"]["source"]["value"]
+
+        brain.l_turn = "T1"  # a running turn is steered, with the same label
+        assert await brain.send_text("the other arm", "phone_mic") == {"steered": "T1"}
+        method, params = calls[-1]
+        assert method == "turn/steer" and "iPhone" in params["additionalContext"]["source"]["value"]
+        assert [s for _, s in logged] == ["phone_mic", "phone_mic"]
+    asyncio.run(go())

@@ -136,7 +136,11 @@ camera. Tools: camera, LiDAR depth/obstacles, detection, on-phone LFM3 (`phone_l
 and `phone_mode` mounted (on Tony) / companion (on a stand watching Tony: `phone_track`, `phone_record_jobs`,
 `phone_episode_review`, the observer for docs/BODY_EXPERIMENTS.md). It never moves Tony: on tonyd.sock it only
 subscribes, reads state/skills/joints (≈2 Hz while recording) and sends plain `stop` (no latch); on voice.sock `say`
-and, in companion mode only, `text` with source `phone_mic` (heard by the phone) or `phone_app` (typed).
+and, in companion mode only, commands the phone heard as `text` with source `phone_mic` (`phone_app` = typed is
+reserved; the bridge doesn't send it yet). live.py drops a `phone_mic` request when Tony's own mic heard the user within
+8 s before to 2.5 s after it (same words, GPT-Live already has them), and labels the rest for the brain, also on steers.
+Phone speech does not clear the stop latch (only Tony's own mic does). Codex connects to the phone MCP when the voice
+starts and doesn't retry: if the bridge was down then, `sudo systemctl restart tonypi-voice` once it is up.
 
 ## Agent (live: `tonypi-agent.service`, since 2026-10-28)
 `src/tonypi/agent/` — voice + terminal front end. Owns the mic and speaker; every move goes through tonyd (`body_link.py`).
