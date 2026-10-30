@@ -49,10 +49,11 @@ FATAL_HTTP = {401, 402, 403}
 # shape, prints a photo as base64 text (~15k tokens) and calls snapshot again
 EXEC_NOTE = """
 
-Calling tools: inside exec, `const r = await tools.snapshot({})` (any tool) returns
-{success, contentItems: [{type: "inputText", text}, {type: "inputImage", imageUrl}]}. Show text with text(item.text)
-and look at a photo with image(item.imageUrl). Never print image data as text. Call tools one after another (await
-each) when order matters, e.g. look, then snapshot."""
+Calling tools: inside exec, every tool returns one string: its text, and each photo on its own line as a
+data:image/jpeg;base64,... URL. Use exactly this to see photos (never print image data as text):
+  const r = await tools.snapshot({});
+  for (const l of r.split("\\n")) l.startsWith("data:image") ? image(l) : text(l);
+Await tools one after another when order matters (look, then snapshot)."""
 TRACE = int(os.environ.get("TONYPI_CODEX_TRACE", "0"))  # log raw incoming lines, cut to this many chars
 
 
