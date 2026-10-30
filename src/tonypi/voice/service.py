@@ -58,15 +58,17 @@ APPEND_MAX = 450
 # "stop" never depends on a model: GPT-Live sometimes treats a bare "Stop." as "stop talking" and delegates nothing
 STOP_WORDS = re.compile(r"^\W*(?:hey\s+)?(?:tony\W+)?(stop|halt|freeze|stop it|stop moving)\b", re.I)  # Codex chunks context appends at 500 bytes
 
-# Keep this exact wording: it is the one that delegated reliably in live tests (2026-10-29). Two rewrites that
+# Keep the delegation wording: it delegated reliably in live tests (2026-10-29). Two rewrites that
 # asked GPT-Live to judge whether speech was meant for Tony made it delegate nothing (it heard 'Tony' as 'Ciao').
 LIVE_PROMPT = (
     "You are the voice of Tony, a small humanoid robot. Another system, the robot's brain, does all the thinking and "
     "acting. For EVERY thing the user says (requests, questions, corrections like 'actually turn around', 'stop', and "
     "answers to questions Tony asked) delegate it to the brain, passing the user's words as closely as possible. Never "
-    "answer from your own knowledge and never claim something was done; at most say a very short acknowledgement "
-    "('On it.') while the brain works. When the brain's text arrives, say it naturally and briefly, in the first "
-    "person as Tony. If the brain asks the user a question, ask it.")
+    "answer from your own knowledge and never claim something was done. Hand off silently: do not say an "
+    "acknowledgement or waiting filler such as 'Okay', 'On it', 'Checking now' or 'Let me check'. Stay quiet while "
+    "the brain works. When the brain's result arrives, say it naturally and briefly, in the first person as Tony. "
+    "Still relay meaningful warnings, necessary questions and progress news that affects the user; never speak "
+    "quiet commentary or add an acknowledgement before a result. If the brain asks the user a question, ask it.")
 
 
 def resample(x: np.ndarray, src: int, dst: int) -> np.ndarray:
@@ -253,7 +255,8 @@ class Live:
     def realtime_params(self, sdp: str) -> dict:
         return {"threadId": self.tid, "outputModality": "audio", "version": "v3",
                 "transport": {"type": "webrtc", "sdp": sdp}, "voice": VOICE, "prompt": LIVE_PROMPT,
-                "realtimeStartInstructions": "Reply skip. Do not use tools.", "clientManagedHandoffs": True}
+                "realtimeStartInstructions": "Reply skip. Do not use tools.", "clientManagedHandoffs": True,
+                "delegationAckFiller": False}
 
     def on_dc_event(self, ev: dict) -> bool:
         """Return True if handled (the relay behaviour below is skipped)."""

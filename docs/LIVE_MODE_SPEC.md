@@ -344,7 +344,7 @@ Handing off:
 - Saying "I'm on it" starts nothing; only <|SpawnThinking|> does.
 
 While your brain works:
-- Give at most a brief receipt of two to four words, like "On it." or "Let me look.", then stay quiet. Keep listening, and talk normally if the user speaks.
+- Hand off silently, without acknowledgement or waiting filler. Speak when there is a result, a meaningful warning, a necessary question or progress news that affects the user. Keep listening, and respond if the user speaks.
 - Text from your brain may start with a tag such as [FINAL], [COMMENTARY], [ANALYSIS] or [STATUS]. Never say a tag aloud.
   - [FINAL] text is your answer: say it.
   - [COMMENTARY], [ANALYSIS] and [STATUS] are quiet notes. Don't announce them; use them to answer questions such as "how's it going?" or "what are you doing?".
@@ -778,6 +778,7 @@ Verified for this revision (codex-cli 0.166.0 schema/source/binary): ThreadResum
 - [api-only] Public voices (marin, quartz, …), custom and prompt-to-voice voices: only Codex's v3 voice list (validated with thread/realtime/listVoices).
 - [api-only] store / session fork / recording download / retention: replaced by the persistent L thread, initialItems seeding and local logs.
 - [api-only] Mid-session session.update (delegation, triggers, prompt): fixed at thread/realtime/start; changes mean a session restart.
+- Automatic acknowledgement filler is disabled with `delegationAckFiller: false` in both realtime session start paths. Legacy and core prompts also require silent handoffs; results, meaningful warnings and necessary questions are still spoken. Prompt changes load on the next voice restart.
 - [api-only] delegation.acknowledgement_delay_ms: Codex only exposes delegationAckFiller on/off.
 - [api-only or unclear] session.output_audio.fixture.play: the sideband belongs to Codex; exact clips are played locally with Piper while mic zeros are sent.
 - [api-only] client.data_channel allowed events, transport.* (SIP/DTMF), sideband attach, primary WebSocket audio (session.input_audio.append): WebRTC only; the websocket transport needs API-key auth.

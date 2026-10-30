@@ -237,6 +237,7 @@ class LiveBrain(Live):
             "transport": {"type": "webrtc", "sdp": sdp}, "voice": VOICE, "prompt": live_prompt(),
             "includeStartupContext": False, "initialItems": self._initial_items(),
             "clientManagedHandoffs": False, "codexResponseHandoffMode": "bemTags", "backendReasoningStatus": True,
+            "delegationAckFiller": False,
             "flushTranscriptTailOnSessionEnd": True,
             "realtimeStartInstructions": _text("codex_realtime_start.md"),
             "realtimeEndInstructions": _text("codex_realtime_end.md"),

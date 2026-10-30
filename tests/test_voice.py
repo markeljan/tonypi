@@ -4,6 +4,20 @@ import json
 from tonypi.voice import service
 
 
+def test_realtime_sessions_disable_automatic_acknowledgement_filler(monkeypatch):
+    from tonypi.voice import live
+
+    # Exercise both actual session-start builders without opening audio, sockets or files.
+    for cls in (service.Live, live.LiveBrain):
+        session = object.__new__(cls)
+        session.tid = "test-thread"
+        if cls is live.LiveBrain:
+            monkeypatch.setattr(cls, "_initial_items", lambda self: [])
+        params = session.realtime_params("test-sdp")
+        assert params["delegationAckFiller"] is False
+        assert params["clientManagedHandoffs"] is (cls is service.Live)
+
+
 class _Writer:
     def __init__(self):
         self.lines = []
