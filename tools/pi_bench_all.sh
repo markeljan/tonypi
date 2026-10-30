@@ -74,6 +74,12 @@ case $MODE in
     tether_reset; TIMEOUT=200 b E2 "find the black office chair" "@180" "stop"
     tether_reset; TIMEOUT=200 b E3 "do a jumping jack" "@180" "stop"
     ;;
+  e2e-rerun)  # E1 + E3 again: the first dry run was disturbed by another harness's driver (23:29-23:30)
+    start_front TONYPI_X=1
+    tether_reset() { $PY -c "from tonypi.tonyd.client import TonydClient as T; print('tether', T().call('tether', reset=True)['tether'])"; }
+    tether_reset; TIMEOUT=200 b E1 "walk to the door" "@180" "stop"
+    tether_reset; TIMEOUT=200 b E3 "do a jumping jack" "@180" "stop"
+    ;;
   getup)  # a body move while lying gets up first
     start_front TONYPI_X=1
     b G2 "lie down"
