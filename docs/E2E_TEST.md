@@ -7,13 +7,20 @@ the same three tasks from the same starting point; the owner times them and judg
 - **Full control, every peripheral**: camera (photo, scan, short video/frame burst), head, all body skills, its own
   keyframes/poses, saved motions and skills, calibration, IMU state (`tilt_deg`, `lying`, `heading_deg`, per-job
   `yaw_deg` / `max_tilt_deg`), battery/temps, speaker and mic, the walking tether.
-- **Voice through GPT-Live-1** (see the integration brief from M1), with typed input as well. Text-only fallback if
+- **Voice through GPT-Live-1** via the shared `tonypi-voice` peripheral (docs/GPT_LIVE.md), with typed input as well. Text-only fallback if
   the live session drops; the local LFM3 stays the offline fallback only.
 - **Self-learning**: creates new motions and skills when it lacks one (e.g. a gait, a gesture), keeps what works
   (saved under its own suffix), and gets better over attempts.
 - **Overcomes failure, keeps going until success**: a failed step, a fall, a lost target or a refused walk is a
   reason to try another way (get up, turn, re-scan, write a new motion), not to stop. It stops only on success, on
   "stop", or when it has truly run out of options (then it says what it tried and what it needs).
+- **Stalls and repeated failures → gather data, then a new idea** (owner, 2026-10-29: a harness kept failing to step
+  up onto the rug). After 2 failed tries of the same thing, stop repeating it: collect data (look down at the feet,
+  `video` while trying, compare `yaw_deg`/`max_tilt_deg`, `get_joints`), say what's wrong, and try something
+  different, outside the box if needed: e.g. author a high-step motion that lifts the foot enough to clear the rug
+  edge, approach at another angle, side-step, back up. Save what works as a skill and write the lesson down.
+- **Ask the human out loud when stuck**: "I'm stuck at the rug edge, what should I do?" / "What's going on?" via the
+  voice service's `ask`, then use the answer. Asking is fine; giving up silently is not.
 - **Updates itself on request and by itself**: "learn X", "improve Y", "fix how you do Z" changes its own skills,
   prompts or harness code, and it can do that unasked after a failure. Changes persist and take effect without a
   manual restart where possible (hot reload), and are committed on its branch.
