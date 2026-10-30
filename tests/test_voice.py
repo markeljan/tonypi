@@ -83,6 +83,27 @@ def test_realtime_sessions_disable_automatic_acknowledgement_filler(monkeypatch)
         assert params["prompt"]
 
 
+def test_realtime_reader_distinguishes_requested_closure_from_errors(caplog):
+    async def run(method, params):
+        session = service.Live(type("Hub", (), {"audio": None})())
+        stream = asyncio.StreamReader()
+        stream.feed_data((json.dumps({"method": method, "params": params}) + "\n").encode())
+        stream.feed_eof()
+        session.proc = type("Proc", (), {"stdout": stream})()
+        await session._reader(asyncio.Queue())
+        assert session.voice_closed.is_set()
+        assert session.closed.is_set()
+
+    import logging
+    caplog.set_level(logging.INFO, logger=service.log.name)
+    asyncio.run(run("thread/realtime/closed", {"reason": "requested"}))
+    assert caplog.records[-1].levelno == logging.INFO
+    asyncio.run(run("thread/realtime/closed", {"reason": "disconnected"}))
+    assert caplog.records[-1].levelno == logging.WARNING
+    asyncio.run(run("thread/realtime/error", {"reason": "requested"}))
+    assert caplog.records[-1].levelno == logging.WARNING
+
+
 def test_live_mode_is_the_default():
     assert service.VOICE_MODE == os.environ.get("TONYPI_VOICE_MODE", "live")
 

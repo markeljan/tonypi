@@ -313,7 +313,9 @@ class Live:
             if meth == "thread/realtime/sdp":
                 await sdp_q.put(m["params"]["sdp"])
             elif meth in ("thread/realtime/closed", "thread/realtime/error"):
-                log.warning("%s %s", meth, json.dumps(m.get("params"))[:300])
+                params = m.get("params") or {}
+                log_fn = log.info if meth == "thread/realtime/closed" and params.get("reason") == "requested" else log.warning
+                log_fn("%s %s", meth, json.dumps(params)[:300])
                 self.voice_closed.set()
             else:
                 if (meth == "thread/realtime/item/started"
