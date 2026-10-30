@@ -98,7 +98,8 @@ export async function job(start: () => Promise<tonyd.Job>, ctx: ExtensionContext
 
 /** Short job summary for the model: state, time, how far Tony leaned, what the body said. */
 export function describe(label: string, j: tonyd.Job, why: string | null, secs: string): string {
-  let msg = `${label}: ${j.state} (${secs} s${j.max_tilt_deg != null ? `, max tilt ${j.max_tilt_deg.toFixed(1)} deg` : ""})`;
+  let msg = `${label}: ${j.state} (${secs} s${j.max_tilt_deg != null ? `, max tilt ${j.max_tilt_deg.toFixed(1)} deg` : ""}`
+    + `${j.yaw_deg != null ? `, turned ${j.yaw_deg.toFixed(1)} deg` : ""})`;
   if (why && j.state !== "done") msg += `; stopped because ${why}`;
   else if (j.state === "failed") msg += `; the body refused or aborted it${j.error ? ` (${j.error})` : ""}`;
   if (j.said.length) msg += `. Body said: ${j.said.join(" ")}`;
@@ -152,6 +153,8 @@ export default async function body(pi: ExtensionAPI) {
       let why: string | null = null;
       let state = "done";
       let tilt: number | null = null;
+      let yaw: number | null = null;
+      const yaws: number[] = [];
       for (let i = 0; i < (stepped ? count : 1); i++) {
         if (skill.includes("turn") && turnSteps >= TURN_BUDGET) {
           why = `the benchmark's budget of ${TURN_BUDGET} turn steps is used up`;
@@ -172,18 +175,20 @@ export default async function body(pi: ExtensionAPI) {
         said.push(...r.job.said);
         state = r.job.state;
         if (r.job.max_tilt_deg != null) tilt = Math.max(tilt ?? 0, r.job.max_tilt_deg);
+        if (r.job.yaw_deg != null) { yaw = (yaw ?? 0) + r.job.yaw_deg; yaws.push(r.job.yaw_deg); }
         if (r.job.state === "done") done += stepped ? 1 : count;
         why = r.why ?? (r.job.state === "done" ? interruption(ctx, signal) : null);
         if (r.job.state !== "done" || why) break;
       }
       const secs = ((Date.now() - t0) / 1000).toFixed(1);
-      const tiltS = tilt != null ? `, max tilt ${tilt.toFixed(1)} deg` : "";
+      const tiltS = (tilt != null ? `, max tilt ${tilt.toFixed(1)} deg` : "")
+        + (yaw != null ? `, turned ${yaw.toFixed(1)} deg (+ = left${yaws.length > 1 ? `; per step ${yaws.map((y) => y.toFixed(1)).join(", ")}` : ""})` : "");
       let msg = stepped ? `${skill}: ${done} of ${count} steps done (${secs} s${tiltS})` : `${skill}: ${state} (${secs} s${tiltS})`;
       if (why && (done < count || state !== "done")) msg += `; stopped because ${why}`;
       else if (state === "failed") msg += "; the body refused or aborted it";
       if (said.length) msg += `. Body said: ${said.join(" ")}`;
       if (notes.length) msg = `${notes.join("; ")}. ${msg}`;
-      return text(msg + ".", { skill, done, of: count, state, why, said, max_tilt_deg: tilt });
+      return text(msg + ".", { skill, done, of: count, state, why, said, max_tilt_deg: tilt, yaw_deg: yaw });
     },
   }));
 

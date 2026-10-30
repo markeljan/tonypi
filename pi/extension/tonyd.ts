@@ -48,6 +48,7 @@ export interface Job {
   error: string | null;
   seconds: number | null;
   max_tilt_deg: number | null;
+  yaw_deg?: number | null;  // gyro heading change during the job, + = left (checked against the camera within ~1 deg)
 }
 
 /** Per job: hold_s keeps the end pose with torque on (else tonyd goes limp 1.5 s after the job, in whatever pose);
