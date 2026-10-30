@@ -37,7 +37,7 @@ class _Body:
         self.studio = Studio(Path(tempfile.mkdtemp()), default_skills=DEFAULT_SKILLS)
         self.max_tilt, self.torqued = 3.0, []
 
-    def play_frames(self, frames, say):
+    def play_frames(self, frames, say, guard_tilt=None):
         self.ran.append(("_play", len(frames)))
         return not self.cancelled.wait(self.seconds)
 
@@ -53,7 +53,7 @@ class _Body:
     def cancel(self):
         self.cancelled.set()
 
-    def run(self, skill, count, say):
+    def run(self, skill, count, say, guard_tilt=None):
         self.ran.append((skill, count))
         if skill == "squat":
             say("My left knee is too hot, at 82 degrees. I need to cool down first.")
@@ -150,29 +150,23 @@ def test_watchdog_check_waits_for_the_idle_delay(robot, monkeypatch):
     assert d.body.relaxed > before
 
 
-def test_settles_before_going_limp_after_body_moves(robot, monkeypatch):
-    """Going limp in a walk/turn end pose and starting the next step from it put Tony on his back."""
+def test_no_automatic_settle_falls_are_the_brains_job(robot, monkeypatch):
+    """tonyd neither stands Tony up nor settles him: it only goes limp after the idle delay (owner's direction)."""
     monkeypatch.setattr(server, "IDLE_RELAX_S", 0.1)
     d, c = robot
     c.run("turn_left")
     time.sleep(0.6)
-    assert d.body.ran == [("turn_left", 1), ("settle", 1)] and d.body.relaxed >= 1
-    d.body.ran.clear()
-    c.run("nod")  # head only: no settle
-    c.run("settle")  # already a stand: no second settle
-    time.sleep(0.6)
-    assert d.body.ran == [("nod", 1), ("settle", 1)]
+    assert d.body.ran == [("turn_left", 1)] and d.body.relaxed >= 1
 
 
-def test_no_settle_after_stop(robot, monkeypatch):
-    monkeypatch.setattr(server, "IDLE_RELAX_S", 0.1)
+def test_tilt_guard_is_opt_in_and_reaches_the_body(robot, monkeypatch):
     d, c = robot
-    d.body.seconds = 2
-    c.run("walk_forward", wait=False)
-    time.sleep(0.1)
-    c.stop()
-    time.sleep(0.6)
-    assert ("settle", 1) not in d.body.ran
+    seen = []
+    orig = d.body.run
+    d.body.run = lambda skill, count, say, guard_tilt=None: (seen.append(guard_tilt), orig(skill, count, say))[1]
+    c.run("wave")
+    c.call("run", skill="wave", wait=True, guard_tilt_deg=35)
+    assert seen == [None, 35.0]
 
 
 def test_head_is_clamped(robot):
@@ -222,13 +216,13 @@ def test_camera_missing_at_startup_is_announced():
 STEP = [{"ms": 300, "pos": {"4": 620, "12": 380}}, {"ms": 300, "pos": {"4": 600, "12": 400}}]
 
 
-def test_play_frames_runs_as_a_guarded_job_and_settles(robot, monkeypatch):
+def test_play_frames_runs_as_a_job(robot, monkeypatch):
     monkeypatch.setattr(server, "IDLE_RELAX_S", 0.1)
     d, c = robot
     job = c.play(STEP)
     assert job["skill"] == "_play" and job["state"] == "done" and job["max_tilt_deg"] == 3.0
     time.sleep(0.6)
-    assert d.body.ran == [("_play", 2), ("settle", 1)] and d.body.relaxed >= 1
+    assert d.body.ran == [("_play", 2)] and d.body.relaxed >= 1
 
 
 def test_pose_hold_keeps_torque_and_skips_settle(robot, monkeypatch):

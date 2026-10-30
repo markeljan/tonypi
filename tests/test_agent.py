@@ -104,7 +104,32 @@ def test_sleep_and_wake():
     assert body.run("sleep", 1, lambda s: None) and body.asleep
     assert ("torque", False) in body.board.calls
     assert body.run("wave", 1, lambda s: None) and not body.asleep
-    assert body.player.played == ["stand_up_back", "stand_slow", "wave"]
+    assert body.player.played == ["wave"]  # tonyd doesn't get up by itself: falls and sleep are the brain's call
+
+
+def test_voice_agent_gets_up_before_moving_when_lying():
+    """The voice agent is one such brain: BodyLink gets up first when Tony is lying and the skill moves the body."""
+    from tonypi.agent.body_link import BodyLink
+
+    class Tonyd:
+        def __init__(self, lying):
+            self.lying, self.ran = lying, []
+
+        def state(self, fresh=False):
+            return {"lying": self.lying}
+
+        def run(self, skill, count=1):
+            self.ran.append(skill)
+            if skill == "get_up":
+                self.lying = False
+            return {"state": "done", "said": []}
+
+    for lying, skill, expected in ((True, "wave", ["get_up", "wave"]), (False, "wave", ["wave"]),
+                                   (True, "look_left", ["look_left"])):
+        link = BodyLink.__new__(BodyLink)
+        link.cancelled, link.tonyd = __import__("threading").Event(), Tonyd(lying)
+        assert link.run(skill, 1, lambda s: None)
+        assert link.tonyd.ran == expected
 
 
 def test_sleep_relaxes_even_if_lying_down_fails():
