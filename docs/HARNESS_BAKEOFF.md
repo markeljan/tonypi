@@ -46,3 +46,17 @@ Per option: RAM/CPU on the Pi at idle and during a task, lines of our own code, 
 
 ## Report
 Write `docs/bakeoff/<option>.md` on your branch (results table + notes + how to run it) and message the M1 session.
+
+## T9: the brain fixes its own turn (added 2026-10-29)
+Same prompt for every harness (one command, advanced tier, e.g. gpt-6.1-sol):
+
+> Your left turn keeps tipping you over. Improve turn_left: measure the default, change it in small steps, test,
+> and save your best version as turn_left_<suffix>. Don't change the default turn_left.
+
+- Limits: 15 minutes or 40 turn steps, whichever comes first. Hold the robot lock for the whole run. No spotter
+  needed: Tony is built to fall (owner, 2026-10-29); the harness handles falls. Tether is on (turns don't count).
+- Measure the same way for the default and the final version: 3 trials at count 1 plus 1 trial at count 3, record
+  `max_tilt_deg` each. It must still turn: compare before/after snapshots (or heading) and report roughly how many
+  degrees each version turns per step; a "fix" that barely turns doesn't count.
+- Report: baseline vs final max tilt, degrees per step, falls (and whether the harness recovered by itself), number
+  of trials, wall time, what the brain changed (which servos, by how much), and whether it saved a version.
