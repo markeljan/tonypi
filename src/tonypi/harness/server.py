@@ -11,7 +11,8 @@ Socket protocol (same events as tonypi-agent, so tonypi-chat works with TONYPI_S
   <- {"type": "heard"|"thinking"|"action"|"tool_result"|"say"|"info"|"plan"|"usage"|"done"|"status", "t": ...}
 
 Environment: TONYPI_BRAIN (default codex,local; claude optional), TONYPI_PERIPHERALS (body,camera,voice,iphone),
-TONYPI_CODEX_MODEL, TONYPI_CODEX_EFFORT, TONYPI_STEER_MODE (cut|steer); Claude: CLAUDE_CODE_OAUTH_TOKEN in secrets.env.
+TONYPI_CODEX_TIER (auto|fast|multi|advanced), TONYPI_CODEX_FAST/MULTI/ADVANCED ("model:effort"), TONYPI_STEER_MODE
+(cut|steer), TONYPI_HARNESS_VOICE (stream|transcribe). Claude: CLAUDE_CODE_OAUTH_TOKEN in secrets.env.
 """
 
 from __future__ import annotations
@@ -65,8 +66,11 @@ class Frontend:
         self.listener = None
         if voice:
             from tonypi.agent.speech import Listener
+            # streaming speech-to-text only: the LFM3 second pass would load the shared llama-server, and a cloud
+            # brain copes with the odd misheard word (TONYPI_HARNESS_VOICE=transcribe brings it back)
             self.listener = Listener(self.speaker, lambda: self.emit("wake"),
-                                     lambda text, audio=None, recording=None: self._from_thread(text, "voice"))
+                                     lambda text, audio=None, recording=None: self._from_thread(text, "voice"),
+                                     mode=os.environ.get("TONYPI_HARNESS_VOICE", "stream"))
 
     # ---- events -----------------------------------------------------------------------------------------------
 

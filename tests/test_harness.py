@@ -261,6 +261,18 @@ def test_backend_order(monkeypatch):
     assert [b.name for b in backends.build()] == ["codex", "local"]
 
 
+def test_codex_tiers(monkeypatch):
+    from tonypi.harness.backends import codex
+    monkeypatch.setattr(codex, "FORCE_TIER", "auto")
+    assert codex.tier_for("wave") == "fast"
+    assert codex.tier_for("how's your battery and how hot are you?") == "multi"
+    assert codex.tier_for("walk forward 3 steps, then turn left") == "multi"
+    assert codex.tier_for("find the door and walk toward it") == "advanced"
+    assert codex.tier_for("wave", failed_before=True) == "advanced"
+    monkeypatch.setattr(codex, "FORCE_TIER", "fast")
+    assert codex.tier_for("find the door") == "fast"
+
+
 def test_claude_tool_results_carry_images():
     class H:
         async def call_tool(self, name, args, inject):

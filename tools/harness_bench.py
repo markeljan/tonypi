@@ -33,6 +33,8 @@ TASKS = {
     "T6": ("find the door and walk toward it", [(60.0, "stop")]),
 }
 TASKS["T8"] = ("find the door and walk toward it", [(15.0, "stop")])  # stop mid-task; T6 runs the full minute
+# T4 with the correction 1.5 s after the first step started (T4's fixed 2 s can land before the walk begins)
+TASKS["T4m"] = ("walk forward 3 steps, then turn left", [("move+1.5", "actually, turn right instead")])
 
 
 class Conn:
@@ -120,6 +122,9 @@ def run_task(c: Conn, tonyd: TonydClient, name: str, timeout: float) -> dict:
     rid = rid and rid.get("id")
     sent = []
     for delay, words in steps:
+        if isinstance(delay, str):  # "move+S": S seconds after the first move started
+            first = c.wait(lambda e: e["type"] == "action" and e.get("name") not in ("stop",), timeout, n0)
+            delay = (first["t"] - t0 if first else 0) + float(delay.split("+")[1])
         while time.time() < t0 + delay:
             peak = max(peak, sample(pids)[0])
             if c.wait(lambda e, i=rid: e["type"] == "done" and e.get("id") == i, 0.2, n0):
@@ -148,6 +153,8 @@ def run_task(c: Conn, tonyd: TonydClient, name: str, timeout: float) -> dict:
         "actions": [(round(e["t"] - t0, 1), e["name"], e.get("count"), e.get("args")) for e in acts],
         "said": [e["text"] for e in says],
         "brains": sorted({e["text"][7:] for e in evs if e["type"] == "info" and e["text"].startswith("brain: ")}),
+        "tiers": [e["text"][11:] for e in evs if e["type"] == "info" and e["text"].startswith("codex tier ")],
+        "refused": [e["name"] for e in evs if e["type"] == "refused"],
         "cost_usd": round(sum(u.get("cost_usd") or 0 for u in usage), 4),
         "tokens_in": sum((u.get("input") or 0) + (u.get("cache_read") or 0) + (u.get("cache_write") or 0)
                          for u in usage),

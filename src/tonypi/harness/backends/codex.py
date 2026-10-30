@@ -18,6 +18,7 @@ import itertools
 import json
 import logging
 import os
+import re
 import shutil
 import socket
 import time
@@ -28,8 +29,30 @@ from tonypi.harness.core import BrainUnavailable
 log = logging.getLogger(__name__)
 
 CODEX_HOME = Path(os.environ.get("TONYPI_CODEX_HOME", "/home/pi/.config/tonypi/codex-own"))
-MODEL = os.environ.get("TONYPI_CODEX_MODEL") or None  # None: the account's default
-EFFORT = os.environ.get("TONYPI_CODEX_EFFORT", "low")
+# Model + reasoning effort per turn, by tier ("model:effort"; the lowest effort these models take is "low"):
+#   fast      one simple command ("wave", "what's your battery")
+#   multi     several steps in a row ("walk 3 steps then turn left", "look left and tell me if ...")
+#   advanced  open-ended plans, hard perception, recovering after a failed step ("find the door", "go get that")
+TIERS = {
+    "fast": os.environ.get("TONYPI_CODEX_FAST", "gpt-6.1-terra:low"),
+    "multi": os.environ.get("TONYPI_CODEX_MULTI", "gpt-6.1-terra:medium"),
+    "advanced": os.environ.get("TONYPI_CODEX_ADVANCED", "gpt-6.1-sol:medium"),
+}
+FORCE_TIER = os.environ.get("TONYPI_CODEX_TIER", "auto")  # auto | fast | multi | advanced
+ADVANCED_RE = re.compile(r"\b(find|search|look for|explore|go (to|get|and)|get (me|that|the)|bring|fetch|follow|"
+                         r"come (here|to)|toward|towards|until|navigate|figure out|count|read|how many|which|why|"
+                         r"try again|it didn'?t work|you failed|you fell)\b", re.I)
+MULTI_RE = re.compile(r"\b(then|and|after|before|while|first|next|tell me if|is there|are there)\b|,", re.I)
+
+
+def tier_for(text: str, failed_before: bool = False) -> str:
+    """Which tier a request needs. A turn after a failed step escalates."""
+    if FORCE_TIER in TIERS:
+        return FORCE_TIER
+    if failed_before or ADVANCED_RE.search(text):
+        return "advanced"
+    return "multi" if MULTI_RE.search(text) else "fast"
+
 FIRST_REPLY_S = float(os.environ.get("TONYPI_CODEX_FIRST_REPLY_S", "25"))
 # reachability probe; T7 points it at a dead port to play "no internet"
 PROBE = os.environ.get("TONYPI_CODEX_PROBE", "chatgpt.com:443")
@@ -74,6 +97,8 @@ class CodexBackend:
         self.turn: dict | None = None
         self.fatal: str | None = None
         self.did_tools = 0
+        self.failed_tools = 0  # failed steps (not steering refusals) in the last turn: the next one escalates
+        self.tier = "fast"
         self.down_until = 0.0
         self.probe_ok_until = 0.0
         self._lock: asyncio.Lock | None = None
@@ -152,11 +177,10 @@ class CodexBackend:
             params = {"dynamicTools": tools, "baseInstructions": self.h.system_prompt() + EXEC_NOTE,
                       "approvalPolicy": "never",
                       "sandbox": "read-only", "ephemeral": True, "cwd": str(STATE_DIR)}
-            if MODEL:
-                params["model"] = MODEL
+            params["model"] = TIERS["fast"].split(":")[0]
             r = await self.request("thread/start", params)
             self.thread_id = r["thread"]["id"]
-            log.info("codex thread up in %.1f s (model %s, plan %s)", time.monotonic() - t, r.get("model"),
+            log.info("codex thread up in %.1f s (tiers %s, plan %s)", time.monotonic() - t, TIERS,
                      acct["account"].get("planType"))
 
     def _send(self, msg: dict) -> None:
@@ -213,6 +237,8 @@ class CodexBackend:
             self.first.set()
             self.did_tools += 1
             res = await self.h.call_tool(params["tool"], params.get("arguments") or {}, inject=True)
+            if res.error and not res.text.startswith("NOT done"):
+                self.failed_tools += 1
             items = [{"type": "inputText", "text": res.text}]
             items += [{"type": "inputImage", "imageUrl": "data:image/jpeg;base64," + base64.b64encode(i).decode()}
                       for i in res.images]
@@ -263,9 +289,15 @@ class CodexBackend:
             raise BrainUnavailable(f"can't start codex app-server ({e})") from e
         self.turn_done.clear()
         self.first.clear()
-        self.turn, self.fatal, self.did_tools = None, None, 0
-        params = {"threadId": self.thread_id, "effort": EFFORT,
+        followup = text.startswith("[New words from the user")
+        self.tier = self.tier if followup and self.tier == "advanced" else tier_for(text, self.failed_tools > 0)
+        model, _, effort = TIERS[self.tier].partition(":")
+        self.h.emit("info", text=f"codex tier {self.tier}: {model}, effort {effort or 'default'}")
+        self.turn, self.fatal, self.did_tools, self.failed_tools = None, None, 0, 0
+        params = {"threadId": self.thread_id, "model": model,
                   "input": [{"type": "text", "text": f"[{source}] {text}" if source == "voice" else text}]}
+        if effort:
+            params["effort"] = effort
         try:
             r = await self.request("turn/start", params)
         except Exception as e:
