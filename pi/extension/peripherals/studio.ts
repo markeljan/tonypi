@@ -20,12 +20,12 @@ const Frame = Type.Object({
 });
 const json = (o: unknown) => JSON.stringify(o);
 // bake-off rule: the user layer (~/.local/share/tonypi) is shared by every harness, so this one saves only names
-// ending in its suffix and never overrides a default (turn_left stays the factory turn until a winner is promoted).
+// with its suffix (turn_left_pi, turn_left_pi_v2) and never overrides a default (turn_left stays the factory turn until a winner is promoted).
 // Set TONYPI_STUDIO_SUFFIX="" to lift it.
 const SUFFIX = process.env.TONYPI_STUDIO_SUFFIX ?? "_pi";
 function own(name: string) {
-  if (SUFFIX && !name.endsWith(SUFFIX))
-    throw new Error(`save it as "${name}${SUFFIX}": motions and skills saved here must end in "${SUFFIX}" (the library is shared; defaults stay as they are)`);
+  if (SUFFIX && !(name.endsWith(SUFFIX) || name.includes(SUFFIX + "_")))
+    throw new Error(`save it as "${name}${SUFFIX}": names saved here must contain "${SUFFIX}" (e.g. turn_left${SUFFIX}_v2; the library is shared, defaults stay as they are)`);
 }
 
 export default function studio(pi: ExtensionAPI) {
@@ -88,7 +88,7 @@ export default function studio(pi: ExtensionAPI) {
     Type.Object({ name: Type.String() }), ({ name }) => tonyd.call("motion_get", { name }));
 
   op("save_motion", "Save motion", "Save keyframes as a named motion (lowercase, digits, _). The name "
-    + `must end in "${SUFFIX}" (e.g. turn_left_v2${SUFFIX}); defaults can't be overridden from here.`,
+    + `must contain "${SUFFIX}" (e.g. turn_left${SUFFIX}_v2); defaults can't be overridden from here.`,
     Type.Object({ name: Type.String(), frames: Type.Array(Frame, { minItems: 1, maxItems: 400 }),
       description: Type.Optional(Type.String()) }),
     ({ name, frames, description = "" }) => (own(name), tonyd.call("motion_save", { name, frames, description })));
@@ -97,7 +97,7 @@ export default function studio(pi: ExtensionAPI) {
     Type.Object({ name: Type.String() }), ({ name }) => (own(name), tonyd.call("motion_delete", { name })));
 
   op("save_skill", "Save skill", "Define a skill as a motion sequence; \"*name\" repeats with count. E.g. a new "
-    + `turn: save_skill("turn_left_v2${SUFFIX}", ["*turn_left_v2${SUFFIX}"]). Names must end in "${SUFFIX}". `
+    + `turn: save_skill("turn_left${SUFFIX}_v2", ["*turn_left${SUFFIX}_v2"]). Names must contain "${SUFFIX}". `
     + "upright: get up first if lying. settle: stand before going limp afterwards.",
     Type.Object({ name: Type.String(), motions: Type.Array(Type.String(), { minItems: 1 }),
       description: Type.Optional(Type.String()), upright: Type.Optional(Type.Boolean()), settle: Type.Optional(Type.Boolean()) }),
