@@ -67,6 +67,11 @@ case $MODE in
     b S1 "turn left 2 steps"
     sleep 5
     ;;
+  getup)  # a body move while lying gets up first
+    start_front TONYPI_X=1
+    b G2 "lie down"
+    b G3 "wave"
+    ;;
   gait)  # T9 (docs/HARNESS_BAKEOFF.md): the brain fixes its own turn. No spotter (owner: Tony is built to fall)
     start_front TONYPI_BRAIN_TIER=advanced TONYPI_TURN_BUDGET=40
     TIMEOUT=960 b T9 "Your left turn keeps tipping you over. Improve turn_left: measure the default, change it in small steps, test, and save your best version as turn_left_pi. Don't change the default turn_left." "@900" "stop"

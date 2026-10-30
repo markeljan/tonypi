@@ -65,8 +65,17 @@ def wait_for(cond, s: float = 2.0) -> None:
 def test_idle_command_is_a_prompt():
     f = front()
     f.submit("wave", "terminal")
+    wait_for(lambda: f.pi.sent)
     assert f.pi.sent == [("prompt", {"message": "wave", "streamingBehavior": "steer"})]
     assert f.running
+
+
+def test_after_a_long_idle_the_new_session_comes_before_the_prompt():
+    f = front()
+    f.last_settled = time.monotonic() - daemon.IDLE_RESET_S - 1
+    f.submit("lie down", "terminal")
+    wait_for(lambda: len(f.pi.sent) == 2)
+    assert f.pi.types() == ["new_session", "prompt"]
 
 
 def test_stop_goes_to_tonyd_not_the_model():
@@ -96,6 +105,7 @@ def test_new_command_while_generating_aborts_and_prompts():
     f = front()
     f.submit("what do you see?", "terminal")
     f._on_pi({"type": "agent_start"})
+    wait_for(lambda: f.pi.sent)
     f.submit("dance instead", "terminal")
     wait_for(lambda: f.pi.types()[-1:] == ["prompt"] and len(f.pi.sent) == 4)
     assert f.pi.types() == ["prompt", "clear_queue", "abort", "prompt"]

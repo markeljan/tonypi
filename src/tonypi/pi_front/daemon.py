@@ -239,12 +239,21 @@ class Front:
                     threading.Thread(target=self._restart, args=(text,), daemon=True).start()
                 self._finish(old, superseded=True)
             else:
-                if time.monotonic() - self.last_settled > IDLE_RESET_S:
-                    self.pi.send_async("new_session")
+                fresh = time.monotonic() - self.last_settled > IDLE_RESET_S
                 self.running = True  # until agent_settled (set before pi answers, so a quick 2nd command steers)
-                self.pi.send_async("prompt", message=text, streamingBehavior="steer")
+                threading.Thread(target=self._prompt, args=(text, fresh), daemon=True).start()
         self.emit("info", id=rid, text=f"→ pi ({self.cmd.how})")
         return rid
+
+    def _prompt(self, text: str, fresh: bool) -> None:
+        """In order, from one thread: a prompt racing a new_session got lost in the session switch (T9, 2026-10-29)."""
+        try:
+            if fresh:
+                self.pi.send("new_session")
+            self.pi.send("prompt", message=text, streamingBehavior="steer")
+        except Exception as e:
+            log.warning("prompt failed: %s", e)
+            self.emit("info", text=f"pi didn't take the command: {e}")
 
     def _restart(self, text: str) -> None:
         self.restarting = True  # the aborted run's agent_settled must not finish the new command
