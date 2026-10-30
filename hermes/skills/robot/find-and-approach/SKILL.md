@@ -10,8 +10,8 @@ metadata:
 
 # Find and approach
 
-1. `snapshot`. If the target is not in view, scan: `look(pan_deg=45)`, `snapshot`, `look(pan_deg=-45)`, `snapshot`,
-   then `look(0, 0)`. Still nothing: `run_skill("turn_left", 3)` and scan again (at most 3 times), then give up and say so.
+1. `scan` (left / ahead / right photos in one call). Not found: `run_skill("turn_left", 4)` (about half a turn) and
+   `scan` again (at most 3 times), then give up and say so.
 2. Target seen at a head pan angle P: centre the head (`look(0, 0)`), then turn the body toward it:
    P > 20 → `turn_left` (1 step per ~20°), P < -20 → `turn_right`.
 3. `run_skill("walk_forward", 2)`, then `snapshot`. Re-centre with small turns if it drifted off centre.

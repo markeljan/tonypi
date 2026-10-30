@@ -107,6 +107,24 @@ def video(seconds: float = 2.0, frames: int = 4) -> list[Image]:
 
 
 @mcp.tool()
+def scan(tilt_deg: float = 0.0) -> list:
+    """Look around without moving the body: photos with the head at 50° left, straight ahead and 50° right (in that
+    order, each labelled with its pan angle), then the head returns to centre. One call instead of six."""
+    out: list = []
+    with _robot():
+        try:
+            for pan in (50.0, 0.0, -50.0):
+                tonyd.head(pan, tilt_deg)
+                time.sleep(0.5)  # head move (400 ms) + a fresh frame
+                with open(tonyd.snapshot()["path"], "rb") as f:
+                    out += [f"pan_deg={pan:+.0f} ({'left' if pan > 0 else 'right' if pan < 0 else 'ahead'}):",
+                            Image(data=f.read(), format="jpeg")]
+        finally:
+            tonyd.head(0.0, 0.0)
+    return out
+
+
+@mcp.tool()
 def say(text: str) -> dict:
     """Speak out loud through Tony's speaker (interrupts nothing; returns as soon as speaking starts)."""
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)

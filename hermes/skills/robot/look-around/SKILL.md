@@ -10,9 +10,6 @@ metadata:
 
 # Look around
 
-1. `look(pan_deg=50)`, `snapshot` → what's on the left.
-2. `look(pan_deg=0)`, `snapshot` → what's ahead.
-3. `look(pan_deg=-50)`, `snapshot` → what's on the right.
-4. `look(0, 0)` to finish facing forward.
-5. Answer in one or two spoken sentences: "On my left there's a sofa, ahead a door, on my right a table."
+1. `scan`: photos at 50° left, ahead and 50° right (the head returns to centre).
+2. Answer in one or two spoken sentences: "On my left there's a sofa, ahead a door, on my right a table."
    If you learned something lasting about the room, save it to memory (e.g. "living room: door is opposite the sofa").
