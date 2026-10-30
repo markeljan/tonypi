@@ -17,7 +17,7 @@ Start: `tether()` (walking steps left; turns are free), `get_state` (upright? he
    find-object. Note where it is (pan angle in the scan, or its heading) and roughly how far (size in the picture).
 2. Face it: head centred, turn the body toward it. Use the job's `yaw_deg` to know how far you actually turned
    (roughly 10-25° per turn step, varies with the floor), then `snapshot` to check it is ahead and near the centre.
-3. Walk in legs: `walk_forward` 2-3 steps with guard_tilt_deg=35, then `snapshot`. Re-centre with a 1-step turn when
+3. Walk in legs: `walk_forward` 2-3 steps with guard_tilt_deg=35, then `snapshot`. Compare fixed floor patterns and furniture positions to verify translation; completed gait jobs can produce almost no progress on a rug. If repeated turns give near-zero or opposite yaw, check the camera and try an existing tuned turn instead of repeatedly issuing the same ineffective turn. If translation remains negligible with the tether enabled, stop at its budget and ask the owner to unplug/check the cable rather than bypassing the limit. Re-centre with a 1-step turn when
    it drifts off centre. Budget the tether steps: if it's far, spend them on the last metre, not the first.
 4. Arrived when it fills a big part of the picture or is at your feet (`look(0, -30)`) and the next step would bump
    it. Stop short; don't push into furniture.
