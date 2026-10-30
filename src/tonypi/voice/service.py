@@ -54,11 +54,14 @@ APPEND_MAX = 450  # Codex chunks context appends at 500 bytes
 
 LIVE_PROMPT = (
     "You are the voice of Tony, a small humanoid robot. Another system, the robot's brain, does all the thinking and "
-    "acting. For EVERY thing the user says (requests, questions, corrections like 'actually turn around', 'stop', and "
-    "answers to questions Tony asked) delegate it to the brain, passing the user's words as closely as possible. Never "
-    "answer from your own knowledge and never claim something was done; at most say a very short acknowledgement "
-    "('On it.') while the brain works. When the brain's text arrives, say it naturally and briefly, in the first "
-    "person as Tony. If the brain asks the user a question, ask it.")
+    "acting. Delegate to the brain every request, question or correction a robot could act on or answer (move, look, "
+    "find, walk, stop, 'actually turn around', questions about what Tony sees or how he is, answers to Tony's "
+    "questions), passing the user's words as closely as possible. Treat such requests as meant for Tony even when his "
+    "name is missing or misheard (it often comes out as 'Ciao', 'Tell me', 'Toni', 'Hey'). Ignore only speech clearly "
+    "meant for someone else: long dictation to a computer, phone calls, people talking to each other about unrelated "
+    "things, the TV. Stay silent for those. Never answer from your own knowledge and never claim something was done; "
+    "at most say a very short acknowledgement ('On it.') while the brain works. When the brain's text arrives, say it "
+    "naturally and briefly, in the first person as Tony. If the brain asks the user a question, ask it.")
 
 
 def resample(x: np.ndarray, src: int, dst: int) -> np.ndarray:
@@ -79,12 +82,24 @@ class Audio:
         self.mute_mic_until = 0.0  # don't let GPT-Live hear Tony's own Piper speech
         self.inject = bytearray()
         self.voice_until = 0.0
+        self.mic_chunks = 0  # 20 ms chunks read from the mic
+        self.sent_chunks = 0  # chunks handed to GPT-Live
         self.spoken_s = {"gpt-live": 0.0, "piper": 0.0}  # seconds of speech played, for status / tests  # test audio that replaces the mic (op inject: "the user said ...")
 
-    async def start(self) -> None:
+    async def _open_mic(self) -> None:
         self.rec = await asyncio.create_subprocess_exec(
             "arecord", "-q", "-D", ALSA_DEV, "-f", "S16_LE", "-r", str(MIC_RATE), "-c", "1", "-t", "raw",
-            stdout=asyncio.subprocess.PIPE)
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        asyncio.create_task(self._drain(self.rec.stderr, "arecord"))
+
+    @staticmethod
+    async def _drain(stream, name: str) -> None:
+        """Log a child's stderr (an unread pipe would fill up and stall it)."""
+        async for line in stream:
+            log.warning("%s: %s", name, line.decode(errors="replace").strip())
+
+    async def start(self) -> None:
+        await self._open_mic()
         self.play = await asyncio.create_subprocess_exec(
             "aplay", "-q", "-D", ALSA_DEV, "-f", "S16_LE", "-r", str(OUT_RATE), "-c", "1", "-t", "raw",
             "--buffer-time=200000", stdin=asyncio.subprocess.PIPE)
@@ -92,8 +107,17 @@ class Audio:
         asyncio.create_task(self._mix())
 
     async def _read_mic(self) -> None:
+        """Never dies: if arecord exits (device busy right after another owner let go, USB hiccup) it is reopened."""
         while True:
-            buf = await self.rec.stdout.readexactly(MIC_CHUNK * 2)
+            try:
+                buf = await self.rec.stdout.readexactly(MIC_CHUNK * 2)
+            except (asyncio.IncompleteReadError, OSError) as e:
+                log.warning("mic stopped (%s, arecord exit %s); reopening in 0.5 s", type(e).__name__,
+                            self.rec.returncode)
+                await asyncio.sleep(0.5)
+                await self._open_mic()
+                continue
+            self.mic_chunks += 1
             if self.inject:
                 buf, self.inject[:] = bytes(self.inject[:len(buf)]).ljust(len(buf), b"\0"), self.inject[len(buf):]
             elif time.monotonic() < self.mute_mic_until or (not DUPLEX and time.monotonic() < self.voice_until + 0.25):
@@ -217,6 +241,7 @@ class Live:
 
             async def recv(self):
                 buf = await audio.mic_q.get()
+                audio.sent_chunks += 1
                 f = av.AudioFrame(format="s16", layout="mono", samples=MIC_CHUNK)
                 f.planes[0].update(buf)
                 f.sample_rate, f.pts, f.time_base = MIC_RATE, self.pts, fractions.Fraction(1, MIC_RATE)
@@ -242,7 +267,7 @@ class Live:
 
         @self.dc.on("open")
         def on_open():
-            self.ready.set()
+            asyncio.get_running_loop().call_later(8.0, self.ready.set)  # fallback if session.started never shows
 
         @self.dc.on("message")
         def on_msg(raw):
@@ -262,6 +287,9 @@ class Live:
                 self.hub.emit_attached({"event": "barge_in"})
             elif typ == "error":
                 log.warning("live error: %s", json.dumps(ev)[:300])
+            elif typ == "session.started":
+                # audio sent before this is lost (the first commands after a start were never heard): ready a bit later
+                asyncio.get_running_loop().call_later(1.0, self.ready.set)
             elif typ == "session.closed":
                 self.closed.set()
 
@@ -338,7 +366,7 @@ class Hub:
         """What GPT-Live heard. An answer to an `ask` is often not delegated (it isn't a request), so a pending ask
         collects the transcript and resolves after a 1.2 s pause."""
         self.emit_attached({"event": "transcript", "text": text})
-        log.debug("transcript %r (voice_until in %.2f s)", text, self.audio.voice_until - time.monotonic())
+        log.info("transcript %r", text)
         if (not text or self.ask_fut is None or self.ask_fut.done()
                 or time.monotonic() < max(self.ask_listen_from, self.audio.voice_until + 0.3)):  # not Tony's own question
             return
@@ -486,7 +514,9 @@ class Hub:
         if op == "status":
             return {"mode": self.mode, "attached": self.attached[0] if self.attached else None,
                     "voice": VOICE if self.mode == "gpt-live" else "piper", "open_requests": len(self.requests),
-                    "spoken_s": {k: round(v, 1) for k, v in self.audio.spoken_s.items()}}
+                    "spoken_s": {k: round(v, 1) for k, v in self.audio.spoken_s.items()},
+                    "mic_s": round(self.audio.mic_chunks * MIC_CHUNK / MIC_RATE, 1),
+                    "sent_to_live_s": round(self.audio.sent_chunks * MIC_CHUNK / MIC_RATE, 1)}
         if op == "ping":
             return {"pong": True}
         raise ValueError(f"unknown op {op!r}")
