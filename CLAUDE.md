@@ -106,6 +106,12 @@ heard, reply, say, ask, barge_in, transcript, status, inject (a WAV as if the us
 (mic silenced while Tony talks: no echo cancellation). Live 2026-10-29: request heard ~1 s after the user stops,
 replies and unprompted speech spoken by GPT-Live, `ask` answered from the transcript.
 
+## Switching the brain (harness bake-off, 2026-10-30)
+One harness at a time as `tonypi-brain@{own,hermes,pi}.service` (`tools/e2e.sh <name>`: start pose, robot lock,
+tonypi-voice, the harness). Say "switch to pi / Hermes / our own / local" (voice service and tonypi-agent both handle
+it, loosely matched: ASR hears "which Khermes"), or `tools/switch.sh own|hermes|pi|off|status`. "Stop" / "halt" /
+"freeze" is caught by the voice service itself and stops tonyd directly, whatever the brain does.
+
 ## Agent (live: `tonypi-agent.service`, since 2026-10-28)
 `src/tonypi/agent/` — voice + terminal front end. Owns the mic and speaker; every move goes through tonyd (`body_link.py`).
 - Input: terminal (`tonypi-chat` → `/run/tonypi/agent.sock`, JSON lines) and voice ("hey Tony …": sherpa-onnx KWS

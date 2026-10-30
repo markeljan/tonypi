@@ -56,7 +56,9 @@ the same three tasks from the same starting point; the owner times them and judg
 - [ ] Logging for timing; one start command; dry run of one task per category
 
 ## Run sheet (owner)
-One harness at a time; each command runs in the foreground, Ctrl-C ends the slot and hands the robot back.
+Easiest: say **"switch to pi"**, **"switch to Hermes"** or **"switch to our own"** (or `tools/switch.sh pi|hermes|own`,
+`tools/switch.sh off` for the plain agent, `tools/switch.sh status`). Each switch takes ~20-40 s; the new harness
+greets you. Or run one in the foreground; Ctrl-C ends the slot and hands the robot back:
 ```
 tools/e2e.sh own       # our own harness (Codex app-server brain)
 tools/e2e.sh hermes    # Hermes Agent
