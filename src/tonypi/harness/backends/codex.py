@@ -41,7 +41,8 @@ TIERS = {
 FORCE_TIER = os.environ.get("TONYPI_CODEX_TIER", "auto")  # auto | fast | multi | advanced
 ADVANCED_RE = re.compile(r"\b(find|search|look for|explore|go (to|get|and)|get (me|that|the)|bring|fetch|follow|"
                          r"come (here|to)|toward|towards|until|navigate|figure out|count|read|how many|which|why|"
-                         r"try again|it didn'?t work|you failed|you fell)\b", re.I)
+                         r"try again|it didn'?t work|you failed|you fell|improve|tune|tuning|calibrat\w*|steadier|"
+                         r"optimi[sz]e|fix|keeps? (tipping|falling))\b", re.I)
 MULTI_RE = re.compile(r"\b(then|and|after|before|while|first|next|tell me if|is there|are there)\b|,", re.I)
 
 

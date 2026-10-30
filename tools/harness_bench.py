@@ -35,11 +35,12 @@ TASKS = {
 TASKS["T8"] = ("find the door and walk toward it", [("walk+1.5", "stop")])  # stop 1.5 s into its first walk
 # T4 with the correction 1.5 s after the first step started (T4's fixed 2 s can land before the walk begins)
 TASKS["T4m"] = ("walk forward 3 steps, then turn left", [("move+1.5", "actually, turn right instead")])
-# movement authoring (2026-10-29: Tony fell three times during turns): the brain tunes its own turn_left
-TASKS["T9"] = ("Your turn_left has made you fall over today. Make it steadier: first measure the default with two "
-               "single turns, then try small changes one at a time, and only adopt a version that has a clearly lower "
-               "max tilt over two trials and still turns. Save your versions with the suffix _own (adopt it as "
-               "turn_left_own; leave turn_left itself alone). Tell me what you changed and the numbers.", [])
+# T9 (docs/HARNESS_BAKEOFF.md): the brain fixes its own turn. Measured by this script before and after, the same way
+# for every harness; the brain's run in between is capped at 15 min / 40 turn steps.
+TASKS["T9"] = ("Your left turn keeps tipping you over. Improve turn_left: measure the default, change it in small "
+               "steps, test, and save your best version as turn_left_own. Don't change the default turn_left.", [])
+T9_LIMIT_S, T9_LIMIT_STEPS, T9_TRIALS = 15 * 60, 40, [1, 1, 1, 3]
+FX = 424.6  # camera focal length in px (data/camera_calibration.npz): yaw = atan(image shift / FX)
 # T8 without the camera: "stop" 1 s into a walk
 TASKS["T8w"] = ("walk forward 5 steps", [("move+1.0", "stop")])
 
@@ -183,6 +184,92 @@ def run_task(c: Conn, tonyd: TonydClient, name: str, timeout: float) -> dict:
     return r
 
 
+def yaw_deg(before: bytes, after: bytes) -> tuple[float | None, float]:
+    """How far the view turned (degrees, + = left turn: the scene moves right) from two snapshots, by phase
+    correlation of the grey images; None when they hardly overlap (response < 0.05)."""
+    import math
+
+    import cv2
+    import numpy as np
+    a, b = (cv2.imdecode(np.frombuffer(x, np.uint8), cv2.IMREAD_GRAYSCALE).astype(np.float32) for x in (before, after))
+    (dx, _), response = cv2.phaseCorrelate(a, b, cv2.createHanningWindow(a.shape[::-1], cv2.CV_32F))
+    return (round(math.degrees(math.atan(dx / FX)), 1) if response >= 0.05 else None), round(response, 3)
+
+
+def snap(tonyd: TonydClient) -> bytes:
+    time.sleep(0.6)  # a still frame
+    return Path(tonyd.snapshot()["path"]).read_bytes()
+
+
+def turn_trials(tonyd: TonydClient, skill: str) -> list[dict]:
+    """T9 measurement: 3 x count 1 + 1 x count 3, each from a settled stand with the head centred: max tilt, yaw."""
+    out = []
+    tonyd.head(0, 0)
+    for n in T9_TRIALS:
+        fell = False
+        if tonyd.state()["lying"]:
+            tonyd.run("get_up")
+        tonyd.run("settle")
+        a = snap(tonyd)
+        job = tonyd.run(skill, n)
+        if tonyd.state()["lying"]:
+            fell = True
+            tonyd.run("get_up")
+        tonyd.run("settle")
+        yaw, resp = yaw_deg(a, snap(tonyd))
+        out.append({"skill": skill, "count": n, "state": job["state"], "max_tilt_deg": job.get("max_tilt_deg"),
+                    "yaw_deg": yaw, "match": resp, "fell": fell, "said": job.get("said")})
+        print(json.dumps(out[-1]), flush=True)
+    return out
+
+
+def summary(trials: list[dict]) -> dict:
+    ones = [t for t in trials if t["count"] == 1]
+    yaws = [t["yaw_deg"] for t in ones if t["yaw_deg"] is not None]
+    return {"max_tilt_count1": [t["max_tilt_deg"] for t in ones],
+            "max_tilt_count3": [t["max_tilt_deg"] for t in trials if t["count"] == 3],
+            "deg_per_step": round(sum(yaws) / len(yaws), 1) if yaws else None,
+            "falls": sum(t["fell"] for t in trials)}
+
+
+def run_t9(c: Conn, tonyd: TonydClient, label: str) -> dict:
+    t_start = time.time()
+    before = turn_trials(tonyd, "turn_left")
+    n0 = len(c.events)
+    t0 = c.send(TASKS["T9"][0])
+    rid = (c.wait(lambda e: e["type"] == "accepted", 5, n0) or {}).get("id")
+    steps, stopped = 0, None
+    while not c.wait(lambda e, i=rid: e["type"] == "done" and e.get("id") == i, 1.0, n0):
+        acts = [e for e in c.events[n0:] if e["type"] == "action"]
+        steps = sum(int(e.get("count") or 1) for e in acts if "turn" in str(e.get("name")) or e["name"] == "play_frames")
+        if stopped is None and (steps > T9_LIMIT_STEPS or time.time() - t0 > T9_LIMIT_S):
+            stopped = f"limit: {steps} turn steps, {time.time() - t0:.0f} s"
+            c.send("stop")
+        if time.time() - t0 > T9_LIMIT_S + 120:
+            break
+    brain_s = time.time() - t0
+    evs = c.events[n0:]
+    acts = [e for e in evs if e["type"] == "action"]
+    results = [e for e in evs if e["type"] == "tool_result"]
+    saved = "turn_left_own" in tonyd.call("skills")["details"]
+    after = turn_trials(tonyd, "turn_left_own") if saved else []
+    return {
+        "task": "T9", "label": label, "t": round(t0), "brain_s": round(brain_s), "total_s": round(time.time() - t_start),
+        "stopped_by_limit": stopped, "turn_steps": steps, "tool_calls": len(acts),
+        "falls_during_run": sum("FELL" in (e.get("text") or "") for e in results),
+        "get_ups": sum(e.get("name") == "get_up" for e in acts),
+        "tiers": [e["text"][11:] for e in evs if e["type"] == "info" and e["text"].startswith("codex tier ")],
+        "said": [e["text"] for e in evs if e["type"] == "say"],
+        "tokens_in": sum((u.get("input") or 0) + (u.get("cache_read") or 0) for u in evs if u["type"] == "usage"),
+        "tokens_out": sum(u.get("output") or 0 for u in evs if u["type"] == "usage"),
+        "saved": saved, "own_skill": tonyd.call("skills")["details"].get("turn_left_own"),
+        "before": summary(before), "after": summary(after) if after else None,
+        "trials_before": before, "trials_after": after,
+        "brain_actions": [(round(e["t"] - t0, 1), e["name"], e.get("count"),
+                           None if e["name"] == "play_frames" else e.get("args")) for e in acts],
+    }
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("tasks", nargs="+", choices=sorted(TASKS))
@@ -191,7 +278,7 @@ def main() -> None:
     args = ap.parse_args()
     c, tonyd = Conn(), TonydClient()
     for name in args.tasks:
-        r = run_task(c, tonyd, name, args.timeout)
+        r = run_t9(c, tonyd, args.label) if name == "T9" else run_task(c, tonyd, name, args.timeout)
         r["label"] = args.label
         print(json.dumps(r), flush=True)
         with OUT.open("a") as f:
