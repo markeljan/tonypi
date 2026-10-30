@@ -131,6 +131,12 @@ class TonydClient:
     def snapshot(self) -> dict:
         return self.call("snapshot")
 
+    def scan(self, pans=(60, 0, -60), tilt_deg: float | None = None) -> dict:
+        return self.call("scan", timeout=30, pans=list(pans), tilt_deg=tilt_deg)
+
+    def burst(self, frames: int = 4, seconds: float = 2.0) -> dict:
+        return self.call("burst", timeout=float(seconds) + 15, frames=frames, seconds=seconds)
+
     def skills(self) -> dict[str, str]:
         return self.call("skills")["skills"]
 

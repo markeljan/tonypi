@@ -344,3 +344,27 @@ def test_gyro_heading_learns_bias_while_still_and_integrates_turns():
         t += 0.01
         b._on_imu(NS(t=t, gyro=(-8.0, 0.0, 0.0)))
     assert abs(b.heading_deg - 9.0) < 0.5  # + = left
+
+
+def test_scan_and_burst_with_a_fake_camera(monkeypatch, tmp_path):
+    class Cam:
+        width, height = 640, 480
+
+        def __init__(self):
+            self.on_change, self.calls = None, []
+
+        def snapshot(self, path, newer_than=None):
+            self.calls.append(newer_than)
+            path.write_bytes(b"jpeg")
+            return 0.01
+
+        def status(self):
+            return {"ok": True}
+
+    monkeypatch.setattr(server, "SNAP_DIR", tmp_path)
+    d = Tonyd(_Body(), Cam())
+    r = d.scan(pans=[60, 0, -60], settle_s=0.1)
+    assert [v["pan_deg"] for v in r["views"]] == [60, 0, -60] and d.head_deg["pan"] == 0
+    assert all(t is not None for t in d.camera.calls)  # every view waits for a frame taken after the head moved
+    b = d.burst(frames=3, seconds=0.4)
+    assert len(b["frames"]) == 3 and b["frames"][-1]["t_s"] >= 0.35

@@ -6,7 +6,7 @@ Brains (the voice agent, the MCP server, scripts) talk to it over a Unix socket 
   reply    {"rid": 7, "ok": true, "job": {"id": 3, "skill": "wave", "state": "done", "said": [], ...}}
   event    {"event": "job" | "warn", ...}          (only to connections that sent {"op": "subscribe"})
 
-ops: ping, skills, run, stop, state, head, snapshot, relax, subscribe,
+ops: ping, skills, run, stop, state, head, snapshot, scan, burst, relax, subscribe,
      and for brains that write their own moves (studio.py): joints, pose, play, torque, motions, motion_get,
      motion_save, motion_delete, skill_save, skill_delete, calibration, servo_calibration, servo_calibrate;
      tether {on, max_steps, reset} (walking-step budget while plugged into the charger).
@@ -51,7 +51,7 @@ IDLE_RELAX_S = 1.5  # torque off this long after the last skill (a brain's next 
 WATCH_S = 20
 IDLE_HOT_C = 80
 WARN_EVERY_S = 300
-KEEP_SNAPSHOTS = 10
+KEEP_SNAPSHOTS = 40  # scan + burst can take a dozen at once
 
 # head: PWM pulse = centre + degrees * US_PER_DEG (500-2500 us ~ 180 deg). Pan + = left, tilt + = up.
 PAN, TILT = 2, 1
@@ -312,18 +312,47 @@ class Tonyd:
         self.head_deg = {"pan": pan, "tilt": tilt}
         return dict(self.head_deg)
 
-    def snapshot(self) -> dict:
+    def snapshot(self, newer_than: float | None = None) -> dict:
         if self.camera is None:
             raise RuntimeError("camera disabled")
         n = next(self._snap_ids)
         path = SNAP_DIR / f"snap-{n:06d}.jpg"
-        age = self.camera.snapshot(path)
+        age = self.camera.snapshot(path, newer_than=newer_than)
         if age is None:
             raise RuntimeError("no camera frame (is the camera plugged in?)")
         old = SNAP_DIR / f"snap-{n - KEEP_SNAPSHOTS:06d}.jpg"
         old.unlink(missing_ok=True)
         return {"path": str(path), "frame_age_s": round(age, 3), "width": self.camera.width,
                 "height": self.camera.height, "head_deg": dict(self.head_deg)}
+
+    def scan(self, pans=(60, 0, -60), tilt_deg: float | None = None, settle_s: float = 0.5) -> dict:
+        """Look around with the head only: one photo per pan angle (+ = left), then the head goes back."""
+        back = dict(self.head_deg)
+        tilt = back["tilt"] if tilt_deg is None else float(tilt_deg)
+        views = []
+        try:
+            for pan in list(pans)[:7]:
+                self.head(pan, tilt, ms=350)
+                moved = time.monotonic() + 0.35 + max(0.1, min(2.0, float(settle_s)))
+                time.sleep(moved - time.monotonic())
+                views.append({**self.snapshot(newer_than=moved), "pan_deg": self.head_deg["pan"],
+                              "tilt_deg": self.head_deg["tilt"]})
+        finally:
+            self.head(back["pan"], back["tilt"], ms=350)
+        b = self.body
+        return {"views": views, "heading_deg": None if getattr(b, "heading_deg", None) is None else round(b.heading_deg, 1)}
+
+    def burst(self, frames: int = 4, seconds: float = 2.0) -> dict:
+        """A short "video": `frames` photos spread over `seconds` (e.g. while a skill started with wait=false runs)."""
+        frames = max(2, min(12, int(frames)))
+        gap = max(0.2, min(10.0, float(seconds))) / (frames - 1)
+        shots, t0 = [], time.monotonic()
+        for i in range(frames):
+            time.sleep(max(0.0, t0 + i * gap - time.monotonic()))
+            shot = self.snapshot()
+            shot["t_s"] = round(time.monotonic() - t0, 2)
+            shots.append(shot)
+        return {"frames": shots}
 
     # ---- socket server --------------------------------------------------------------------------------------
 
@@ -361,6 +390,10 @@ class Tonyd:
             reply({"head_deg": self.head(msg.get("pan_deg", 0), msg.get("tilt_deg", 0), msg.get("ms", 400))})
         elif op == "snapshot":
             reply(self.snapshot())
+        elif op == "scan":
+            reply(self.scan(msg.get("pans") or (60, 0, -60), msg.get("tilt_deg"), msg.get("settle_s", 0.5)))
+        elif op == "burst":
+            reply(self.burst(msg.get("frames", 4), msg.get("seconds", 2.0)))
         elif op == "relax":
             self.stop()
             with self.lock:

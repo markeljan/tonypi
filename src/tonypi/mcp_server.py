@@ -100,6 +100,35 @@ def snapshot() -> Image:
             return Image(data=f.read(), format="jpeg")
 
 
+def _images(shots: list[dict], label) -> list:
+    out = []
+    for shot in shots:
+        out.append(label(shot))
+        with open(shot["path"], "rb") as f:
+            out.append(Image(data=f.read(), format="jpeg"))
+    return out
+
+
+@mcp.tool()
+def scan(pans: list[float] | None = None, tilt_deg: float | None = None) -> list:
+    """Look around without moving the body: one photo per head pan angle (default 60, 0, -60; + = left, max 7
+    angles, -60..60), each labelled with its angle, then the head returns. Use it to find things outside the
+    current view before turning or walking."""
+    with _robot():
+        r = tonyd.call("scan", timeout=30, pans=pans or [60, 0, -60], tilt_deg=tilt_deg)
+    return [f"heading {r['heading_deg']} deg"] + _images(
+        r["views"], lambda v: f"head pan {v['pan_deg']:+.0f} deg, tilt {v['tilt_deg']:+.0f} deg")
+
+
+@mcp.tool()
+def video(seconds: float = 2.0, frames: int = 4) -> list:
+    """A short clip: `frames` photos (2-12) spread over `seconds` (0.2-10), oldest first, each with its time.
+    To watch a move, start it with run_skill(..., wait=False) or play_frames first, then call this."""
+    with _robot():
+        r = tonyd.call("burst", timeout=float(seconds) + 15, frames=frames, seconds=seconds)
+    return _images(r["frames"], lambda f: f"t = {f['t_s']:.1f} s")
+
+
 @mcp.tool()
 def get_joints() -> dict:
     """Current bus servo positions: `pos` in motion space (what motions use) and `raw` servo counts."""
@@ -108,13 +137,13 @@ def get_joints() -> dict:
 
 
 @mcp.tool()
-def play_frames(frames: list[dict], hold_s: float = 0, guard_tilt_deg: float | None = None) -> dict:
+def play_frames(frames: list[dict], hold_s: float = 0, guard_tilt_deg: float | None = None, wait: bool = True) -> dict:
     """Play your own keyframes without saving them: [{"ms": 400, "pos": {"4": 620, "12": 380}}, ...]. Servos left
     out of a frame keep their position. hold_s > 0 keeps torque on (holding the last pose) that long afterwards,
     otherwise Tony goes limp in the last pose 1.5 s after. Returns the job, with max_tilt_deg."""
     with _robot():
-        return tonyd.call("play", timeout=185, frames=frames, hold_s=hold_s, guard_tilt_deg=guard_tilt_deg,
-                          wait=True, wait_s=180)["job"]
+        return tonyd.call("play", timeout=185 if wait else 10, frames=frames, hold_s=hold_s,
+                          guard_tilt_deg=guard_tilt_deg, wait=wait, wait_s=180)["job"]
 
 
 @mcp.tool()
