@@ -71,6 +71,23 @@ class Speech:
                 self.idle.set()
 
 
+def fast_stop_listener():
+    """The voice Listener, but "stop" in the streaming transcript stops the body at once, ~2 s before LFM3's
+    second-pass transcript arrives (that one still goes through submit: stopping twice is harmless)."""
+    from tonypi.agent.speech import Listener
+
+    class FastStopListener(Listener):
+        on_stop = None
+
+        def _done(self, st: dict, text: str) -> None:
+            if self.on_stop and STOP_RE.match(text or ""):
+                log.info("stop in the streaming transcript (%r): stopping now", text)
+                self.on_stop()
+            super()._done(st, text)
+
+    return FastStopListener
+
+
 class Command:
     def __init__(self, rid: int, text: str, source: str) -> None:
         self.rid, self.text, self.source = rid, text, source
@@ -106,9 +123,9 @@ class Front:
         self.clients_lock = threading.Lock()
         self.listener = None
         if voice:
-            from tonypi.agent.speech import Listener
-            self.listener = Listener(speaker, lambda: self.emit("wake"),
-                                     lambda t, a=None, recording=None: self.submit(t, "voice"))
+            self.listener = fast_stop_listener()(speaker, lambda: self.emit("wake"),
+                                                 lambda t, a=None, recording=None: self.submit(t, "voice"))
+            self.listener.on_stop = self.stop_all
 
     # ---- events to terminals --------------------------------------------------------------------------------
 

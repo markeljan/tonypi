@@ -53,6 +53,16 @@ case $MODE in
     b V-T2 --voice "what do you see?"; sleep 10
     b V-T6 --voice "find the door and walk toward it" "@40" "stop"
     ;;
+  voice3)  # voice stop during a walk (fast path on the streaming transcript), then idle CPU/RAM
+    sudo systemctl stop tonypi-agent
+    trap 'pkill -f "[t]onypi.pi_front.daemon"; sudo systemctl start tonypi-agent' EXIT
+    pkill -f "[t]onypi.pi_front.daemon"; sleep 1
+    $PY -m tonypi.pi_front.daemon > $OUT/front-voice3.log 2>&1 & sleep 25
+    export TIMEOUT=60
+    b V-T8b --voice "walk forward 5 steps" "@9" "stop"
+    sleep 20
+    echo "idle: $(top -b -n 2 -d 5 -p $(pgrep -x pi),$(pgrep -f '[t]onypi.pi_front.daemon') | tail -3 | awk '{print $12, "cpu%=" $9, "res=" $6}' | tr '\n' ' ')" | tee -a $OUT/bench-$MODE.txt
+    ;;
   deadcloud)
     start_front TONYPI_CLOUD=deadcloud/gpt TONYPI_PI_EXTRA_EXT=tests/pi_dead_cloud.ts
     b T7a "wave"

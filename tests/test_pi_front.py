@@ -126,3 +126,20 @@ def test_say_tool_and_final_reply_are_spoken():
     f._on_pi({"type": "message_end", "message": {"role": "assistant", "stopReason": "aborted",
                                                  "content": [{"type": "text", "text": "half a reply"}]}})
     assert spoken == ["On my way.", "I'm there."]
+
+
+def test_voice_stop_fires_on_the_streaming_transcript():
+    from tonypi.agent.speech import Listener
+
+    cls = daemon.fast_stop_listener()
+    lst = cls.__new__(cls)
+    stops, passed = [], []
+    lst.on_stop = lambda: stops.append(1)
+    orig = Listener._done
+    Listener._done = lambda self, st, text: passed.append(text)
+    try:
+        lst._done({}, "stop")
+        lst._done({}, "walk forward")
+    finally:
+        Listener._done = orig
+    assert stops == [1] and passed == ["stop", "walk forward"]
