@@ -46,7 +46,16 @@ class VoiceLink:
 
     @staticmethod
     def available(path: str = SOCK) -> bool:
-        return os.path.exists(path)
+        """The service is up (a stale socket file doesn't count)."""
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.settimeout(1)
+        try:
+            s.connect(path)
+            return True
+        except OSError:
+            return False
+        finally:
+            s.close()
 
     # ---- connection ---------------------------------------------------------------------------------------------
 
