@@ -20,4 +20,3 @@ metadata:
 5. Anything in the way (wall, furniture, an edge or drop): stop and say so. Never walk off a table edge.
 6. Be quick: one snapshot per decision is enough (the floor ahead is in it). Don't look down or re-check before every
    step, and move within the first few tool calls: a minute of looking without moving is a failure.
-7. Finish with `run_skill("settle")` so Tony goes limp from a stable stance.
