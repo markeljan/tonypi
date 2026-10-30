@@ -51,6 +51,17 @@ case $MODE in
     b T4 "walk forward 3 steps, then turn left" "@7" "actually, turn right instead"
     if [ $MODE = tiered ]; then b T6 "find the door and walk toward it" "@60" "stop"; fi
     ;;
+  vision-terra-off|vision-terra-low|vision-tiered|vision-sol)  # T2/T3 again once the camera was back
+    case $MODE in
+      vision-terra-off) start_front TONYPI_BRAIN_MODEL=openai-codex/gpt-6.1-terra TONYPI_BRAIN_THINKING=off ;;
+      vision-terra-low) start_front TONYPI_BRAIN_MODEL=openai-codex/gpt-6.1-terra TONYPI_BRAIN_THINKING=low ;;
+      vision-tiered)    start_front TONYPI_X=1 ;;
+      vision-sol)       start_front TONYPI_BRAIN_MODEL=openai-codex/gpt-6.1-sol TONYPI_BRAIN_THINKING=low ;;
+    esac
+    b T2 "what do you see?"
+    b T3 "look left and tell me if there's a chair"
+    $PY -c "from tonypi.tonyd.client import TonydClient as T; T().head(0, 0)"
+    ;;
   steer)
     start_front TONYPI_X=1
     b T4b "walk forward 3 steps, then turn left" "@7" "actually, turn right instead"
