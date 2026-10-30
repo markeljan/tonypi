@@ -68,6 +68,22 @@ def run_skill(skill: str, count: int = 1, wait: bool = True, guard_tilt_deg: flo
 
 
 @mcp.tool()
+def wait_motion(timeout_s: float = 3.0) -> dict:
+    """Wait up to timeout_s (max 3) for the running body job to finish, then report it. Use after
+    run_skill(wait=False) in a loop for long moves: you stay steerable between the short waits."""
+    import time
+
+    end = time.monotonic() + max(0.0, min(3.0, float(timeout_s)))
+    with _robot():
+        while True:
+            st = tonyd.state()
+            if not st["busy"] or time.monotonic() >= end:
+                return {"busy": st["busy"], "job": st["job"], "tilt_deg": st["tilt_deg"], "lying": st["lying"],
+                        "heading_deg": st.get("heading_deg"), "stop_latched": st.get("stop_latched")}
+            time.sleep(0.2)
+
+
+@mcp.tool()
 def stop() -> dict:
     """Stop whatever the body is doing, immediately."""
     with _robot():

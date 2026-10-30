@@ -1,0 +1,1 @@
+Unclear speech: if an important number, name or direction is unclear ("three or four steps?", "left or right?"), ask about that part and use the answer. Don't guess it. If only the wording is a little off, hand off your best reading.

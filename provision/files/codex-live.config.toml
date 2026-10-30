@@ -1,0 +1,40 @@
+# tonypi LIVE mode: this Codex app-server is Tony's brain behind GPT-Live (src/tonypi/voice/live.py).
+# Full access is intended by the owner. Auth: access token shared from Hermes by tools/share_chatgpt_login.py
+# (placeholder refresh_token): never run codex login/logout here.
+cli_auth_credentials_store = "file"
+model = "gpt-6.1-sol"
+model_reasoning_effort = "low"
+model_reasoning_summary = "concise"
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+web_search = "live"
+project_doc_fallback_filenames = ["CLAUDE.md"]
+project_doc_max_bytes = 65536
+model_auto_compact_token_limit = 150000
+
+[realtime]
+version = "v3"
+voice = "cove"
+
+
+[features]
+realtime_conversation = true
+multi_agent = true
+
+[agents]
+max_concurrent_threads_per_session = 3
+max_depth = 1
+
+[shell_environment_policy]
+inherit = "all"
+
+[mcp_servers.tonypi]
+url = "http://127.0.0.1:8765/mcp"
+required = false
+startup_timeout_sec = 20
+tool_timeout_sec = 240
+default_tools_approval_mode = "approve"
+disabled_tools = ["say"]
+
+[projects."/home/pi/tonypi"]
+trust_level = "trusted"

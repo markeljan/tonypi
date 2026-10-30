@@ -9,6 +9,7 @@ User=pi
 RuntimeDirectory=tonypi
 RuntimeDirectoryPreserve=yes
 Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-/run/tonypi/voice.env
 ExecStart=/home/pi/tonypi/.venv/bin/tonypi-voice
 Restart=on-failure
 RestartSec=5

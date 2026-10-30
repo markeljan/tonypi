@@ -48,6 +48,9 @@ CODEX = os.environ.get("TONYPI_CODEX", "/home/pi/.local/bin/codex")
 CODEX_HOME = os.environ.get("TONYPI_VOICE_CODEX_HOME", "/home/pi/.config/tonypi/codex-voice")
 VOICE = os.environ.get("TONYPI_VOICE_NAME", "cove")
 RETRY_LIVE_S = 120
+# relay: GPT-Live hands requests to the attached harness (pi, Hermes, own). live: GPT-Live's own Codex agent is the
+# brain, with full access (live.py). Chosen per slot via /run/tonypi/voice.env (tools/e2e.sh live).
+VOICE_MODE = os.environ.get("TONYPI_VOICE_MODE", "relay")
 # No echo cancellation on the USB speaker/mic: by default the mic sends silence while Tony talks (half duplex), so
 # GPT-Live doesn't hear (and transcribe, or act on) Tony's own voice. 1 = full duplex (barge-in while Tony talks).
 DUPLEX = os.environ.get("TONYPI_VOICE_DUPLEX", "0") == "1"
@@ -180,6 +183,7 @@ class Live:
         self.proc = None
         self.pc = self.dc = None
         self.tid = None
+        self.codex_home = CODEX_HOME
         self.ready = asyncio.Event()
         self.closed = asyncio.Event()
         self._pending: dict[int, asyncio.Future] = {}
@@ -204,33 +208,75 @@ class Live:
                 m = json.loads(line)
             except ValueError:
                 continue
-            if "id" in m and m["id"] in self._pending:
+            if "id" in m and "method" not in m and m["id"] in self._pending:
                 self._pending.pop(m["id"]).set_result(m)
                 continue
             meth = m.get("method", "")
+            if "id" in m:  # a request from the app-server to us (tool call, approval, ...)
+                asyncio.create_task(self._answer_server(m))
+                continue
             if meth == "thread/realtime/sdp":
                 await sdp_q.put(m["params"]["sdp"])
             elif meth in ("thread/realtime/closed", "thread/realtime/error"):
                 log.warning("%s %s", meth, json.dumps(m.get("params"))[:300])
                 self.closed.set()
+            else:
+                try:
+                    self.on_notification(meth, m.get("params") or {})
+                except Exception:
+                    log.exception("notification %s", meth)
         self.closed.set()
+
+    async def _answer_server(self, m: dict) -> None:
+        try:
+            result = await self.on_server_request(m["method"], m.get("params") or {})
+            out = {"id": m["id"], "result": result}
+        except Exception as e:
+            log.warning("server request %s failed: %s", m.get("method"), e)
+            out = {"id": m["id"], "error": {"code": -32601, "message": str(e)}}
+        self.proc.stdin.write((json.dumps(out) + "\n").encode())
+        await self.proc.stdin.drain()
+
+    # ---- hooks (LiveBrain in live.py overrides these) ------------------------------------------------------
+
+    async def on_server_request(self, method: str, params: dict) -> dict:
+        if method.endswith("requestApproval"):
+            return {"decision": "accept"}
+        raise ValueError(f"unsupported: {method}")
+
+    def on_notification(self, method: str, params: dict) -> None:
+        pass
+
+    async def setup_thread(self) -> str:
+        return (await self._rpc("thread/start", {"cwd": "/tmp", "ephemeral": True}))["thread"]["id"]
+
+    def realtime_params(self, sdp: str) -> dict:
+        return {"threadId": self.tid, "outputModality": "audio", "version": "v3",
+                "transport": {"type": "webrtc", "sdp": sdp}, "voice": VOICE, "prompt": LIVE_PROMPT,
+                "realtimeStartInstructions": "Reply skip. Do not use tools.", "clientManagedHandoffs": True}
+
+    def on_dc_event(self, ev: dict) -> bool:
+        """Return True if handled (the relay behaviour below is skipped)."""
+        return False
 
     async def start(self) -> None:
         from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription
         import av
 
         env = {k: v for k, v in os.environ.items() if k not in ("OPENAI_API_KEY", "CODEX_API_KEY")}
-        env["CODEX_HOME"] = CODEX_HOME
+        env["CODEX_HOME"] = self.codex_home
+        env["PATH"] = "/home/pi/.local/bin:/home/pi/tonypi/.venv/bin:" + env.get("PATH", "/usr/local/bin:/usr/bin:/bin")
         self.proc = await asyncio.create_subprocess_exec(
             CODEX, "app-server", "--listen", "stdio://", "--enable", "realtime_conversation",
             "-c", 'model_provider="openai"', stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL, env=env, limit=1 << 24)
+            stderr=asyncio.subprocess.PIPE, env=env, limit=1 << 24)
+        asyncio.create_task(Audio._drain(self.proc.stderr, "codex"))
         sdp_q: asyncio.Queue = asyncio.Queue()
         asyncio.create_task(self._reader(sdp_q))
-        await self._rpc("initialize", {"clientInfo": {"name": "tonypi-voice", "version": "1"},
+        await self._rpc("initialize", {"clientInfo": {"name": "tonypi-voice", "version": "2"},
                                        "capabilities": {"experimentalApi": True}})
         self.proc.stdin.write(b'{"method":"initialized","params":{}}\n')
-        self.tid = (await self._rpc("thread/start", {"cwd": "/tmp", "ephemeral": True}))["thread"]["id"]
+        self.tid = await self.setup_thread()
 
         audio = self.audio
 
@@ -278,6 +324,11 @@ class Live:
             except ValueError:
                 return
             typ = ev.get("type", "")
+            try:
+                if self.on_dc_event(ev):
+                    return
+            except Exception:
+                log.exception("dc event %s", typ)
             if typ == "delegation.created":
                 item = ev.get("item") or {}
                 text = " ".join(c.get("text", "") for c in item.get("content", []) if isinstance(c, dict)).strip()
@@ -296,11 +347,7 @@ class Live:
                 self.closed.set()
 
         await self.pc.setLocalDescription(await self.pc.createOffer())
-        await self._rpc("thread/realtime/start", {
-            "threadId": self.tid, "outputModality": "audio", "version": "v3",
-            "transport": {"type": "webrtc", "sdp": self.pc.localDescription.sdp}, "voice": VOICE,
-            "prompt": LIVE_PROMPT, "realtimeStartInstructions": "Reply skip. Do not use tools.",
-            "clientManagedHandoffs": True})
+        await self._rpc("thread/realtime/start", self.realtime_params(self.pc.localDescription.sdp))
         answer = await asyncio.wait_for(sdp_q.get(), 30)
         await self.pc.setRemoteDescription(RTCSessionDescription(answer, "answer"))
         await asyncio.wait_for(self.ready.wait(), 30)
@@ -399,10 +446,12 @@ class Hub:
             try:
                 from tonypi.tonyd.client import TonydClient
 
-                TonydClient().stop()
+                TonydClient().stop(latch=VOICE_MODE == "live")  # live: no brain may carry on moving
             except Exception as e:
                 log.error("tonyd stop failed: %s", e)
         threading.Thread(target=stop, daemon=True).start()
+        if VOICE_MODE == "live" and self.live is not None and hasattr(self.live, "interrupt_all"):
+            asyncio.create_task(self.live.interrupt_all(body_only=True))
         self.emit_attached({"event": "heard", "id": next(self.ids), "text": "stop", "mode": self.mode,
                             "stopped_body": True})
 
@@ -410,6 +459,26 @@ class Hub:
         text, self.utt_parts = "".join(self.utt_parts), []
         if (target := parse_switch(text)) is not None:
             self._switch(target, None)
+        elif VOICE_MODE == "live" and text.strip() and not STOP_WORDS.match(text):
+            if hasattr(self.live, "utterance_done") and len(text.split()) >= 2:
+                self.live.utterance_done(" ".join(text.split()))
+            def unlatch() -> None:  # the user spoke again after a stop: moving is allowed again
+                try:
+                    from tonypi.tonyd.client import TonydClient
+
+                    TonydClient().unlatch()
+                except Exception as e:
+                    log.warning("unlatch failed: %s", e)
+            threading.Thread(target=unlatch, daemon=True).start()
+
+    def on_live_delegation(self, text: str) -> None:
+        """Live mode: Codex handles the request; we only run the switch reflex on it."""
+        if (target := parse_switch(text)) is not None:
+            self._switch(target, None)
+
+    def request_brain_switch(self, target: str) -> None:
+        self.last_switch_t = -1e9
+        self._switch(target, None)
 
     def _switch(self, target: str, item_id: str | None) -> None:
         if time.monotonic() - self.last_switch_t < 15:  # transcript and delegation of the same words
@@ -498,11 +567,15 @@ class Hub:
         log.info("local voice ready (say 'hey Tony')")
 
     async def run_live(self) -> None:
+        if VOICE_MODE == "live":
+            from tonypi.voice.live import LiveBrain
         while self.live_enabled:
-            self.live = Live(self)
+            self.live = LiveBrain(self) if VOICE_MODE == "live" else Live(self)
             try:
                 await self.live.start()
                 self.mode = "gpt-live"
+                if hasattr(self.live, "watchdog"):
+                    asyncio.create_task(self.live.watchdog())
                 await self.live.closed.wait()
                 log.warning("GPT-Live session closed; restarting")
             except Exception as e:
@@ -564,8 +637,14 @@ class Hub:
                 pcm = resample(pcm, w.getframerate(), MIC_RATE)
             self.audio.inject.extend(pcm.tobytes() + bytes(MIC_RATE))  # + 0.5 s of silence after it
             return {"seconds": round(len(pcm) / MIC_RATE, 2)}
+        if op == "text":  # live mode: a typed request for the brain (turn, or steer of the running turn)
+            if VOICE_MODE != "live" or self.live is None or not hasattr(self.live, "send_text"):
+                raise ValueError("typed requests need live mode with the brain running")
+            return await self.live.send_text(str(msg.get("text", "")), str(msg.get("source", "typed")))
+        if op == "tasks" and hasattr(self.live, "workers"):
+            return {"tasks": {k: {kk: vv for kk, vv in w.items() if kk != "started"} for k, w in self.live.workers.items()}}
         if op == "status":
-            return {"mode": self.mode, "attached": self.attached[0] if self.attached else None,
+            return {"mode": self.mode, "voice_mode": VOICE_MODE, "attached": self.attached[0] if self.attached else None,
                     "voice": VOICE if self.mode == "gpt-live" else "piper", "open_requests": len(self.requests),
                     "spoken_s": {k: round(v, 1) for k, v in self.audio.spoken_s.items()},
                     "mic_s": round(self.audio.mic_chunks * MIC_CHUNK / MIC_RATE, 1),

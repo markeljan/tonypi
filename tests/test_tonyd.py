@@ -400,3 +400,15 @@ def test_fused_tilt_ignores_short_accelerometer_spikes_but_follows_real_leans():
         ang = math.radians(45 * (i + 1) / 50)
         feed(1, (-math.cos(ang), 0.0, math.sin(ang)), gyro=(0.0, -90.0, 0.0))
     assert 35 < b.tilt_deg() < 55
+
+
+def test_stop_latch_refuses_motion_until_unlatched(robot):
+    d, c = robot
+    c.call("stop", latch=True)
+    with pytest.raises(TonydError, match="stop latch"):
+        c.run("wave")
+    assert c.state()["stop_latched"]
+    c.unlatch()
+    assert c.run("wave")["state"] == "done"
+    c.stop()  # a plain stop doesn't latch
+    assert c.run("wave")["state"] == "done"

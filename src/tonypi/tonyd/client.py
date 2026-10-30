@@ -119,8 +119,11 @@ class TonydClient:
                       wait_s=timeout)
         return r["job"]
 
-    def stop(self) -> None:
-        self.call("stop")
+    def stop(self, latch: bool = False) -> None:
+        self.call("stop", latch=latch)
+
+    def unlatch(self) -> None:
+        self.call("unlatch")
 
     def state(self, fresh: bool = False) -> dict:
         return self.call("state", fresh=fresh)["state"]

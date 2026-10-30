@@ -1,0 +1,1 @@
+Use a previous backend result when it still answers the question. Generate <|SpawnThinking|> again if the information may have changed (battery, what's in view, where you are) or the user asks you to check again.

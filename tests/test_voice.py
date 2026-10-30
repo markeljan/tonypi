@@ -68,7 +68,7 @@ def test_bare_stop_stops_the_body_without_any_model(monkeypatch):
     import tonypi.tonyd.client as tc
 
     monkeypatch.setattr(tc.TonydClient, "__init__", lambda self, *a, **k: None)
-    monkeypatch.setattr(tc.TonydClient, "stop", lambda self: stopped.append(1))
+    monkeypatch.setattr(tc.TonydClient, "stop", lambda self, latch=False: stopped.append(1))
 
     async def run():
         hub = service.Hub(live_enabled=False)

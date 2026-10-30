@@ -97,6 +97,7 @@ class Tonyd:
         self.torque_maybe_on = True
         self.hold_s = 0.0  # the last job asked to hold its pose this long
         self.walked = 0  # walking steps since the tether was set / reset
+        self.stop_latched = False
         self.last_warn = 0.0
         self.cached: dict = {}
         self.cached_t = 0.0
@@ -148,6 +149,8 @@ class Tonyd:
             frames, skill = [{"ms": f.ms, "pos": f.pos} for f in parse_frames(frames)], "_play"
         elif skill not in (known := self.skills()):
             raise ValueError(f"unknown skill {skill!r}; known: {', '.join(known)}")
+        if self.stop_latched:
+            raise ValueError("stopped by the user (stop latch): don't move again until they ask for a move")
         steps = max(1, min(MAX_COUNT, int(count)))
         tether = self.tether()
         if tether["on"] and is_walking(skill):
@@ -164,9 +167,13 @@ class Tonyd:
         self.emit("job", **job.public())
         return job
 
-    def stop(self) -> None:
+    def stop(self, latch: bool = False) -> None:
+        """latch: the user said stop; refuse new motion until unlatch (the voice service unlatches when they speak
+        again), so no brain carries on moving after a spoken stop."""
         self._drop_queued()
         self.body.cancel()
+        if latch:
+            self.stop_latched = True
 
     def _drop_queued(self) -> None:
         try:
@@ -247,6 +254,7 @@ class Tonyd:
             "head_deg": dict(self.head_deg),
             "camera": self.camera.status() if self.camera else {"ok": False, "device": None},
             "tether": self.tether(),
+            "stop_latched": self.stop_latched,
         }
 
     def _refresh(self) -> dict:
@@ -386,8 +394,11 @@ class Tonyd:
 
             threading.Thread(target=waiter, daemon=True).start()
         elif op == "stop":
-            self.stop()
-            reply({"stopped": True})
+            self.stop(bool(msg.get("latch")))
+            reply({"stopped": True, "latched": self.stop_latched})
+        elif op == "unlatch":
+            self.stop_latched = False
+            reply({"latched": False})
         elif op == "state":
             reply({"state": self.state(bool(msg.get("fresh")))})
         elif op == "head":

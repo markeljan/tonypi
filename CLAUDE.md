@@ -112,6 +112,22 @@ tonypi-voice, the harness). Say "switch to pi / Hermes / our own / local" (voice
 it, loosely matched: ASR hears "which Khermes"), or `tools/switch.sh own|hermes|pi|off|status`. "Stop" / "halt" /
 "freeze" is caught by the voice service itself and stops tonyd directly, whatever the brain does.
 
+## Live mode (`switch to live`, 2026-10-30): GPT-Live-1 + its own Codex agent, full access
+`src/tonypi/voice/live.py` (spec: docs/LIVE_MODE_SPEC.md). GPT-Live is the voice; with `clientManagedHandoffs:false` its
+Codex app-server thread L (gpt-6.1-sol, `danger-full-access`, approval never, CODEX_HOME `~/.config/tonypi/codex-live`,
+config in provision/files/codex-live.config.toml) is the brain: shell, file edits incl. its own code, live web search,
+image viewing, subagents, and the robot MCP (camera images are seen by the model). L is persistent (resumed via
+`~/.local/share/tonypi/live/state.json`), gets every request as `<realtime_delegation>` with the transcript since the
+last one, and Codex speaks its `[FINAL]` messages (bemTags). Voice-service tools `tony_*`: speak now, background worker
+threads (concurrent jobs, result spoken + injected into L), steer/cancel tasks, switch brain, restart its own voice.
+Live-tested: wave, "what do you see" (camera answer ~11 s), a background task, march then "stop".
+Known: GPT-Live sometimes answers without handing off, and Codex's own link to the call sometimes misses a delegation
+or stalls; the voice service bridges both (it sees every transcript/delegation and hands the request to L itself).
+Seeding past turns as real items made GPT-Live imitate them, so history goes in as one developer note. Prompt variant
+`TONYPI_LIVE_PROMPT=legacy` (default; the spec's `core` prompt delegated less). Stop: the voice service stops tonyd
+with a latch (motion refused until the user speaks again) and interrupts L's turn and body tasks. Typed:
+`{"op":"text"}` on voice.sock. Log: `~/.local/share/tonypi/live/conversation.jsonl`.
+
 ## Agent (live: `tonypi-agent.service`, since 2026-10-28)
 `src/tonypi/agent/` — voice + terminal front end. Owns the mic and speaker; every move goes through tonyd (`body_link.py`).
 - Input: terminal (`tonypi-chat` → `/run/tonypi/agent.sock`, JSON lines) and voice ("hey Tony …": sherpa-onnx KWS

@@ -8,6 +8,7 @@ set -u
 W=/home/pi/tonypi/.claude/worktrees
 PY=/home/pi/tonypi/.venv/bin/python
 name=${1:-}
+rm -f /run/tonypi/voice.env  # relay mode unless this is the live slot (below)
 
 prep() {  # same start pose for every harness: head centred, standing, tether off, walking budget reset
   $PY - <<'EOF'
@@ -44,6 +45,17 @@ case "$name" in
       sleep 1
     done
     cd $W/harness-pi-9ec65f && pi/start.sh ;;
+  live)
+    # GPT-Live-1 + its own Codex agent as the brain, full access (src/tonypi/voice/live.py)
+    echo 'typed: python3 -c "import json,socket;s=socket.socket(socket.AF_UNIX);s.connect(\"/run/tonypi/voice.sock\");s.sendall(json.dumps({\"op\":\"text\",\"text\":\"wave\"}).encode()+b\"\\n\");print(s.makefile().readline())"'
+    exec 9>/run/lock/tonypi-robot.lock
+    flock 9
+    trap 'rm -f /run/tonypi/voice.env; sudo systemctl start tonypi-agent' EXIT INT TERM
+    prep
+    echo "TONYPI_VOICE_MODE=live" > /run/tonypi/voice.env
+    sudo systemctl restart tonypi-voice   # stops tonypi-agent (the units conflict)
+    echo "live mode: journalctl -fu tonypi-voice"
+    sleep infinity & wait $! ;;
   *)
-    echo "usage: tools/e2e.sh own|hermes|pi"; exit 2 ;;
+    echo "usage: tools/e2e.sh own|hermes|pi|live"; exit 2 ;;
 esac

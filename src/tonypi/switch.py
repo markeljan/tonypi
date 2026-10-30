@@ -12,7 +12,7 @@ import subprocess
 
 # speech recognition mangles both words ("Tony, which Khermes"), so match loosely
 _VERB = r"(?:switch|switched|which|swish|twitch|change|swap)(?:\s+(?:over|back))?(?:\s+(?:to|too|two))?"
-_NAME = r"(k?h?ermes|herpes|herm[eè]s|hermis|our own|own|custom|codex|pie|pi|py|p i|local|default)"
+_NAME = r"(k?h?ermes|herpes|herm[eè]s|hermis|our own|own|custom|codex|gpt live|live|alive|life|voice brain|pie|pi|py|p i|local|default)"
 SWITCH_RE = re.compile(rf"\b{_VERB}\s+(?:the\s+)?{_NAME}\b|\buse\s+(?:the\s+)?{_NAME}\s+(?:harness|brain|agent)\b", re.I)
 
 
@@ -24,10 +24,12 @@ def _canon(name: str) -> str:
         return "own"
     if n in ("local", "default"):
         return "off"
+    if n in ("gpt live", "live", "alive", "life", "voice brain"):
+        return "live"
     return "pi"
 
 
-LABEL = {"own": "our own harness", "hermes": "Hermes", "pi": "pi", "off": "the local agent"}
+LABEL = {"own": "our own harness", "hermes": "Hermes", "pi": "pi", "live": "live mode", "off": "the local agent"}
 
 
 def parse_switch(text: str) -> str | None:
@@ -41,7 +43,7 @@ def request_switch(name: str) -> None:
 
 
 def current() -> str:
-    for name in ("own", "hermes", "pi"):
+    for name in ("own", "hermes", "pi", "live"):
         if subprocess.run(["systemctl", "is-active", "-q", f"tonypi-brain@{name}"]).returncode == 0:
             return name
     return "off"
