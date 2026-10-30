@@ -34,6 +34,9 @@ log = logging.getLogger("tonypi.tonyd")
 SNAP_DIR = Path(os.environ.get("TONYD_SNAP_DIR", "/run/tonypi"))
 IDLE_RELAX_S = 1.5  # torque off this long after the last skill (a brain's next step usually comes sooner)
 WATCH_S = 20
+# skills that end in a known pose (or only move the head): no settle before going limp after them
+NO_SETTLE = {"settle", "stand", "get_up", "lie_down", "sleep", "nod", "shake_head",
+             "look_left", "look_right", "look_up", "look_down", "look_center"}
 IDLE_HOT_C = 80
 WARN_EVERY_S = 300
 KEEP_SNAPSHOTS = 10
@@ -73,6 +76,7 @@ class Tonyd:
         self.subs_lock = threading.Lock()
         self.last_skill_end = 0.0
         self.torque_maybe_on = True
+        self.needs_settle = False  # the last skill left the body in a step pose: stand before going limp
         self.last_warn = 0.0
         self.cached: dict = {}
         self.cached_t = 0.0
@@ -146,6 +150,7 @@ class Tonyd:
                     log.exception("skill %s failed", job.skill)
                     self._finish(job, "failed", f"{type(e).__name__}: {e}")
                 finally:
+                    self.needs_settle = job.skill not in NO_SETTLE and job.state != "cancelled"
                     self.current = None
                     self.last_skill_end = time.monotonic()
                     self.torque_maybe_on = True
@@ -189,10 +194,15 @@ class Tonyd:
             time.sleep(0.25)
             now = time.monotonic()
             idle = self.current is None and self.queue.empty()
-            # idle = torque off, whatever pose it ended in (Tony carries no load and holds the pose limp)
+            # idle = torque off (Tony carries no load and holds the pose limp), but only from a neutral stand: going
+            # limp in a walk/turn end pose, then starting the next step from it, put Tony on his back (2026-10-29).
+            # A brain's next step within IDLE_RELAX_S chains on with torque still on, no settle in between.
             if idle and self.torque_maybe_on and now - self.last_skill_end >= IDLE_RELAX_S:
                 if self.lock.acquire(blocking=False):
                     try:
+                        if self.needs_settle and self.current is None and self.queue.empty():
+                            self.needs_settle = False
+                            self.body.settle()  # no-op when lying, asleep or stopped; a new skill preempts it
                         if self.current is None and self.queue.empty():
                             self.body.relax()
                             self.torque_maybe_on = False

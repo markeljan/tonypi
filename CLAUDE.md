@@ -68,7 +68,8 @@ before `tools/bench.py`** or anything else that opens the board.
 - Socket `/run/tonypi/tonyd.sock`, JSON lines (`tonypi.tonyd.client.TonydClient`): ops `ping, skills, run, stop, state, head,
   snapshot, relax, subscribe`. `run` takes a skill name from `tonyd/skills.py` (the only list of body skills) + count 1–5;
   one skill at a time, the newest preempts; `wait: true` returns the finished job (`done/failed/cancelled` + `said`).
-- Safety lives here: `body.py` temperature/fall guards per motion, **torque off 1.5 s after the last skill**, 20 s watchdog
+- Safety lives here: `body.py` temperature/fall guards per motion, **torque off 1.5 s after the last skill**, from a neutral stand (after any body move tonyd runs `settle` first: going limp
+  in a walk/turn end pose and stepping off from it put Tony on his back twice on 2026-10-29; a next skill within 1.5 s chains on), 20 s watchdog
   (re-unloads torque left on, warns on overheating / low battery as `warn` events, which the agent speaks).
 - `head` takes degrees (pan + = left, ±60; tilt + = up, −40..25). `snapshot` writes `/run/tonypi/snap-NNNNNN.jpg` from the
   latest frame (~30 ms; the camera thread keeps capturing at 15 fps).

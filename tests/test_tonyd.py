@@ -132,6 +132,31 @@ def test_watchdog_check_waits_for_the_idle_delay(robot, monkeypatch):
     assert d.body.relaxed > before
 
 
+def test_settles_before_going_limp_after_body_moves(robot, monkeypatch):
+    """Going limp in a walk/turn end pose and starting the next step from it put Tony on his back."""
+    monkeypatch.setattr(server, "IDLE_RELAX_S", 0.1)
+    d, c = robot
+    c.run("turn_left")
+    time.sleep(0.6)
+    assert d.body.ran == [("turn_left", 1), ("settle", 1)] and d.body.relaxed >= 1
+    d.body.ran.clear()
+    c.run("nod")  # head only: no settle
+    c.run("settle")  # already a stand: no second settle
+    time.sleep(0.6)
+    assert d.body.ran == [("nod", 1), ("settle", 1)]
+
+
+def test_no_settle_after_stop(robot, monkeypatch):
+    monkeypatch.setattr(server, "IDLE_RELAX_S", 0.1)
+    d, c = robot
+    d.body.seconds = 2
+    c.run("walk_forward", wait=False)
+    time.sleep(0.1)
+    c.stop()
+    time.sleep(0.6)
+    assert ("settle", 1) not in d.body.ran
+
+
 def test_head_is_clamped(robot):
     d, c = robot
     assert c.head(100, -100) == {"pan": 60.0, "tilt": -40.0}
