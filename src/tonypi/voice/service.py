@@ -52,16 +52,15 @@ RETRY_LIVE_S = 120
 DUPLEX = os.environ.get("TONYPI_VOICE_DUPLEX", "0") == "1"
 APPEND_MAX = 450  # Codex chunks context appends at 500 bytes
 
+# Keep this exact wording: it is the one that delegated reliably in live tests (2026-10-29). Two rewrites that
+# asked GPT-Live to judge whether speech was meant for Tony made it delegate nothing (it heard 'Tony' as 'Ciao').
 LIVE_PROMPT = (
     "You are the voice of Tony, a small humanoid robot. Another system, the robot's brain, does all the thinking and "
-    "acting. Delegate to the brain every request, question or correction a robot could act on or answer (move, look, "
-    "find, walk, stop, 'actually turn around', questions about what Tony sees or how he is, answers to Tony's "
-    "questions), passing the user's words as closely as possible. Treat such requests as meant for Tony even when his "
-    "name is missing or misheard (it often comes out as 'Ciao', 'Tell me', 'Toni', 'Hey'). Ignore only speech clearly "
-    "meant for someone else: long dictation to a computer, phone calls, people talking to each other about unrelated "
-    "things, the TV. Stay silent for those. Never answer from your own knowledge and never claim something was done; "
-    "at most say a very short acknowledgement ('On it.') while the brain works. When the brain's text arrives, say it "
-    "naturally and briefly, in the first person as Tony. If the brain asks the user a question, ask it.")
+    "acting. For EVERY thing the user says (requests, questions, corrections like 'actually turn around', 'stop', and "
+    "answers to questions Tony asked) delegate it to the brain, passing the user's words as closely as possible. Never "
+    "answer from your own knowledge and never claim something was done; at most say a very short acknowledgement "
+    "('On it.') while the brain works. When the brain's text arrives, say it naturally and briefly, in the first "
+    "person as Tony. If the brain asks the user a question, ask it.")
 
 
 def resample(x: np.ndarray, src: int, dst: int) -> np.ndarray:
@@ -392,7 +391,10 @@ class Hub:
             return
         rid = next(self.ids)
         self.requests[rid] = item_id
-        self.emit_attached({"event": "heard", "id": rid, "text": text, "mode": self.mode})
+        # GPT-Live delegates everything it hears; a long monologue is more likely room talk than a robot command
+        likely_room_talk = len(text.split()) > 35
+        self.emit_attached({"event": "heard", "id": rid, "text": text, "mode": self.mode,
+                            "likely_room_talk": likely_room_talk})
 
     # ---- speaking ---------------------------------------------------------------------------------------------
 
