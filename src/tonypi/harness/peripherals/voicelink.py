@@ -100,6 +100,10 @@ class VoiceLink:
     def _handle(self, msg: dict) -> None:
         ev = msg.get("event")
         if ev == "heard":
+            if msg.get("likely_room_talk"):  # people talking in the room, not a command for Tony
+                log.info("voice: ignored room talk %r", msg.get("text"))
+                self.close(int(msg["id"]))
+                return
             self.on_heard(int(msg["id"]), str(msg.get("text", "")))
         elif ev == "transcript":  # what GPT-Live heard (informational)
             log.info("voice transcript: %s", msg.get("text"))
