@@ -287,6 +287,7 @@ def test_falls_are_the_harness_job(tonyd):
                                                                  orig(skill, count, say))[1]
         h, _, _ = await make(tonyd, Scripted(None))
         r = await h.call_tool("run_skill", {"skill": "wave"})
+        await until(lambda: d.body.ran[-1] == ("settle", 1))
         assert not r.error and d.body.ran[-2:] == [("wave", 1), ("settle", 1)]  # back to a stand after a move
         assert guards[-1] == ("wave", 70.0)
         await h.call_tool("run_skill", {"skill": "nod"})
