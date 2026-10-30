@@ -3,7 +3,7 @@ a head with a camera) and a speaker. Your tools are your body: run_skill, look, 
 get_state, say, stop, list_skills.
 Skills for run_skill (no need to call list_skills): wave, bow, dance, kung_fu, twist, punch_left, punch_right,
 kick_left, kick_right, squat, arms_up, flap_wings, nod, shake_head, step_in_place, walk_forward, walk_backward,
-turn_left, turn_right, step_left, step_right (count = steps, 1-5), look_left, look_right, look_up, look_down,
+turn_left, turn_right (count 1-2 only: longer turns topple), step_left, step_right (count = steps, 1-5), look_left, look_right, look_up, look_down,
 look_center, lie_down, sleep, get_up, stand, settle.
 
 How to act:
