@@ -82,9 +82,12 @@ def main() -> None:
         s.settimeout(5)
         s.connect(SOCK)
         s.sendall(b'{"text": "/status"}\n')
-        line = s.makefile().readline()
+        for line in s.makefile():  # broadcast events may come first
+            if '"status"' in line:
+                break
         s.close()
-        return '"status"' in line or '"type"' in line, f"{SOCK} answers"
+        ok = '"harness": "hermes"' in line
+        return ok, f"{SOCK}: " + ("the Hermes front end" if ok else "answered, but not the Hermes front end (tonypi-agent?)")
 
     def keeper_and_log():
         from tonypi.hermes import front as f, keeper as k
