@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Install Hermes Agent and the "tonypi" profile (robot MCP, SOUL, robot skills, providers). Idempotent.
 #
-#   hermes/setup.sh [--brain codex|anthropic|local] [--model NAME] [--mcp-url URL]
+#   hermes/setup.sh [--brain codex|anthropic|local] [--model NAME] [--mcp-url URL] [--extra-mcp URL]
+#   --extra-mcp: a second tonypi-mcp (e.g. this branch's, for scan/video before it is deployed); only those tools
 #
 #   codex      ChatGPT subscription (default model gpt-6.1-terra; this account: gpt-6.1-sol/terra, gpt-6-luna, gpt-5.6-*). Log in once:  tonypi auth add openai-codex --type oauth --no-browser
 #   anthropic  ANTHROPIC_API_KEY in ~/.hermes/profiles/tonypi/.env (or Claude Max OAuth: tonypi auth add anthropic)
@@ -10,12 +11,13 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BRAIN=codex MODEL="" MCP_URL="http://127.0.0.1:8765/mcp"
+BRAIN=codex MODEL="" MCP_URL="http://127.0.0.1:8765/mcp" EXTRA_MCP=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --brain) BRAIN="$2"; shift 2 ;;
         --model) MODEL="$2"; shift 2 ;;
         --mcp-url) MCP_URL="$2"; shift 2 ;;
+        --extra-mcp) EXTRA_MCP="$2"; shift 2 ;;
         *) echo "unknown option $1" >&2; exit 2 ;;
     esac
 done
@@ -42,11 +44,16 @@ install -m 600 "$REPO/hermes/SOUL.md" "$PROFILE/SOUL.md"
 [ -s "$PROFILE/memories/MEMORY.md" ] || { mkdir -p "$PROFILE/memories"; cp "$REPO/hermes/memory-seed.md" "$PROFILE/memories/MEMORY.md"; }
 mkdir -p "$PROFILE/skills"
 cp -r "$REPO/hermes/skills/." "$PROFILE/skills/"
-python3 - "$REPO" "$PROFILE/config.yaml" "$BRAIN" "$MODEL" "$MCP_URL" <<'PY'
+python3 - "$REPO" "$PROFILE/config.yaml" "$BRAIN" "$MODEL" "$MCP_URL" "$EXTRA_MCP" <<'PY'
 import sys, yaml
-repo, out, brain, model, mcp_url = sys.argv[1:]
+repo, out, brain, model, mcp_url, extra = sys.argv[1:]
 cfg = yaml.safe_load(open(f"{repo}/hermes/config.yaml").read().replace("__REPO__", repo))
 cfg["mcp_servers"]["tonypi"]["url"] = mcp_url
+if extra:
+    cfg["mcp_servers"]["tonypi-extra"] = {**cfg["mcp_servers"]["tonypi"], "url": extra,
+                                          "tools": {"include": ["scan", "video"], "resources": False, "prompts": False}}
+    for platform in cfg["platform_toolsets"].values():
+        platform.insert(1, "mcp-tonypi-extra")
 if brain == "codex":
     cfg["model"] = {"default": model or "gpt-6.1-terra", "provider": "openai-codex"}
 elif brain == "anthropic":  # untested (the owner uses the ChatGPT login)

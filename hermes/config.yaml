@@ -40,7 +40,7 @@ platform_toolsets:
   telegram: [mcp-tonypi, memory, skills]
 
 mcp_servers:
-  tonypi:
+  tonypi:   # the robot: skills, head, camera, state, speech, and motion authoring (joints, keyframes, calibration)
     url: http://127.0.0.1:8765/mcp
     timeout: 200          # run_skill(wait=True) can take a while (dance ~60 s)
     connect_timeout: 10
