@@ -89,6 +89,19 @@ def main() -> None:
         ok = '"harness": "hermes"' in line
         return ok, f"{SOCK}: " + ("the Hermes front end" if ok else "answered, but not the Hermes front end (tonypi-agent?)")
 
+    def voice():
+        from tonypi.hermes.peripherals import VOICE_SOCK, voice_service_up
+
+        if not voice_service_up():
+            return False, f"tonypi-voice not running ({VOICE_SOCK}); local wake word fallback only"
+        s = socket.socket(socket.AF_UNIX)
+        s.settimeout(5)
+        s.connect(VOICE_SOCK)
+        s.sendall(b'{"op": "status"}\n')
+        line = s.makefile().readline().strip()
+        s.close()
+        return True, f"tonypi-voice: {line[:200]}"
+
     def keeper_and_log():
         from tonypi.hermes import front as f, keeper as k
         f.STATE.mkdir(parents=True, exist_ok=True)
@@ -124,7 +137,7 @@ def main() -> None:
 
     checks = [check("Hermes gateway (API :8642)", gateway), check("ChatGPT/Codex login", codex),
               check("Robot tools (tonypi-mcp :8765)", robot_tools), check("Self-update tools (tonypi-self)", self_tools),
-              check("Body: upright, camera, battery, tether", body), check("Front end socket", front),
+              check("Body: upright, camera, battery, tether", body), check("Front end socket", front), check("Voice (tonypi-voice, GPT-Live-1)", voice),
               check("Task log + keeper", keeper_and_log), check("Harness tests", tests),
               check("Code frozen (committed)", frozen)]
     if args.probe:

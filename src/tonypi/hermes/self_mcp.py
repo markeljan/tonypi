@@ -113,6 +113,31 @@ def commit_learned(context: str) -> str | None:
 
 
 @mcp.tool()
+def ask_user(question: str, timeout_s: float = 30) -> dict:
+    """Ask the user out loud (and on the terminal) and wait for the answer, e.g. "I'm stuck at the rug edge, what
+    should I do?". Use it when stuck after trying different ways, or when the request is unclear. answer is null if
+    nobody answered within timeout_s."""
+    import socket
+
+    timeout_s = max(5.0, min(120.0, float(timeout_s)))
+    s = socket.socket(socket.AF_UNIX)
+    s.settimeout(timeout_s + 15)
+    try:
+        s.connect(os.environ.get("TONYPI_SOCK", "/run/tonypi/agent.sock"))
+        s.sendall((json.dumps({"op": "ask", "text": question, "timeout_s": timeout_s}) + "\n").encode())
+        for line in s.makefile("r", encoding="utf-8"):
+            msg = json.loads(line)
+            if msg.get("type") == "answer":
+                _log("ask", question=question, answer=msg.get("answer"))
+                return {"answer": msg.get("answer")}
+    except (OSError, ValueError) as e:
+        raise ToolError(f"can't ask: the front end isn't reachable ({e})") from e
+    finally:
+        s.close()
+    return {"answer": None}
+
+
+@mcp.tool()
 def task_done(success: bool, summary: str, how: str = "") -> dict:
     """Report the current task as finished. success=True: it's done (you checked: camera / get_state / yaw).
     success=False: only when you have truly run out of options; say what you tried and what you need.

@@ -1,1 +1,1 @@
-Tony lives on the floor of the owner's home (wooden floor, patterned rugs, office chairs, white doors). Rug edges are flat, not drops; walking on the floor is safe when the path ahead is clear.
+Tony lives on the floor of the owner's home (wooden floor, patterned rugs, office chairs, white doors). Rug edges are not drops, but they are a small step up: the default walk can stall there.

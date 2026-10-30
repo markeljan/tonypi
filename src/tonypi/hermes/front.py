@@ -65,9 +65,10 @@ TETHER_RESET = os.environ.get("TONYPI_HERMES_TETHER_RESET", "0") == "1"  # E2E p
 STATE = Path(os.environ.get("TONYPI_HERMES_STATE", Path.home() / ".local/state/tonypi/hermes"))
 TASK_LOG = STATE / "tasks.jsonl"
 CONTINUE_PROMPT = ("[harness] The task \"{task}\" is not reported done yet (attempt {n}). Check where things stand "
-                   "(camera, get_state, last results). If something failed, try a different way: turn, re-scan, get "
-                   "closer, write or fix a motion. Keep going; call task_done when it is done, or task_done(success="
-                   "false) only if you have truly run out of options.")
+                   "(camera, get_state, last results). If the same thing failed twice, don't repeat it: follow "
+                   "when-stuck (gather data, say what's wrong, try a genuinely different way) or ask_user. Keep going; "
+                   "call task_done when it is done, or task_done(success=false) only if you have truly run out of "
+                   "options.")
 
 
 def tier_for(text: str) -> str:
@@ -105,6 +106,7 @@ class Front:
         self.source = "terminal"
         self.stopped = False
         self.task: dict | None = None  # the task being worked on (its log record)
+        self._asking: dict | None = None  # a pending ask(): {"done": Event, "answer"}
         self.speaking = threading.Event()
         self.speech: queue.Queue = queue.Queue()
         threading.Thread(target=self._speech_loop, name="speech", daemon=True).start()
@@ -120,11 +122,32 @@ class Front:
             except Exception:
                 log.exception("event listener failed")
 
-    def say(self, text: str, rid: int | None = None) -> None:
+    def say(self, text: str, rid: int | None = None, final: bool = False) -> None:
+        """final: the answer to request `rid` (the voice service speaks one final reply per request); else progress."""
         text = text.strip()
         if text:
-            self.emit("say", id=rid, text=text)
+            self.emit("say", id=rid, text=text, final=final)
             self.speech.put(text)
+
+    def ask(self, question: str, timeout_s: float = 30) -> str | None:
+        """Ask the user out loud (voice service) and on the terminal; the first answer, spoken or typed, wins."""
+        waiter = {"done": threading.Event(), "answer": None}
+        self._asking = waiter
+        self.emit("info", text=f"[asking] {question}")
+        self.emit("ask", text=question, timeout_s=timeout_s)
+        waiter["done"].wait(timeout_s)
+        self._asking = None
+        self.emit("info", text=f"[answer] {waiter['answer']!r}")
+        return waiter["answer"]
+
+    def answer(self, text: str) -> bool:
+        """An answer to the pending ask (False if nothing is being asked)."""
+        waiter = self._asking
+        if waiter is None or waiter["done"].is_set():
+            return False
+        waiter["answer"] = text
+        waiter["done"].set()
+        return True
 
     def hush(self) -> None:
         while not self.speech.empty():
@@ -166,8 +189,14 @@ class Front:
             self.emit("done", id=rid)
             return rid
         if STOP_RE.match(text):
+            if self._asking is not None:
+                self.answer(text)
             self.stop_all()
             self.emit("action", id=rid, name="stop", count=1)
+            self.emit("done", id=rid)
+            return rid
+        if self.answer(text):  # Tony asked something; this is the reply, not a new command
+            self.emit("info", id=rid, text="taken as the answer to Tony's question")
             self.emit("done", id=rid)
             return rid
         deadline = time.monotonic() + 15
@@ -228,7 +257,7 @@ class Front:
         task = self.task = {"id": f"{time.strftime('%Y%m%d-%H%M%S')}-{rid}", "text": text, "source": source,
                             "tier": tier, "model": model, "effort": effort, "received": round(wall0, 2),
                             "first_action_s": None, "tool_calls": [], "turns": 0, "retries": 0, "steers": 0,
-                            "tokens_in": 0, "tokens_out": 0, "runs": []}
+                            "tokens_in": 0, "tokens_out": 0, "runs": [], "rid": rid}
         self.emit("thinking", id=rid)
         self.emit("info", id=rid, text=f"brain: {model} ({effort} reasoning)")
         if not self.session_id or time.monotonic() - self.last_turn > IDLE_S or tier == "deep":
@@ -257,11 +286,13 @@ class Front:
                 continue
             report = read_report(turn_wall)
             if report or tier == "fast" or out["kind"] == "error":
+                self.say(out["output"], rid, final=True)
                 break
             if time.monotonic() - t0 > TASK_CAP_S or task["retries"] >= MAX_CONTINUES:
-                self.say("I'm out of time for this one. " + ("I'll stop here." if not out["output"] else ""), rid)
+                self.say(out["output"] + " I'm out of time for this one.", rid, final=True)
                 task["timed_out"] = True
                 break
+            self.say(out["output"], rid)  # progress; the task goes on
             task["retries"] += 1
             prompt = CONTINUE_PROMPT.format(task=text, n=task["retries"] + 1)
             with self.lock:
@@ -303,12 +334,9 @@ class Front:
                     self.say(ev["text"], rid)  # "Looking for the door." between tool calls
                 elif kind in ("run.completed", "run.failed", "run.cancelled", "run.interrupted"):
                     out.update(kind=kind, pending=(ev.get("pending_steer") or "").strip(), output=ev.get("output") or "")
-                    if kind == "run.completed" and not out["pending"]:
-                        self.say(out["output"], rid)
-                    elif kind == "run.failed":
+                    if kind == "run.failed":
                         self.emit("info", id=rid, text=f"hermes: {ev.get('error', 'run failed')}")
-                        if not self.stopped:
-                            self.say("Sorry, my brain had a problem with that.", rid)
+                        out["output"] = "" if self.stopped else "Sorry, my brain had a problem with that."
                     usage = ev.get("usage") or {}
                     task["tokens_in"] += int(usage.get("input_tokens") or 0)
                     task["tokens_out"] += int(usage.get("output_tokens") or 0)
@@ -318,7 +346,7 @@ class Front:
         except HermesError as e:
             log.error("%s", e)
             self.emit("info", id=rid, text=str(e))
-            self.say("I can't reach my brain right now.", rid)
+            out["output"] = "I can't reach my brain right now."
         return out
 
     def _time_up(self, task: dict) -> None:
@@ -328,7 +356,7 @@ class Front:
         log.warning("task cap %.0f s reached: stopping", TASK_CAP_S)
         task["timed_out"] = True
         self.stop_all()
-        self.say("I'm out of time for this one.")
+        self.say("I'm out of time for this one.", task.get("rid"), final=True)
 
     def _commit_learned(self, task: dict) -> None:
         """Skills Tony refined during the task (skill_manage) are committed on the branch (tonypi-self)."""
@@ -397,11 +425,12 @@ def main() -> None:
     ap.add_argument("--no-voice", action="store_true", help="terminal socket only (no mic, no speaker)")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    speaker = None if args.no_voice else peripherals.make_speaker()
+    service = peripherals.voice_service_up()  # tonypi-voice owns the mic and speaker (GPT-Live-1)
+    speaker = None if args.no_voice or service else peripherals.make_speaker()
     front = Front(HermesRuns(), speak=speaker.say if speaker else None, stop_speaking=speaker.stop if speaker else None)
     front.keeper = BodyKeeper(front.tonyd, front.say, on_fall=front.body_note)
     front.keeper.start()
-    for p in peripherals.enabled(front, speaker):
+    for p in peripherals.enabled(front, speaker, voice_service=service and not args.no_voice):
         p.start()
     if not front.hermes.health():
         log.warning("Hermes API server not reachable at %s (start: tonypi gateway run)", front.hermes.url)

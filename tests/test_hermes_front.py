@@ -67,18 +67,25 @@ class FakeHermes:
         self.release.put(("run.cancelled", None))
 
 
+FRONTS: list = []
+
+
 @pytest.fixture(autouse=True)
 def state_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(front_mod, "STATE", tmp_path)
     monkeypatch.setattr(front_mod, "TASK_LOG", tmp_path / "tasks.jsonl")
     monkeypatch.setattr(front_mod, "TIER", "fast")
     monkeypatch.setattr(Front, "_commit_learned", lambda self, task: None)  # never touch the real repo/profile
-    return tmp_path
+    yield tmp_path
+    for f in FRONTS:  # a task still finishing would log into the next test's directory
+        wait(lambda: f.task is None and f.run_id is None, 6)
+    FRONTS.clear()
 
 
 def make(hermes):
     said: list[str] = []
     f = Front(hermes, tonyd=FakeTonyd(), speak=said.append, stop_speaking=lambda: None)
+    FRONTS.append(f)
     events: list[dict] = []
     f.listeners.append(events.append)
     return f, said, events
@@ -179,7 +186,9 @@ def test_deep_task_persists_until_task_done_and_is_logged(monkeypatch, state_dir
     assert wait(lambda: f.run_id is None)
     assert len(h.started) == 2
     assert wait(lambda: (state_dir / "tasks.jsonl").exists())
-    rec = json.loads((state_dir / "tasks.jsonl").read_text().splitlines()[-1])
+    assert wait(lambda: "walk to the chair" in (state_dir / "tasks.jsonl").read_text())
+    rec = next(r for r in map(json.loads, (state_dir / "tasks.jsonl").read_text().splitlines())
+               if r["text"] == "walk to the chair")
     assert rec["success"] is True and rec["retries"] == 1 and rec["turns"] == 2
     assert rec["tokens_in"] == 200 and rec["created"] == ["motion:jumping_jack_hermes"]
     assert rec["first_action_s"] is not None and rec["how"] == "scan, turn, walk"
