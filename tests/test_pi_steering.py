@@ -164,7 +164,11 @@ def test_steer_mid_walk_turns_right_instead(tmp_path: Path, monkeypatch):
     assert "turn_left" not in skills
     assert skills[-2:] == ["turn_right", "settle"], body.runs  # settles once pi is done
     walk = body.run_msgs[0]
-    assert walk["guard_tilt_deg"] == 70 and walk["hold_s"] == 10  # balance is the harness's job now
+    assert walk["guard_tilt_deg"] == 70 and walk["hold_s"] == 2  # balance is the harness's job now
+    # settle ~1 s after the last move ends (before tonyd's 1.5 s limp), never between steps that follow each other
+    assert skills.count("settle") == 1
+    t_last_turn_end = body.runs[-2][0] + STEP_S
+    assert 0.8 < body.runs[-1][0] - t_last_turn_end < 1.6, body.runs
     assert "guard_tilt_deg" not in body.run_msgs[-1] and body.run_msgs[-1]["hold_s"] == 0  # settle
     t_turn = next(t for t, s, _ in body.runs if s == "turn_right")
     assert t_turn - t_steer < STEP_S + 1.5, f"steer took {t_turn - t_steer:.2f} s to land"

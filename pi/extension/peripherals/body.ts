@@ -4,9 +4,10 @@
 // Balance is ours, not tonyd's (since main ef99364 tonyd only stops, guards temperature, and goes limp 1.5 s after
 // the last job in whatever pose it ended). Without the model:
 // - every job carries a tilt guard (GUARD_TILT_DEG, tighter if the model asks; not for getting up / lying down);
-// - body moves hold their end pose (HOLD_S) so Tony doesn't go limp mid-step while the model thinks;
-// - a body move while lying gets up first;
-// - when pi has nothing left to do after body moves (aborted or not), Tony settles into a neutral stand.
+// - after a body move, if no other body job starts within SETTLE_AFTER_MS, Tony settles into a neutral stand before
+//   tonyd's 1.5 s limp (the move holds its end pose HOLD_S meanwhile). So he never goes limp mid-step, also after a
+//   "stop", and servos aren't kept loaded while the model thinks (a stand is safe limp);
+// - a body move while lying gets up first.
 // The front end's fall reflex (src/tonypi/pi_front) gets him up after an unexpected fall.
 //
 // Steering: pi delivers a steering message only after the running tool returns, so a motion tool must not keep
@@ -39,7 +40,32 @@ const NO_SETTLE = /^(look_|nod$|shake_head$|settle$|stand$|lie_down$|sleep$|get_
 const FLOOR = /^(get_up|stand|lie_down|sleep|settle)$/;  // these pass through lying: no tilt guard
 const HEAD = /^(look_|nod$|shake_head$)/;
 export const GUARD_TILT_DEG = Number(process.env.TONYPI_GUARD_TILT_DEG ?? 70);  // dances lean past 50 on purpose
-const HOLD_S = Number(process.env.TONYPI_HOLD_S ?? 10);
+export const HOLD_S = Number(process.env.TONYPI_HOLD_S ?? 2);
+// benchmark limit (T9: 40 turn steps): skills with "turn" in the name stop once this many steps ran (unset = none)
+const TURN_BUDGET = process.env.TONYPI_TURN_BUDGET ? Number(process.env.TONYPI_TURN_BUDGET) : Infinity;
+let turnSteps = 0;
+const SETTLE_AFTER_MS = Number(process.env.TONYPI_SETTLE_AFTER_MS ?? 1000);
+
+// ---- settle when idle after a body move (reflex, no model) -------------------------------------------------------
+let settleTimer: ReturnType<typeof setTimeout> | undefined;
+let jobsRunning = 0;
+/** A body job is about to start: no settle in between. */
+export function bodyBusy() {
+  clearTimeout(settleTimer);
+  jobsRunning++;
+}
+/** A body job ended; moved = it left Tony in a pose that isn't a stand. */
+export function bodyIdle(moved: boolean) {
+  jobsRunning = Math.max(0, jobsRunning - 1);
+  clearTimeout(settleTimer);
+  if (!moved) return;
+  settleTimer = setTimeout(async () => {
+    if (jobsRunning) return;
+    const st = await tonyd.state().catch(() => null);
+    if (!st || st.lying || st.busy) return;  // lying: the fall reflex's business; busy: someone else moves him
+    await tonyd.run("settle", 1).catch(() => {});
+  }, SETTLE_AFTER_MS);
+}
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -52,8 +78,10 @@ function interruption(ctx: ExtensionContext, signal?: AbortSignal): string | nul
 
 /** One tonyd job; cancelled when the turn is aborted, or (unless finishStep) when a new message arrives. */
 export async function job(start: () => Promise<tonyd.Job>, ctx: ExtensionContext, signal: AbortSignal | undefined,
-                          finishStep = false): Promise<{ job: tonyd.Job; why: string | null }> {
+                          finishStep = false, moves = true): Promise<{ job: tonyd.Job; why: string | null }> {
+  bodyBusy();
   const p = start();
+  p.finally(() => bodyIdle(moves)).catch(() => {});
   let settled = false;
   let why: string | null = null;
   p.finally(() => (settled = true)).catch(() => {});
@@ -85,15 +113,6 @@ export default async function body(pi: ExtensionAPI) {
   } catch {
     skills = loadSkills();
   }
-  let moved = false;
-
-  // reflex, no model: when pi has nothing left to do after body moves, settle into a neutral stand, also after an
-  // abort ("stop", or a new command that only talks): going limp mid-step tips Tony over.
-  pi.on("agent_settled", () => {
-    if (!moved) return;
-    moved = false;
-    tonyd.run("settle", 1).catch(() => {});  // no-op when lying; a new command's move preempts it
-  });
 
   pi.registerTool(defineTool({
     name: "run_skill",
@@ -116,7 +135,7 @@ export default async function body(pi: ExtensionAPI) {
       if (!FLOOR.test(skill) && !HEAD.test(skill)) {
         const st = await tonyd.state().catch(() => null);
         if (st?.lying) {  // tonyd no longer gets up by itself before moving
-          const up = await job(() => tonyd.run("get_up"), ctx, signal);
+          const up = await job(() => tonyd.run("get_up"), ctx, signal, false, false);
           notes.push(`I was lying down, so I got up first (${up.job.state})`);
           if (up.job.state !== "done") return text(`${notes[0]}; ${skill} not started.`, { skill, done: 0, of: count, state: "failed" });
         }
@@ -133,11 +152,17 @@ export default async function body(pi: ExtensionAPI) {
       let why: string | null = null;
       let state = "done";
       let tilt: number | null = null;
-      if (!NO_SETTLE.test(skill)) moved = true;
       for (let i = 0; i < (stepped ? count : 1); i++) {
+        if (skill.includes("turn") && turnSteps >= TURN_BUDGET) {
+          why = `the benchmark's budget of ${TURN_BUDGET} turn steps is used up`;
+          state = "failed";
+          break;
+        }
+        if (skill.includes("turn")) turnSteps += stepped ? 1 : count;
         let r: Awaited<ReturnType<typeof job>>;
         try {
-          r = await job(() => tonyd.run(skill, stepped ? 1 : Math.min(count, 5), o), ctx, signal, stepped);
+          r = await job(() => tonyd.run(skill, stepped ? 1 : Math.min(count, 5), o), ctx, signal, stepped,
+                        !NO_SETTLE.test(skill));
         } catch (e) {  // refused mid-way (e.g. the charger tether's step budget): report what got done
           if (!done) throw e;
           why = `the body refused: ${(e as Error).message}`;
@@ -182,7 +207,6 @@ export default async function body(pi: ExtensionAPI) {
     description: "Stop all body motion immediately.",
     parameters: Type.Object({}),
     async execute() {
-      moved = false;
       await tonyd.stop();
       return text("Stopped.", undefined);
     },

@@ -10,7 +10,7 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import * as tonyd from "../tonyd.ts";
-import { describe, GUARD_TILT_DEG, job, text } from "./body.ts";
+import { describe, GUARD_TILT_DEG, HOLD_S, job, text } from "./body.ts";
 
 const SERVOS = "L/R: 1/9 ankle roll, 2/10 ankle pitch, 3/11 knee, 4/12 hip pitch, 5/13 hip roll, 6/14 elbow, "
   + "7/15 shoulder roll, 8/16 shoulder pitch; positions 0..1000, 500 = centre, ~0.24 deg per count";
@@ -46,15 +46,17 @@ export default function studio(pi: ExtensionAPI) {
     name: "play_frames",
     label: "Play frames",
     description: "Play your own keyframes without saving them, e.g. [{\"ms\": 400, \"pos\": {\"4\": 620, \"12\": 380}}]. "
-      + "Servos left out keep their position. It stops if Tony tilts past guard_tilt_deg. The last pose is held with "
-      + `torque on for hold_s (then Tony goes limp in it: end in a stable pose). Returns state and max tilt. ${SERVOS}.`,
+      + "Servos left out keep their position. It stops if Tony tilts past guard_tilt_deg. Afterwards Tony settles into "
+      + "a stand by himself, unless you hold the last pose longer with hold_s (then he goes limp in it). Returns state "
+      + `and max tilt. ${SERVOS}.`,
     parameters: Type.Object({ frames: Type.Array(Frame, { minItems: 1, maxItems: 400 }),
-      hold_s: Type.Optional(Type.Number({ minimum: 0, maximum: 120, description: "default 10" })),
+      hold_s: Type.Optional(Type.Number({ minimum: 0, maximum: 120, description: `default ${HOLD_S}; longer = hold the pose (no settle)` })),
       guard_tilt_deg: Type.Optional(Type.Number({ minimum: 5, maximum: 120, description: `default ${GUARD_TILT_DEG}` })) }),
     executionMode: "sequential",
-    async execute(_id, { frames, hold_s = 10, guard_tilt_deg = GUARD_TILT_DEG }, signal, _u, ctx) {
+    async execute(_id, { frames, hold_s = HOLD_S, guard_tilt_deg = GUARD_TILT_DEG }, signal, _u, ctx) {
       const t0 = Date.now();
-      const r = await job(() => tonyd.play(frames, { hold_s, guard_tilt_deg }), ctx, signal);
+      // settles into a stand ~1 s after, unless the model asked to hold the pose longer
+      const r = await job(() => tonyd.play(frames, { hold_s, guard_tilt_deg }), ctx, signal, false, hold_s <= HOLD_S);
       return text(describe(`play ${frames.length} frames`, r.job, r.why, ((Date.now() - t0) / 1000).toFixed(1)), r.job);
     },
   }));
@@ -69,7 +71,7 @@ export default function studio(pi: ExtensionAPI) {
       guard_tilt_deg: Type.Optional(Type.Number({ minimum: 5, maximum: 120 })) }),
     executionMode: "sequential",
     async execute(_id, { positions, ms = 500, hold_s = 10, guard_tilt_deg = GUARD_TILT_DEG }, signal, _u, ctx) {
-      const r = await job(() => tonyd.pose(positions, ms, { hold_s, guard_tilt_deg }), ctx, signal);
+      const r = await job(() => tonyd.pose(positions, ms, { hold_s, guard_tilt_deg }), ctx, signal, false, false);
       return text(describe("pose", r.job, r.why, ((r.job.seconds ?? 0)).toFixed(1)), r.job);
     },
   }));

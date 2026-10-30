@@ -34,9 +34,11 @@ opposite directions around 500. Check against the default before assuming.
 ## Workflow
 
 1. **Baseline.** `list_skills` shows what the skill plays (`turn_left = *turn_left`: one motion repeated per
-   step). `get_motion` the motion and read it: frame times (`ms`), which servos move, how far. Run the default
-   3 times at `count` 1 (with `guard_tilt_deg: 25`) and write down each max tilt. For a turn, also note how far it turns: take a `snapshot`
-   before and after and compare, or ask the person.
+   step). `get_motion` the motion and read it: frame times (`ms`), which servos move, how far. Measure the default
+   with `guard_tilt_deg: 25`: **3 trials at `count` 1 plus 1 trial at `count` 3**, writing down each max tilt.
+   For a turn, also estimate how far it turns per step: `snapshot` before and after a trial and compare how far
+   things in view moved (the camera sees about 60 degrees across), or ask the person. A "steadier" turn that
+   barely turns is no fix.
 2. **One hypothesis.** Common causes of a wobbly or falling step:
    - frames too fast (short `ms`): Tony swings past balance. Try 1.2-1.5x longer frames;
    - too much hip roll (5/13) or ankle roll (1/9) swing: move them 10-20 counts closer to the stand pose;
@@ -48,8 +50,8 @@ opposite directions around 500. Check against the default before assuming.
    servo, or one timing change), and `save_motion` under a new name with `_pi`, e.g. `turn_left_pi_v2`.
    Make it a skill: `save_skill("turn_left_pi_v2", ["*turn_left_pi_v2"], "...")`. The motion library is shared
    with other brains on this robot, so names you save must contain `_pi`, and defaults are never overwritten.
-4. **Test.** `run_skill("turn_left_pi_v2", 1, guard_tilt_deg=25)` three times, the same as the baseline. Compare the max tilts and the
-   turn amount. Then try `count` 2 or 3, still watching the tilt.
+4. **Test.** Measure the candidate exactly like the baseline (3 trials at `count` 1 plus 1 at `count` 3,
+   `guard_tilt_deg: 25`, snapshots for the turn amount) and compare.
 5. **Keep or revert.** Better means a lower or equal max tilt on every trial, no aborts, and still a useful turn.
    If it's worse, go back to the previous version and try a different hypothesis. Three to five rounds is plenty.
 6. **Recommend, don't replace.** Keep the best version under its `_pi` name and put the evidence in its

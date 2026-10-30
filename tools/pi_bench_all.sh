@@ -67,9 +67,17 @@ case $MODE in
     b S1 "turn left 2 steps"
     sleep 5
     ;;
-  gait)  # T9: the brain tunes turn_left (owner: no spotter needed, falls are fine; the fall reflex gets him up)
-    start_front TONYPI_X=1
-    TIMEOUT=900 b G1 "Improve your turn_left so you are steadier: all three falls today happened during turns. You're on the floor; falls are OK, you get back up. Follow your gait tuning instructions. Save your versions with the _pi suffix (never over turn_left) and tell me the numbers before and after."
+  gait)  # T9 (docs/HARNESS_BAKEOFF.md): the brain fixes its own turn. No spotter (owner: Tony is built to fall)
+    start_front TONYPI_BRAIN_TIER=advanced TONYPI_TURN_BUDGET=40
+    TIMEOUT=960 b T9 "Your left turn keeps tipping you over. Improve turn_left: measure the default, change it in small steps, test, and save your best version as turn_left_pi. Don't change the default turn_left." "@900" "stop"
+    sleep 5
+    # staged fall, behind the brain's back: a fast deep hip bend with no tilt guard; the front end's reflex must
+    # notice, stop, speak, get up and settle by itself
+    echo "=== F1 staged fall $(date +%T)" | tee -a $OUT/bench-$MODE.txt
+    $PY -c "from tonypi.tonyd.client import TonydClient as T; print(T().play([{'ms': 250, 'pos': {'4': 900, '12': 100, '3': 500, '11': 500}}], hold_s=3))" 2>&1 | tee -a $OUT/bench-$MODE.txt
+    sleep 30
+    grep -E "fall|get_up|back up|gave up|Oops|settle" $OUT/front-$MODE.log | tail -12 | tee -a $OUT/bench-$MODE.txt
+    $PY -c "from tonypi.tonyd.client import TonydClient as T; s=T().state(); print('after: lying', s['lying'], 'tilt', s['tilt_deg'])" | tee -a $OUT/bench-$MODE.txt
     b G2 "lie down"
     b G3 "wave"   # lying: run_skill must get up first (tonyd no longer does)
     ;;
