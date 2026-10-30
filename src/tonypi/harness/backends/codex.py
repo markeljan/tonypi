@@ -289,8 +289,11 @@ class CodexBackend:
             raise BrainUnavailable(f"can't start codex app-server ({e})") from e
         self.turn_done.clear()
         self.first.clear()
+        # a follow-up within the same task keeps an advanced tier, and escalates after a failed step (recovery);
+        # a new task starts from its own words
         followup = text.startswith("[New words from the user")
-        self.tier = self.tier if followup and self.tier == "advanced" else tier_for(text, self.failed_tools > 0)
+        self.tier = "advanced" if followup and self.tier == "advanced" else \
+            tier_for(text, followup and self.failed_tools > 0)
         model, _, effort = TIERS[self.tier].partition(":")
         self.h.emit("info", text=f"codex tier {self.tier}: {model}, effort {effort or 'default'}")
         self.turn, self.fatal, self.did_tools, self.failed_tools = None, None, 0, 0
