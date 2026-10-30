@@ -87,8 +87,15 @@ case $MODE in
   voice-e2e|voice-e1)  # E2E voice dry run through tonypi-voice (GPT-Live-1), commands injected as speech
     sudo systemctl start tonypi-voice   # stops tonypi-agent (Conflicts=)
     trap 'pkill -f "[t]onypi.pi_front.daemon"; sudo systemctl start tonypi-agent' EXIT
-    for i in $(seq 30); do $PY -c "import socket; s=socket.socket(socket.AF_UNIX); s.connect('/run/tonypi/voice.sock')" 2>/dev/null && break; sleep 1; done
-    sleep 3
+    # wait until GPT-Live is really listening (the service reports mode "gpt-live" only then; audio before is dropped)
+    for i in $(seq 60); do
+      $PY -c "
+import json, socket
+s = socket.socket(socket.AF_UNIX); s.connect('/run/tonypi/voice.sock')
+s.sendall(json.dumps({'op': 'status', 'rid': 1}).encode() + b'\\n')
+raise SystemExit(0 if json.loads(s.makefile().readline()).get('mode') == 'gpt-live' else 1)" 2>/dev/null && break
+      sleep 1
+    done
     pkill -f "[t]onypi.pi_front.daemon"; sleep 1
     $PY -m tonypi.pi_front.daemon --voice service > $OUT/front-$MODE.log 2>&1 & sleep 8
     $PY -c "
