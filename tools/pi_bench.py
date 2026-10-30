@@ -32,11 +32,28 @@ def quiet_say(speaker, text: str) -> None:
     speaker._play([pcm], speaker.rate)
 
 
+def inject(text: str) -> float:
+    """espeak-ng → WAV → tonypi-voice's mic stream (its `inject` op), as if someone said it."""
+    import subprocess
+    import tempfile
+
+    wav = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
+    subprocess.run(["espeak-ng", "-s", "140", "-w", wav, text], check=True)
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.connect(os.environ.get("TONYPI_VOICE_SOCK", "/run/tonypi/voice.sock"))
+    s.sendall((json.dumps({"op": "inject", "wav": wav, "rid": 1}) + "\n").encode())
+    r = json.loads(s.makefile("r").readline())
+    s.close()
+    return r.get("seconds", 0)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("script", nargs="+")
     ap.add_argument("--timeout", type=float, default=240)
     ap.add_argument("--voice", action="store_true")
+    ap.add_argument("--inject", action="store_true",
+                    help="say each command through the tonypi-voice service: espeak-ng WAV injected into its mic stream")
     args = ap.parse_args()
     speaker = None
     if args.voice:
@@ -60,7 +77,7 @@ def main() -> None:
                 if len(ids) == n_cmds and ids[-1] in done:  # "done" can arrive before "accepted" (stop)
                     last_done.set()
                 continue
-            if t == "heard" and args.voice and ev.get("source") == "voice":
+            if t == "heard" and (args.voice or args.inject) and ev.get("source") == "voice":
                 ids.append(ev["id"])
             ev.pop("t", None)
             print(f"{time.monotonic() - t0:7.2f}  {t:7s} {json.dumps(ev)[:240]}", flush=True)
@@ -75,7 +92,10 @@ def main() -> None:
             time.sleep(max(0.0, t0 + float(item[1:]) - time.monotonic()))
             continue
         print(f"{time.monotonic() - t0:7.2f}  SEND    {item}", flush=True)
-        if speaker:
+        if args.inject:
+            secs = inject(f"Tony, {item}")
+            print(f"{time.monotonic() - t0:7.2f}  INJECTED {secs} s of speech", flush=True)
+        elif speaker:
             speaker.say(f"Hey Tony, {item}")
             print(f"{time.monotonic() - t0:7.2f}  SPOKEN  (end of speech)", flush=True)
         else:

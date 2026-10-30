@@ -12,7 +12,7 @@ systemctl is-active -q tonypi-tonyd || fail "tonyd is not running (sudo systemct
 pi auth check --provider openai-codex </dev/null 2>/dev/null | grep -qx ready || fail "ChatGPT login (openai-codex) not ready"
 pi --offline --list-models gpt-6.1-terra </dev/null 2>/dev/null | grep -q "gpt-6.1-terra" || pi update --models </dev/null >/dev/null
 # voice: the shared tonypi-voice service (GPT-Live-1) when it's up, else this process's own mic + speaker
-if [[ -S /run/tonypi/voice.sock ]]; then
+if systemctl is-active -q tonypi-voice; then
   echo "voice: tonypi-voice service (GPT-Live-1 or its local fallback)"
 elif [[ " $* " != *" --no-voice "* && " $* " != *" --voice none "* ]] && systemctl is-active -q tonypi-agent; then
   fail "no voice service, and tonypi-agent owns the mic and speaker: sudo systemctl stop tonypi-agent (start it again afterwards)"

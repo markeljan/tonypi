@@ -84,6 +84,23 @@ case $MODE in
     start_front TONYPI_X=1
     TIMEOUT=200 b E3 "do a jumping jack" "@180" "stop"
     ;;
+  voice-e2e)  # E2E voice dry run through tonypi-voice (GPT-Live-1), commands injected as speech, 3 min cap each
+    sudo systemctl start tonypi-voice   # stops tonypi-agent (Conflicts=)
+    trap 'pkill -f "[t]onypi.pi_front.daemon"; sudo systemctl start tonypi-agent' EXIT
+    for i in $(seq 30); do $PY -c "import socket; s=socket.socket(socket.AF_UNIX); s.connect('/run/tonypi/voice.sock')" 2>/dev/null && break; sleep 1; done
+    sleep 3
+    pkill -f "[t]onypi.pi_front.daemon"; sleep 1
+    $PY -m tonypi.pi_front.daemon --voice service > $OUT/front-$MODE.log 2>&1 & sleep 8
+    $PY -c "
+import json, socket
+s = socket.socket(socket.AF_UNIX); s.connect('/run/tonypi/voice.sock')
+s.sendall(b'{\"op\": \"status\", \"rid\": 1}\\n'); print('voice status', s.makefile().readline().strip())" | tee -a $OUT/bench-$MODE.txt
+    tether_reset() { $PY -c "from tonypi.tonyd.client import TonydClient as T; print('tether', T().call('tether', reset=True)['tether'])"; }
+    TIMEOUT=60 b V0 --inject "how is your battery?"
+    tether_reset; TIMEOUT=200 b V1 --inject "walk to the door" "@180" "stop"
+    tether_reset; TIMEOUT=200 b V2 --inject "find the black office chair" "@180" "stop"
+    tether_reset; TIMEOUT=200 b V3 --inject "do a jumping jack" "@180" "stop"
+    ;;
   getup)  # a body move while lying gets up first
     start_front TONYPI_X=1
     b G2 "lie down"
