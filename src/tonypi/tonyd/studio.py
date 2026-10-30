@@ -6,10 +6,11 @@ Three layers, all plain JSON so any brain (or a person) can read, diff and edit 
 - skills: a named sequence of motions, `"*name"` repeats with `count` (e.g. walk = start, *step, end). User skills add
   new ones or override the default sequences in body.py (walk_forward, turn_left, ...).
 - calibration: per-servo `trim` (counts added to every target, e.g. to straighten a leg) and soft `limits`
-  `[lo, hi]` that every target is clamped to.
+  `[lo, hi]` that every target is clamped to. Below that sit the servos' own EEPROM offset and angle limits
+  (tonyd `servo_calibration` / `servo_calibrate`), only for fixing a bad calibration.
 
 The user layer lives outside the repo (`TONYPI_USER_DIR`, default ~/.local/share/tonypi) so every harness, worktree
-and session sees the same live robot. tonyd still guards whatever is played: stop, temperature, tilt, limits.
+and session sees the same live robot. tonyd still guards whatever is played: stop, temperature, limits.
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ from tonypi.motion.library import DATA_DIR, Frame, Motion
 USER_DIR = Path(os.environ.get("TONYPI_USER_DIR", Path.home() / ".local/share/tonypi"))
 NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,47}$")
 SERVO_IDS = range(1, 17)
+OPTIONAL_IDS = {17, 18}  # grippers on the Pro variant only; ignored here
 MIN_FRAME_MS, MAX_FRAME_MS, MAX_FRAMES = 20, 10_000, 400
 
 
@@ -49,6 +51,7 @@ def parse_frames(frames) -> list[Frame]:
             pos = {int(k): int(v) for k, v in f["pos"].items()}
         except (KeyError, TypeError, ValueError, AttributeError) as e:
             raise StudioError(f"frame {i}: needs {{'ms': int, 'pos': {{servo_id: position}}}} ({e})") from e
+        pos = {k: v for k, v in pos.items() if k not in OPTIONAL_IDS}  # factory files carry the absent grippers
         if not MIN_FRAME_MS <= ms <= MAX_FRAME_MS:
             raise StudioError(f"frame {i}: ms must be {MIN_FRAME_MS}..{MAX_FRAME_MS}")
         bad = {k: v for k, v in pos.items() if k not in SERVO_IDS or not 0 <= v <= 1000}
@@ -124,14 +127,13 @@ class Studio:
         return json.loads(p.read_text()) if p.exists() else {}
 
     def skills(self) -> dict[str, dict]:
-        """name -> {motions, description, upright, settle, source}: the defaults overlaid with the user's."""
+        """name -> {motions, description, source}: the defaults overlaid with the user's."""
         out = {k: {**v, "source": "default"} for k, v in self.default_skills.items()}
         for k, v in self._user_skills().items():
             out[k] = {**v, "source": "user"}
         return out
 
-    def save_skill(self, name: str, motions: list[str], description: str = "", upright: bool = True,
-                   settle: bool = True) -> dict:
+    def save_skill(self, name: str, motions: list[str], description: str = "") -> dict:
         _name(name, "skill")
         if not isinstance(motions, list) or not motions:
             raise StudioError("motions: a list of motion names; '*name' repeats with count")
@@ -140,8 +142,7 @@ class Studio:
                 raise StudioError(f"no motion {m!r} (save it first)")
         with self._lock:
             skills = self._user_skills()
-            skills[name] = {"motions": [str(m) for m in motions], "description": str(description)[:300],
-                            "upright": bool(upright), "settle": bool(settle)}
+            skills[name] = {"motions": [str(m) for m in motions], "description": str(description)[:300]}
             self._write(self.user_dir / "skills.json", skills)
         return {"saved": name, "overrides_default": name in self.default_skills}
 

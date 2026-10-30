@@ -10,6 +10,10 @@ from tonypi.tonyd.client import TonydClient, TonydError
 
 log = logging.getLogger(__name__)
 
+# fine while lying: head moves, and the skills that get up or lie down themselves
+IN_PLACE = {"look_left", "look_right", "look_up", "look_down", "look_center", "nod", "shake_head",
+            "get_up", "stand", "lie_down", "sleep", "settle"}
+
 
 class BodyLink:
     def __init__(self, on_warn: Callable[[str], None]) -> None:
@@ -29,10 +33,17 @@ class BodyLink:
             log.warning("stop: %s", e)
 
     def run(self, skill: str, count: int, say: Callable[[str], None]) -> bool:
-        """Runs one skill to the end. Anything the body reports (too hot, fell over) is passed to `say`."""
+        """Runs one skill to the end. Anything the body reports (too hot, ...) is passed to `say`.
+        tonyd leaves falls to its brains, so this one gets up first when Tony is lying and has to move his body."""
         if self.cancelled.is_set():
             return False
         try:
+            if skill not in IN_PLACE and self.tonyd.state()["lying"]:
+                job = self.tonyd.run("get_up", 1)
+                for line in job["said"]:
+                    say(line)
+                if job["state"] != "done" or self.cancelled.is_set():
+                    return False
             job = self.tonyd.run(skill, count)
         except TonydError as e:
             log.error("run %s: %s", skill, e)

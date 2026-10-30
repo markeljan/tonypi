@@ -30,8 +30,10 @@ mcp = MCPServer(
         "walk/turn/step with better gaits), and calibrate. 16 bus servos, positions 0..1000 (500 = centre, "
         "~0.24 deg/count): L/R 1/9 ankle roll, 2/10 ankle pitch, 3/11 knee, 4/12 hip pitch, 5/13 hip roll, "
         "6/14 elbow, 7/15 shoulder roll, 8/16 shoulder pitch. Start from a default motion (get_motion) and change "
-        "it in small steps; check max_tilt_deg in the result. tonyd still stops anything that overheats or tips "
-        "past 70 deg, and switches servos off (after a neutral stand) when idle unless you hold a pose."
+        "it in small steps; check max_tilt_deg in the result. Falls are yours to handle: nothing stops a move for "
+        "tilting unless you pass guard_tilt_deg, and nothing stands Tony up unless you run settle / get_up. tonyd "
+        "only stops what overheats, and switches servos off 1.5 s after the last move (in whatever pose; end in a "
+        "stable one, or hold_s) to keep them cool."
     ),
 )
 tonyd = TonydClient()
@@ -55,11 +57,13 @@ def list_skills() -> dict:
 
 
 @mcp.tool()
-def run_skill(skill: str, count: int = 1, wait: bool = True) -> dict:
+def run_skill(skill: str, count: int = 1, wait: bool = True, guard_tilt_deg: float | None = None) -> dict:
     """Run one body skill (see list_skills). count = steps/repeats (1-5). With wait=True, returns when it ends:
-    state is done, failed (refused: too hot, fell, ...; see `said`) or cancelled (preempted or stopped)."""
+    state is done, failed (refused: too hot, ...; see `said`) or cancelled (preempted or stopped). max_tilt_deg says
+    how far Tony leaned. guard_tilt_deg (opt-in) stops the skill if he tilts past that angle."""
     with _robot():
-        return tonyd.run(skill, count, wait=wait)
+        return tonyd.call("run", timeout=185 if wait else 10, skill=skill, count=count, wait=wait, wait_s=180,
+                          guard_tilt_deg=guard_tilt_deg)["job"]
 
 
 @mcp.tool()
@@ -103,12 +107,13 @@ def get_joints() -> dict:
 
 
 @mcp.tool()
-def play_frames(frames: list[dict], hold_s: float = 0) -> dict:
+def play_frames(frames: list[dict], hold_s: float = 0, guard_tilt_deg: float | None = None) -> dict:
     """Play your own keyframes without saving them: [{"ms": 400, "pos": {"4": 620, "12": 380}}, ...]. Servos left
-    out of a frame keep their position. Same guards as skills. hold_s > 0 keeps torque on (holding the last pose)
-    that long afterwards instead of settling to a stand. Returns the job, with max_tilt_deg."""
+    out of a frame keep their position. hold_s > 0 keeps torque on (holding the last pose) that long afterwards,
+    otherwise Tony goes limp in the last pose 1.5 s after. Returns the job, with max_tilt_deg."""
     with _robot():
-        return tonyd.play(frames, hold_s=hold_s)
+        return tonyd.call("play", timeout=185, frames=frames, hold_s=hold_s, guard_tilt_deg=guard_tilt_deg,
+                          wait=True, wait_s=180)["job"]
 
 
 @mcp.tool()
@@ -157,14 +162,11 @@ def delete_motion(name: str) -> dict:
 
 
 @mcp.tool()
-def save_skill(name: str, motions: list[str], description: str = "", upright: bool = True,
-               settle: bool = True) -> dict:
+def save_skill(name: str, motions: list[str], description: str = "") -> dict:
     """Define a skill as a motion sequence; "*name" repeats with count. E.g. a better walk:
-    save_skill("walk_forward", ["my_walk_start", "*my_step", "my_walk_end"]). upright: get up first if lying.
-    settle: stand before going limp afterwards."""
+    save_skill("walk_forward", ["my_walk_start", "*my_step", "my_walk_end"])."""
     with _robot():
-        return tonyd.call("skill_save", name=name, motions=motions, description=description, upright=upright,
-                          settle=settle)
+        return tonyd.call("skill_save", name=name, motions=motions, description=description)
 
 
 @mcp.tool()
@@ -180,6 +182,23 @@ def calibration(trim: dict[str, int] | None = None, limits: dict[str, list[int] 
     limits = soft [lo, hi] each target is clamped to (null removes). Applies to every motion immediately."""
     with _robot():
         return tonyd.call("calibration", trim=trim, limits=limits)["calibration"]
+
+
+@mcp.tool()
+def servo_calibration() -> dict:
+    """What each servo stores in itself (EEPROM): offset (-125..125) and angle limits [lo, hi]."""
+    with _robot():
+        return tonyd.call("servo_calibration")["servos"]
+
+
+@mcp.tool()
+def servo_calibrate(servo_id: int, reason: str, offset: int | None = None, limits: list[int] | None = None,
+                    save: bool = False) -> dict:
+    """Change a servo's own offset and/or angle limits. Only to fix a bad calibration (e.g. a joint that sits off
+    centre at 500, or limits that block a needed range): reason must say what is wrong and how you know. save=True
+    writes the offset to the servo's EEPROM (limits always persist). Prefer calibration() trim for small fixes."""
+    with _robot():
+        return tonyd.call("servo_calibrate", id=servo_id, offset=offset, limits=limits, save=save, reason=reason)
 
 
 @mcp.tool()
