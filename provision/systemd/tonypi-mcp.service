@@ -12,6 +12,8 @@ Environment=PYTHONUNBUFFERED=1
 Environment=TONYPI_MCP_HOST=127.0.0.1 TONYPI_MCP_PORT=8765
 ExecStart=/home/pi/tonypi/.venv/bin/tonypi-mcp
 Restart=on-failure
+# robot MCP: keep it over dev jobs and the LLM
+OOMScoreAdjust=-500
 RestartSec=5
 
 [Install]

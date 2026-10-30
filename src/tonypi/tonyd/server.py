@@ -6,9 +6,13 @@ Brains (the voice agent, the MCP server, scripts) talk to it over a Unix socket 
   reply    {"rid": 7, "ok": true, "job": {"id": 3, "skill": "wave", "state": "done", "said": [], ...}}
   event    {"event": "job" | "warn", ...}          (only to connections that sent {"op": "subscribe"})
 
-ops: ping, skills, run, stop, state, head, snapshot, relax, subscribe.
-One skill runs at a time and the newest preempts. Safety lives here, never in a brain: servo temperature and
-fall guards (body.py), torque off whenever idle, and low-battery / overheating warnings.
+ops: ping, skills, run, stop, state, head, snapshot, relax, subscribe,
+     and for brains that write their own moves (studio.py): joints, pose, play, torque, motions, motion_get,
+     motion_save, motion_delete, skill_save, skill_delete, calibration, servo_calibration, servo_calibrate;
+     tether {on, max_steps, reset} (walking-step budget while plugged into the charger).
+One body job runs at a time and the newest preempts. What stays here whatever a brain does: stop, servo temperature
+(body.py), torque off whenever idle, and low-battery / overheating / camera lost-or-back warnings. Falls are the
+brain's job: tonyd reports tilt and `lying`, and only stops a job for tilting if it asks (`guard_tilt_deg`).
 """
 
 from __future__ import annotations
@@ -29,9 +33,20 @@ from tonypi.tonyd import SOCK
 from tonypi.tonyd.body import LOW_BATTERY_MV, Body
 from tonypi.tonyd.camera import Camera
 from tonypi.tonyd.skills import MAX_COUNT, SKILLS
+from tonypi.tonyd.studio import parse_frames
 
 log = logging.getLogger("tonypi.tonyd")
 SNAP_DIR = Path(os.environ.get("TONYD_SNAP_DIR", "/run/tonypi"))
+# Tethered to the charger (the board only reports voltage, so this is a setting, not detected): walking steps
+# since the tether was set or reset are capped so the cable isn't dragged. Turns and in-place moves don't count.
+TETHER_DEFAULT = {"on": True, "max_steps": 10}
+WALKING = {"walk_forward", "walk_backward", "step_left", "step_right"}
+
+
+def is_walking(skill: str) -> bool:
+    return skill in WALKING or "walk" in skill  # user gaits like walk_forward_own count too
+
+
 IDLE_RELAX_S = 1.5  # torque off this long after the last skill (a brain's next step usually comes sooner)
 WATCH_S = 20
 IDLE_HOT_C = 80
@@ -55,10 +70,16 @@ class Job:
     error: str | None = None
     started: float | None = None
     seconds: float | None = None
+    hold_s: float = 0.0  # keep torque on this long after the job (a pose being held) before going limp
+    guard_tilt_deg: float | None = None  # opt-in: stop the job if Tony tilts past this (falls are the brain's job)
+    max_tilt_deg: float | None = None  # how far Tony leaned during the job (judging a new gait)
+    yaw_deg: float | None = None  # how far he turned during the job, from the gyro (+ = left)
+    rot_deg: list[float] | None = None  # gyro integral on each axis during the job (x, y, z)
+    frames: list | None = field(default=None, repr=False)  # a brain's own keyframes ("_play")
     finished: threading.Event = field(default_factory=threading.Event, repr=False)
 
     def public(self) -> dict:
-        return {f.name: getattr(self, f.name) for f in fields(self) if f.name != "finished"}
+        return {f.name: getattr(self, f.name) for f in fields(self) if f.name not in ("finished", "frames")}
 
 
 class Tonyd:
@@ -73,11 +94,15 @@ class Tonyd:
         self.subs_lock = threading.Lock()
         self.last_skill_end = 0.0
         self.torque_maybe_on = True
+        self.hold_s = 0.0  # the last job asked to hold its pose this long
+        self.walked = 0  # walking steps since the tether was set / reset
         self.last_warn = 0.0
         self.cached: dict = {}
         self.cached_t = 0.0
         self.head_deg = {"pan": 0.0, "tilt": 0.0}
         self._snap_ids = itertools.count(1)
+        if camera is not None:
+            camera.on_change = self._camera_changed
 
     # ---- events ---------------------------------------------------------------------------------------------
 
@@ -95,10 +120,43 @@ class Tonyd:
 
     # ---- skills ---------------------------------------------------------------------------------------------
 
-    def submit(self, skill: str, count: int = 1) -> Job:
-        if skill not in SKILLS:
-            raise ValueError(f"unknown skill {skill!r}; known: {', '.join(SKILLS)}")
-        job = Job(next(self.ids), skill, max(1, min(MAX_COUNT, int(count))))
+    def skills(self) -> dict[str, dict]:
+        """Every skill a brain can run: the built-in ones plus the studio's (defaults + the user's)."""
+        out = {k: {"description": v, "source": "builtin"} for k, v in SKILLS.items()}
+        out.update(self.body.studio.skills())
+        return out
+
+    def tether(self, on: bool | None = None, max_steps: int | None = None, reset: bool = False) -> dict:
+        path = self.body.studio.user_dir / "tether.json"
+        t = {**TETHER_DEFAULT, **(json.loads(path.read_text()) if path.exists() else {})}
+        if on is not None or max_steps is not None:
+            if on is not None:
+                t["on"] = bool(on)
+            if max_steps is not None:
+                t["max_steps"] = max(1, min(100, int(max_steps)))
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(t) + "\n")
+            reset = True
+        if reset:
+            self.walked = 0
+        return {**t, "walked": self.walked}
+
+    def submit(self, skill: str, count: int = 1, frames=None, hold_s: float = 0.0,
+               guard_tilt_deg: float | None = None) -> Job:
+        if frames is not None:
+            frames, skill = [{"ms": f.ms, "pos": f.pos} for f in parse_frames(frames)], "_play"
+        elif skill not in (known := self.skills()):
+            raise ValueError(f"unknown skill {skill!r}; known: {', '.join(known)}")
+        steps = max(1, min(MAX_COUNT, int(count)))
+        tether = self.tether()
+        if tether["on"] and is_walking(skill):
+            if self.walked + steps > tether["max_steps"]:
+                raise ValueError(f"tethered to the charger: {self.walked} of {tether['max_steps']} walking steps used. "
+                                 "Turn and walk back, then tether reset; or tether off once unplugged")
+            self.walked += steps
+        job = Job(next(self.ids), skill, max(1, min(MAX_COUNT, int(count))),
+                  hold_s=max(0.0, min(120.0, float(hold_s or 0))), frames=frames,
+                  guard_tilt_deg=None if guard_tilt_deg is None else max(5.0, min(120.0, float(guard_tilt_deg))))
         self.body.cancel()  # the newest command preempts whatever is running
         self._drop_queued()
         self.queue.put(job)
@@ -130,20 +188,29 @@ class Tonyd:
                 self.current = job
                 self.body.cancelled.clear()
                 job.state, job.started = "running", time.monotonic()
+                heading0 = getattr(self.body, "heading_deg", None)
+                rot0 = list(getattr(self.body, "rot_deg", []))
                 self.emit("job", **job.public())
                 log.info("skill %s x%d (job %d)", job.skill, job.count, job.id)
                 try:
                     if job.skill == "settle":
                         self.body.settle()
                         ok = True
+                    elif job.frames is not None:
+                        ok = self.body.play_frames(job.frames, job.said.append, job.guard_tilt_deg)
                     else:
-                        ok = self.body.run(job.skill, job.count, job.said.append)
+                        ok = self.body.run(job.skill, job.count, job.said.append, job.guard_tilt_deg)
                     state = "done" if ok else ("cancelled" if self.body.cancelled.is_set() else "failed")
+                    job.max_tilt_deg = getattr(self.body, "max_tilt", None)  # before _finish: waiters reply then
+                    if heading0 is not None:
+                        job.yaw_deg = round(self.body.heading_deg - heading0, 1)
+                        job.rot_deg = [round(a - b, 1) for a, b in zip(self.body.rot_deg, rot0)]
                     self._finish(job, state)
                 except Exception as e:
                     log.exception("skill %s failed", job.skill)
                     self._finish(job, "failed", f"{type(e).__name__}: {e}")
                 finally:
+                    self.hold_s = job.hold_s
                     self.current = None
                     self.last_skill_end = time.monotonic()
                     self.torque_maybe_on = True
@@ -164,6 +231,7 @@ class Tonyd:
             "busy": cur is not None or not self.queue.empty(),
             "job": cur.public() if cur else None,
             "tilt_deg": None if tilt is None else round(tilt, 1),
+            "heading_deg": None if getattr(b, "heading_deg", None) is None else round(b.heading_deg, 1),
             "lying": b.lying(),
             "asleep": b.asleep,
             "battery_mv": b.board.battery_mv,
@@ -174,6 +242,7 @@ class Tonyd:
             "sensors_age_s": round(time.monotonic() - self.cached_t, 1) if self.cached_t else None,
             "head_deg": dict(self.head_deg),
             "camera": self.camera.status() if self.camera else {"ok": False, "device": None},
+            "tether": self.tether(),
         }
 
     def _refresh(self) -> dict:
@@ -187,8 +256,9 @@ class Tonyd:
             time.sleep(0.25)
             now = time.monotonic()
             idle = self.current is None and self.queue.empty()
-            # idle = torque off, whatever pose it ended in (Tony carries no load and holds the pose limp)
-            if idle and self.torque_maybe_on and now - self.last_skill_end >= IDLE_RELAX_S:
+            # idle = torque off, whatever pose it ended in (Tony carries no load and holds the pose limp). Ending in a
+            # stable pose (run "settle", or hold_s) is the brain's call: going limp mid-step can tip him over.
+            if idle and self.torque_maybe_on and now - self.last_skill_end >= max(IDLE_RELAX_S, self.hold_s):
                 if self.lock.acquire(blocking=False):
                     try:
                         if self.current is None and self.queue.empty():
@@ -196,7 +266,9 @@ class Tonyd:
                             self.torque_maybe_on = False
                     finally:
                         self.lock.release()
-            if now < next_check or not idle:
+            # the 20 s check unloads torque left on by others, never earlier than the idle delay above: unloading
+            # right as a step ends drops Tony mid-sway (2026-10-29: fell on its back after turn_left)
+            if now < next_check or not idle or now - self.last_skill_end < max(IDLE_RELAX_S, self.hold_s):
                 continue
             next_check = now + WATCH_S
             if not self.lock.acquire(blocking=False):
@@ -222,6 +294,11 @@ class Tonyd:
                 self.last_warn = now
                 log.warning(msg)
                 self.emit("warn", text=msg)
+
+    def _camera_changed(self, ok: bool) -> None:
+        text = "Camera reconnected." if ok else "Camera disconnected."
+        (log.info if ok else log.warning)(text)
+        self.emit("warn", text=text, kind="camera")
 
     # ---- head, camera ---------------------------------------------------------------------------------------
 
@@ -256,9 +333,15 @@ class Tonyd:
         if op == "ping":
             reply({"pong": True})
         elif op == "skills":
-            reply({"skills": SKILLS, "max_count": MAX_COUNT})
-        elif op == "run":
-            job = self.submit(str(msg.get("skill", "")), msg.get("count", 1))
+            details = self.skills()
+            reply({"skills": {k: v.get("description", "") for k, v in details.items()}, "details": details,
+                   "max_count": MAX_COUNT})
+        elif op in ("run", "play", "pose"):
+            if op == "pose":
+                msg = {**msg, "frames": [{"ms": msg.get("ms", 500), "pos": msg.get("positions") or {}}]}
+            job = self.submit(str(msg.get("skill", "")), msg.get("count", 1),
+                              frames=msg.get("frames") if op != "run" else None, hold_s=msg.get("hold_s", 0),
+                              guard_tilt_deg=msg.get("guard_tilt_deg"))
             if not msg.get("wait"):
                 reply({"job": job.public()})
                 return
@@ -284,8 +367,64 @@ class Tonyd:
                 self.body.relax()
                 self.torque_maybe_on = False
             reply({"relaxed": True})
+        elif op == "tether":
+            reply({"tether": self.tether(msg.get("on"), msg.get("max_steps"), bool(msg.get("reset")))})
+        elif op == "joints":
+            got = self.lock.acquire(timeout=0.5)  # reading mid-motion is fine, just not racing the watchdog
+            try:
+                reply(self.body.joints())
+            finally:
+                if got:
+                    self.lock.release()
+        elif op == "torque":  # e.g. off on one leg to pose it by hand, then `joints` to record the pose
+            on = bool(msg.get("on"))
+            with self.lock:
+                self.body.torque(msg.get("ids") or range(1, 17), on)
+                if on:
+                    self.torque_maybe_on, self.last_skill_end = True, time.monotonic()
+                    self.hold_s = max(0.0, min(120.0, float(msg.get("hold_s", 0))))
+            reply({"torque": on})
         else:
-            raise ValueError(f"unknown op {op!r}")
+            reply(self._studio_op(op, msg))
+
+    def _studio_op(self, op: str, msg: dict) -> dict:
+        st = self.body.studio
+        if op == "motions":
+            return {"motions": st.list_motions()}
+        if op == "motion_get":
+            return st.get_motion(msg.get("name", ""))
+        if op == "motion_save":
+            return st.save_motion(msg.get("name", ""), msg.get("frames"), msg.get("description", ""))
+        if op == "motion_delete":
+            return st.delete_motion(msg.get("name", ""))
+        if op == "skill_save":
+            return st.save_skill(msg.get("name", ""), msg.get("motions"), msg.get("description", ""))
+        if op == "skill_delete":
+            return st.delete_skill(msg.get("name", ""))
+        if op == "servo_calibration":
+            with self.lock:
+                return {"servos": self.body.servo_calibration(msg.get("ids") or range(1, 17))}
+        if op == "servo_calibrate":
+            # the servos' own EEPROM offset / angle limits: only to fix a bad calibration, so a brain must say why
+            reason = str(msg.get("reason") or "").strip()
+            if len(reason) < 10:
+                raise ValueError("servo_calibrate changes the servo itself; only use it to fix a bad calibration and "
+                                 "pass reason='what is wrong and how you know'")
+            sid = int(msg.get("id", 0))
+            with self.lock:
+                got = self.body.servo_calibrate(sid, msg.get("offset"), msg.get("limits"), bool(msg.get("save")))
+            entry = {"t": time.strftime("%Y-%m-%dT%H:%M:%S"), "id": sid, "offset": msg.get("offset"),
+                     "limits": msg.get("limits"), "save": bool(msg.get("save")), "reason": reason, "now": got}
+            log.warning("servo_calibrate %s", entry)
+            st.user_dir.mkdir(parents=True, exist_ok=True)
+            with open(st.user_dir / "servo-calibration-log.jsonl", "a") as f:
+                f.write(json.dumps(entry) + "\n")
+            return {"servo": sid, **got}
+        if op == "calibration":
+            if msg.get("trim") is not None or msg.get("limits") is not None:
+                st.set_calibration(msg.get("trim"), msg.get("limits"))
+            return {"calibration": self.body.reload_calibration()}
+        raise ValueError(f"unknown op {op!r}")
 
     def _client(self, conn: socket.socket) -> None:
         wlock = threading.Lock()
@@ -344,8 +483,10 @@ def main() -> None:
     ap.add_argument("--no-camera", action="store_true")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    camera = None if args.no_camera else Camera().start()
-    d = Tonyd(Body(), camera).start()
+    camera = None if args.no_camera else Camera()
+    d = Tonyd(Body(), camera).start()  # wires camera.on_change before the camera thread runs
+    if camera:
+        camera.start()
     d.head(0, 0)
     try:
         d.serve()

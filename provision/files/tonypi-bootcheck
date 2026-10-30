@@ -1,0 +1,33 @@
+#!/bin/bash
+# Did the last boot end in a failure (hang -> watchdog reboot, hardware reset, power cut)? If so, Tony says
+# "System booted from a failure." and the end of the previous boot's log is saved for diagnosis.
+# `stop` runs at every clean shutdown (tonypi-bootcheck.service ExecStop) and leaves the marker behind.
+MARK=/var/lib/tonypi/clean-shutdown
+AGENT_SOCK=/run/tonypi/agent.sock
+mkdir -p /var/lib/tonypi /var/log/tonypi
+if [[ $1 == stop ]]; then date -Is > "$MARK"; exit 0; fi
+
+reason=""
+if journalctl -b -1 -q -t watchdog 2>/dev/null | grep -qiE "shutting down|reboot|returned"; then
+  reason="the watchdog restarted me after a freeze"
+elif [[ ! -e $MARK ]]; then
+  reason="the last shutdown wasn't clean (hang, reset or power cut)"
+fi
+rm -f "$MARK"
+[[ -z $reason ]] && { echo "previous boot ended cleanly"; exit 0; }
+
+log=/var/log/tonypi/crash-$(date +%Y%m%d-%H%M%S).log
+{ echo "detected: $reason"; journalctl -b -1 -n 300 --no-pager -o short-iso; } > "$log" 2>&1
+echo "previous boot ended in a failure: $reason (log: $log)"
+text="System booted from a failure."
+[[ $reason == *watchdog* ]] && text="$text The watchdog restarted me after a freeze."
+for _ in $(seq 60); do  # the agent needs ~20 s to load its voice
+  if [[ -S $AGENT_SOCK ]] && python3 - "$AGENT_SOCK" "$text" <<'PY'
+import json, socket, sys
+s = socket.socket(socket.AF_UNIX); s.settimeout(5); s.connect(sys.argv[1])
+s.sendall((json.dumps({"op": "say", "text": sys.argv[2]}) + "\n").encode()); s.makefile().readline()
+PY
+  then echo "said: $text"; exit 0; fi
+  sleep 3
+done
+echo "agent not reachable; nothing said"

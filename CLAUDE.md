@@ -7,10 +7,25 @@ it's told ("hey, go get that"), with local LFM models on the Pi and Claude (Opus
 
 ## Hard rules
 - **One process owns `/dev/ttyAMA0`: `tonyd`** (`tonypi.hal.board.Board` opens it exclusively; a second open fails with EBUSY). Everything else goes through tonyd's socket or the MCP server. tonyd also owns the camera.
-- Motion only through the supervisor/motion layer. LLMs call skill-level tools (walk, turn, look, play_motion, say, stop), never raw joint writes.
-- `stop` and fall recovery never depend on an LLM.
+- **Brains author movement** (owner's direction, 2026-10-29): any brain may read joints, play its own keyframes, hold
+  poses, save motions and skills (overriding walk/turn/step/...), and calibrate (trim, soft limits; the servos' own
+  EEPROM offsets/limits too, but only to fix a bad calibration: `servo_calibrate` needs a reason), all through tonyd
+  (`tonyd/studio.py`, MCP tools). The factory motions are defaults and examples. tonyd keeps the reflexes no brain can
+  bypass: stop, temperature, torque off when idle.
+- `stop` never depends on an LLM. **Falls are the harness's job** (owner's direction, 2026-10-29): tonyd never stops a
+  move for tilting, stands Tony up or settles him by itself; it reports `tilt_deg`/`lying` and `max_tilt_deg` per job,
+  and a brain can opt in to a tilt stop per job (`guard_tilt_deg`). The voice agent gets up / settles in its own code.
 - Before commanding motion, assume the robot may be standing on a table: start slow, prefer `stand_slow`, keep a hand near it the first time.
 - Servo **temperature**: limit is 85 °C (servo self-protects). Measured up to 80 °C after ~1 h of holding a pose on 2026-10-28 (elbows 6/14 hottest at 78–80, right leg 66–76). **Torque is off whenever idle** (any pose, standing included: it carries no load and holds the pose limp); a thermal stop unloads instead of standing.
+- **Memory** (8 GB, 2 GB zram, no PSI): the Pi froze once (2026-10-29) with llama-server + several Claude Code sessions
+  + harness Node/Hermes jobs. `earlyoom` (`provision/files/earlyoom.default`) kills dev/harness jobs first, then the
+  largest process (llama-server, `Restart=always`); tonyd (OOMScoreAdjust −900), agent and MCP (−500) are never chosen.
+  Check `free -m` before anything big (second llama-server, builds) and run it under `flock /run/lock/tonypi-robot.lock`.
+- **Hang recovery**: the `watchdog` daemon (`provision/files/watchdog.conf`, real-time, owns `/dev/watchdog`; systemd's
+  RuntimeWatchdog is off) reboots the Pi if sshd stops answering for 3 min, and the hardware resets it 15 s after the
+  daemon itself stalls. `tonypi-bootcheck.service` makes Tony say "System booted from a failure." when the last boot
+  didn't end cleanly and saves the end of that boot's log to `/var/log/tonypi/crash-*.log`. Journal is persistent;
+  earlyoom logs memory every minute; `psi=1` enables `/proc/pressure`.
 - No `sudo chmod 777` hacks. Access is via groups (dialout, gpio, i2c, video, audio) + `provision/files/99-tonypi.rules`.
 
 ## Hardware facts (verified live 2026-10-28 with `tools/bench.py`)
@@ -34,7 +49,8 @@ it's told ("hey, go get that"), with local LFM models on the Pi and Claude (Opus
 
 ## Joint map (`src/tonypi/config/robot.yaml`)
 L/R: 1/9 ankle roll · 2/10 ankle pitch · 3/11 knee · 4/12 hip pitch · 5/13 hip roll · 6/14 elbow · 7/15 shoulder roll · 8/16 shoulder pitch.
-Positions 0–1000, 500 = centre, ≈0.24°/count. Stand pose in robot.yaml (servo 15: 200 there vs 160 in `stand.json` — pick one on the robot).
+Positions 0–1000, 500 = centre, ≈0.24°/count. Stand pose in robot.yaml. Right shoulder roll (servo 15) is 200 in every stand pose (owner-tuned; `stand`/`stand_slow`
+were 160 from the factory files until 2026-10-29, which pulled the right arm out after every turn/walk).
 
 ## Motion library
 `data/motions/*.json` — 83 keyframe motions converted from the factory `.d6a` files (`{"frames":[{"ms":..,"pos":{"1":..}}]}`).
@@ -45,7 +61,7 @@ Played by `tonypi.motion.library.Player` (one batched frame per keyframe, interr
 ## Architecture (target)
 ```
 tonyd (hal + 100 Hz state: IMU filter, battery, servo temps, keys)  ← only process on ttyAMA0
-  └ control: motion player, walk state machine, fall detect → get-up, thermal/battery watchdog, e-stop
+  └ control: motion player + editable motion library (studio), thermal/battery watchdog, e-stop
 perception: camera loop (OpenCV) + image questions to LFM3-Omni-2B (same llama-server, --mmproj)
 audio: mic → VAD → STT → text events; TTS → speaker (barge-in)
 mcp: robot MCP server (Streamable HTTP, localhost/LAN) — the stable interface for every brain
@@ -59,10 +75,23 @@ before `tools/bench.py`** or anything else that opens the board.
 - Socket `/run/tonypi/tonyd.sock`, JSON lines (`tonypi.tonyd.client.TonydClient`): ops `ping, skills, run, stop, state, head,
   snapshot, relax, subscribe`. `run` takes a skill name from `tonyd/skills.py` (the only list of body skills) + count 1–5;
   one skill at a time, the newest preempts; `wait: true` returns the finished job (`done/failed/cancelled` + `said`).
-- Safety lives here: `body.py` temperature/fall guards per motion, **torque off 1.5 s after the last skill**, 20 s watchdog
+- Kept here whatever a brain does: `body.py` temperature guard per motion, **torque off 1.5 s after the last job** in
+  whatever pose it ended (going limp mid-step can tip Tony over: end in a stable pose, run `settle`, or `hold_s`), 20 s watchdog
   (re-unloads torque left on, warns on overheating / low battery as `warn` events, which the agent speaks).
 - `head` takes degrees (pan + = left, ±60; tilt + = up, −40..25). `snapshot` writes `/run/tonypi/snap-NNNNNN.jpg` from the
   latest frame (~30 ms; the camera thread keeps capturing at 15 fps).
+  Camera unplugged / back → `warn` event (`kind: "camera"`), which the agent says ("Camera disconnected." /
+  "Camera reconnected."; after the current command if busy; at startup if the camera is missing).
+- **Tether** (charging cable): the board reports only voltage, so it's a setting (`tether.json` in the user dir, default
+  on, `max_steps` 10): walking skills (walk_*, step_left/right, any skill named *walk*) share a step budget since set/reset;
+  turns don't count. `tether {on, max_steps, reset}` op / MCP tool. Turn it off when Tony runs on battery.
+- Writing moves (`studio.py`): user layer in `~/.local/share/tonypi/` (`motions/*.json` override `data/motions` by name,
+  `skills.json` = name → motion sequence with `"*step"` repeated by count, `calibration.json` = per-servo `trim` +
+  soft `limits`). Ops `joints, play {frames, hold_s}, pose {positions, ms, hold_s}, torque {ids, on}, motions,
+  motion_get/save/delete, skill_save/delete, calibration, servo_calibration, servo_calibrate {id, offset, limits,
+  save, reason}` (EEPROM; every call logged to `servo-calibration-log.jsonl`). Jobs take an opt-in `guard_tilt_deg`. Every job reports `max_tilt_deg` and `yaw_deg` (gyro X integral, + = left; matched camera shift within ~1° on
+  2026-10-29: default turn_left ≈ 6–13°/step and turn_right ≈ 0–3°/step on the living-room rug), plus `rot_deg` [x, y, z];
+  state has `heading_deg` (drifts slowly: use differences).
 - MCP: `tonypi-mcp.service` → `http://127.0.0.1:8765/mcp` (Streamable HTTP, no auth, localhost only by default). Tools:
   `list_skills, run_skill, stop, get_state, look, snapshot (image), say`. `.mcp.json` in the repo points Claude Code at it.
 
@@ -78,10 +107,10 @@ before `tools/bench.py`** or anything else that opens the board.
   `chat_template_kwargs.enable_thinking=false` (LFM3 thinks by default: ~50 s). llama-server needs `--swa-full`
   (LFM3 sliding-window layers: else no prompt reuse, ~17 s/command) and `-ub 64 -cms 64` (checkpoint at len-ubatch).
 - `sleep` ("go to sleep", "power down"): lie down, check tilt >60°, unload all servos, RGB off; still listens.
-  "wake up" or any body move while lying → `stand_up_back`/`front` → stand. `/status` shows torque on N/16.
+  "wake up" or any body move while lying → the agent's BodyLink runs `get_up` first. `/status` shows torque on N/16.
 - `tonyd/body.py`: actions → motion sequences; servo temp checked before (≥81 °C skip) and during (≥83 °C stop + torque off)
   every motion; `relax()` (all torque off) at startup and whenever tonyd goes idle, and the 20 s idle watchdog re-unloads
-  anything left on; fall guard tilt >70° for 0.3 s (dances lean past 50° on purpose); idle low-battery warning at 10.5 V.
+  anything left on; optional per-job tilt stop (`guard_tilt_deg`); idle low-battery warning at 10.5 V.
 - `speech.py`: Piper (lessac medium) out; the wake phrase is removed from the transcript by token timestamps
   (ASR writes it as "hey tony", "haytony", "athony", "ain'toni", "eight only"…). After end of speech (0.7 s) the clip
   is re-transcribed by LFM3-Omni (`lfm_transcribe`, ~2 s; 0% vs 18% word errors), streaming text is the fallback

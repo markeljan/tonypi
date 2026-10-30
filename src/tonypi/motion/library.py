@@ -44,6 +44,7 @@ class Player:
         self.servo_ids = set(servo_ids)
         self._stop = threading.Event()
         self.playing: str | None = None
+        self.transform = None  # optional fn(targets) -> targets, e.g. calibration trim + soft limits
 
     def stop(self) -> None:
         self._stop.set()
@@ -61,6 +62,8 @@ class Player:
                 targets = {i: p for i, p in frame.pos.items() if i in self.servo_ids}
                 if lock:
                     targets.update(lock)
+                if self.transform:
+                    targets = self.transform(targets)
                 self.board.move(ms, targets)
                 deadline += ms / 1000
                 while (remaining := deadline - time.monotonic()) > 0:

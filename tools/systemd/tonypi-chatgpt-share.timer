@@ -1,0 +1,9 @@
+[Unit]
+Description=Hourly: pick up a ChatGPT token Hermes has refreshed
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1h
+
+[Install]
+WantedBy=timers.target
