@@ -43,10 +43,16 @@ cfg = yaml.safe_load(open(f"{repo}/hermes/config.yaml").read().replace("__REPO__
 cfg["mcp_servers"]["tonypi"]["url"] = mcp_url
 if brain == "codex":
     cfg["model"] = {"default": model or "gpt-6.1-terra", "provider": "openai-codex"}
-elif brain == "anthropic":
+elif brain == "anthropic":  # untested (the owner uses the ChatGPT login)
     cfg["model"] = {"default": model or "claude-sonnet-5-5", "provider": "anthropic"}
+    for task in cfg["auxiliary"].values():
+        if "provider" in task:
+            task.update(provider="anthropic", model=cfg["model"]["default"])
 elif brain == "local":
     cfg.pop("fallback_providers")
+    for task in cfg["auxiliary"].values():
+        if "provider" in task:
+            task.update(provider="custom", model="lfm3-omni-2b", base_url="http://127.0.0.1:8080/v1")
 else:
     sys.exit(f"unknown brain {brain}")
 try:  # keep the version stamp Hermes wrote

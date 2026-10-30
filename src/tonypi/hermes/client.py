@@ -58,8 +58,14 @@ class HermesRuns:
         except HermesError:
             return False
 
-    def start(self, text: str, session_id: str) -> str:
-        with self._req("POST", "/v1/runs", {"input": text, "session_id": session_id}) as r:
+    def start(self, text: str, session_id: str, model: str = "", provider: str = "", effort: str = "") -> str:
+        """model/provider/effort: per-run choice (else the profile's default model and agent.reasoning_effort)."""
+        body: dict = {"input": text, "session_id": session_id}
+        if model:
+            body.update(model=model, provider=provider)
+        if effort:
+            body["model_options"] = {"reasoning_effort": effort}
+        with self._req("POST", "/v1/runs", body) as r:
             return json.load(r)["run_id"]
 
     def events(self, run_id: str) -> Iterator[dict]:

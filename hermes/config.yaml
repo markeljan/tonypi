@@ -62,7 +62,7 @@ memory:
 
 agent:
   max_turns: 40
-  reasoning_effort: low     # a robot waiting to move: speed over depth (LFM3 ignores it)
+  reasoning_effort: low     # default when a request names none; the voice front end picks per task (front.py TIERS)
 
 display:
   # Telegram etc.: a new message while Tony works is delivered into the running turn after the current tool call
@@ -87,8 +87,14 @@ gateway:
   standalone: true
 
 auxiliary:
-  # side tasks follow the main provider (Codex); the session title would be one more model call per session
+  # Side tasks pinned to the ChatGPT login, never "auto": auto walks the main fallback chain and so ends up on LFM3
+  # (seen: a 2-call compression summary on LFM3 took 200 s). An explicit provider only falls back on capacity /
+  # connection errors, i.e. when the cloud is really unreachable. setup.sh rewrites these for --brain local.
+  compression: {provider: openai-codex, model: gpt-6.1-terra, reasoning_effort: low}
+  vision: {provider: openai-codex, model: gpt-6.1-terra, reasoning_effort: low}
+  background_review: {provider: openai-codex, model: gpt-6.1-terra, reasoning_effort: low}
+  mcp: {provider: openai-codex, model: gpt-6.1-terra, reasoning_effort: low}
+  approval: {provider: openai-codex, model: gpt-6.1-terra, reasoning_effort: low}
+  goal_judge: {provider: openai-codex, model: gpt-6.1-terra, reasoning_effort: low}
   title_generation:
-    enabled: false
-  compression:
-    reasoning_effort: low
+    enabled: false   # one more model call per session, for a title nobody reads

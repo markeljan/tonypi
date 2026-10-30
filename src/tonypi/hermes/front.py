@@ -7,6 +7,8 @@ Peripherals (voice, the terminal socket, later the iPhone app) turn what people 
   now is stopped first, so the correction lands as soon as the model sees the cancelled result, not after a long
   walk. A steer that came too late (the model was already writing its answer) is replayed as the next turn.
 - Hermes' final reply, and commentary it writes between tool calls, is spoken; tonyd warnings are spoken when idle.
+Brain tiers: simple commands go to FAST (gpt-6.1-terra, no reasoning), open-ended or multi-step tasks ("find the door",
+"go to the kitchen", "think hard ...") to DEEP (gpt-6.1-sol, medium reasoning); TONYPI_HERMES_TIER forces one.
 A Hermes session holds the conversation ("again", "that one" work); after IDLE_S without a command the next one starts
 a fresh session, so requests stay small (the local fallback has an 8K window). Lasting facts live in Hermes memory.
 """
@@ -18,6 +20,7 @@ import itertools
 import logging
 import os
 import queue
+import re
 import threading
 import time
 from typing import Callable
@@ -29,6 +32,20 @@ from tonypi.tonyd.client import TonydClient, TonydError
 log = logging.getLogger("tonypi.hermes")
 SESSION = os.environ.get("TONYPI_HERMES_SESSION", "tonypi")  # prefix; the session id is SESSION-<start time>
 IDLE_S = float(os.environ.get("TONYPI_HERMES_IDLE_S", "300"))
+# (model, reasoning effort) per tier; provider is the Hermes provider slug both run on
+PROVIDER = os.environ.get("TONYPI_HERMES_PROVIDER", "openai-codex")
+TIERS = {
+    "fast": (os.environ.get("TONYPI_HERMES_MODEL", "gpt-6.1-terra"), os.environ.get("TONYPI_HERMES_EFFORT", "none")),
+    "deep": (os.environ.get("TONYPI_HERMES_DEEP_MODEL", "gpt-6.1-sol"),
+             os.environ.get("TONYPI_HERMES_DEEP_EFFORT", "medium")),
+}
+TIER = os.environ.get("TONYPI_HERMES_TIER", "auto")  # auto | fast | deep
+DEEP_RE = re.compile(r"\b(find|search|look(ing)? for|explore|go (to|into|and)|walk (to|toward|towards|over)|bring|fetch|"
+                     r"get me|figure out|plan|navigate|follow|think (hard|carefully)|big brain)\b", re.I)
+
+
+def tier_for(text: str) -> str:
+    return TIER if TIER in TIERS else "deep" if DEEP_RE.search(text) else "fast"
 
 
 class Front:
@@ -161,8 +178,11 @@ class Front:
         if not self.session_id or time.monotonic() - self.last_turn > IDLE_S:
             self.session_id = f"{self.session_prefix}-{time.strftime('%Y%m%d-%H%M%S')}"
             self.emit("info", id=rid, text=f"new Hermes session {self.session_id}")
+        tier = tier_for(text)
+        model, effort = TIERS[tier]
+        self.emit("info", id=rid, text=f"brain: {model} ({effort} reasoning)")
         try:
-            run_id = self.hermes.start(text, self.session_id)
+            run_id = self.hermes.start(text, self.session_id, model, PROVIDER if model else "", effort)
             with self.lock:
                 self.run_id = run_id
                 stop_now = self.stopped
