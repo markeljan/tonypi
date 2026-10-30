@@ -7,13 +7,15 @@ Unix socket /run/tonypi/voice.sock, JSON lines:
   <- {"event": "heard", "id": N, "text": "..."}       a request
   -> {"op": "reply", "id": N, "text": "...", "final": true|false}
   -> {"op": "say", "text": "..."}
-  -> {"op": "ask", "text": "...", "timeout_s": 30}  <- {"answer": "..." | null}
+  -> {"op": "ask", "text": "...", "timeout_s": 30}  <- {"ok": true, "answer": "..." | null}
+  (every op is answered with {"ok": ..., "rid": rid, ...} when it carried a rid)
   <- {"event": "barge_in"}
   -> {"op": "status"}
 """
 
 from __future__ import annotations
 
+import itertools
 import json
 import logging
 import os
@@ -50,8 +52,8 @@ class VoiceService:
         self.wlock = threading.Lock()
         self.attached = False
         self.detached_by_other = False
-        self.asking: Future | None = None
-        self.status_reply: Future | None = None
+        self.rids = itertools.count(1)
+        self.pending: dict[int, Future] = {}  # every op is answered on the socket with its rid
 
     def start(self) -> "VoiceService":
         threading.Thread(target=self._loop, name="voice-service", daemon=True).start()
@@ -72,8 +74,10 @@ class VoiceService:
             except (OSError, ValueError) as e:
                 log.warning("voice service: %s", e)
             self.attached, self.sock = False, None
-            if self.asking and not self.asking.done():
-                self.asking.set_result(None)
+            for fut in self.pending.values():
+                if not fut.done():
+                    fut.set_result({"ok": False, "error": "voice service gone"})
+            self.pending.clear()
             if self.detached_by_other:
                 return  # someone else is the active brain now: no fight over the mic
             time.sleep(3)
@@ -89,10 +93,8 @@ class VoiceService:
             self.attached, self.detached_by_other = False, True
             if self.sock:
                 self.sock.close()
-        elif "answer" in msg and self.asking and not self.asking.done():
-            self.asking.set_result(msg.get("answer"))
-        elif self.status_reply and not self.status_reply.done() and ev is None:
-            self.status_reply.set_result(msg)
+        elif ev is None and (fut := self.pending.pop(msg.get("rid"), None)) is not None and not fut.done():
+            fut.set_result(msg)
 
     def _send(self, obj: dict) -> bool:
         s = self.sock
@@ -111,22 +113,23 @@ class VoiceService:
     def say(self, text: str) -> bool:
         return self._send({"op": "say", "text": text[:MAX_CHARS]})
 
-    def ask(self, text: str, timeout_s: float = 30) -> str | None:
-        self.asking = Future()
-        if not self._send({"op": "ask", "text": text[:MAX_CHARS], "timeout_s": timeout_s}):
+    def _call(self, timeout: float, **msg) -> dict | None:
+        rid = next(self.rids)
+        fut: Future = Future()
+        self.pending[rid] = fut
+        if not self._send({**msg, "rid": rid}):
+            self.pending.pop(rid, None)
             return None
         try:
-            return self.asking.result(timeout_s + 5)
+            return fut.result(timeout)
         except FutureTimeout:
             return None
         finally:
-            self.asking = None
+            self.pending.pop(rid, None)
+
+    def ask(self, text: str, timeout_s: float = 30) -> str | None:
+        r = self._call(timeout_s + 10, op="ask", text=text[:MAX_CHARS], timeout_s=timeout_s)
+        return (r or {}).get("answer")
 
     def status(self, timeout: float = 3) -> dict | None:
-        self.status_reply = Future()
-        if not self._send({"op": "status"}):
-            return None
-        try:
-            return self.status_reply.result(timeout)
-        except FutureTimeout:
-            return None
+        return self._call(timeout, op="status")

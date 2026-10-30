@@ -16,11 +16,12 @@ tonyd = "tonypi.tonyd.server:main"
 tonypi-mcp = "tonypi.mcp_server:main"
 tonypi-pi = "tonypi.pi_front.daemon:main"
 tonypi-pi-chat = "tonypi.pi_front.daemon:chat"
+tonypi-voice = "tonypi.voice.service:main"
 
 [project.optional-dependencies]
 vision = ["opencv-python-headless>=4.10"]
 agent = ["openai>=1.50", "mcp>=1.10", "claude-agent-sdk>=0.2"]
-voice = ["sherpa-onnx>=1.10", "piper-tts>=1.2", "sentencepiece>=0.2"]
+voice = ["sherpa-onnx>=1.10", "piper-tts>=1.2", "sentencepiece>=0.2", "aiortc>=1.15"]
 
 [dependency-groups]
 dev = ["pytest>=8"]

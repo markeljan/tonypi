@@ -97,6 +97,15 @@ before `tools/bench.py`** or anything else that opens the board.
 - MCP: `tonypi-mcp.service` → `http://127.0.0.1:8765/mcp` (Streamable HTTP, no auth, localhost only by default). Tools:
   `list_skills, run_skill, stop, get_state, look, snapshot (image), say`. `.mcp.json` in the repo points Claude Code at it.
 
+## Voice (`tonypi-voice.service`, 2026-10-29): shared ears + mouth for any harness
+`src/tonypi/voice/` owns the USB mic + speaker (conflicts with tonypi-agent: starting one stops the other; harness
+slots `sudo systemctl start tonypi-voice`, then `start tonypi-agent` to restore). GPT-Live-1 (`gpt-live-1-codex`) via
+`codex app-server` realtime v3 over WebRTC (aiortc) on the shared ChatGPT login (CODEX_HOME `~/.config/tonypi/codex-voice`,
+docs/GPT_LIVE.md); falls back to local wake word + ASR + Piper. Socket `/run/tonypi/voice.sock` (`VoiceClient`): attach,
+heard, reply, say, ask, barge_in, transcript, status, inject (a WAV as if the user spoke; tests). Half duplex by default
+(mic silenced while Tony talks: no echo cancellation). Live 2026-10-29: request heard ~1 s after the user stops,
+replies and unprompted speech spoken by GPT-Live, `ask` answered from the transcript.
+
 ## Agent (live: `tonypi-agent.service`, since 2026-10-28)
 `src/tonypi/agent/` — voice + terminal front end. Owns the mic and speaker; every move goes through tonyd (`body_link.py`).
 - Input: terminal (`tonypi-chat` → `/run/tonypi/agent.sock`, JSON lines) and voice ("hey Tony …": sherpa-onnx KWS

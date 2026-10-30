@@ -250,7 +250,8 @@ def test_voice_service_client_protocol(tmp_path):
         conn.sendall(b'{"event": "heard", "id": 3, "text": "find my shoes"}\n')
         got.append(json.loads(f.readline()))                      # reply
         got.append(json.loads(f.readline()))                      # ask
-        conn.sendall(b'{"answer": "under the desk"}\n')
+        conn.sendall(b'{"ok": true, "spoken": true}\n')           # an ack without rid must not answer the ask
+        conn.sendall((json.dumps({"ok": True, "answer": "under the desk", "rid": got[-1]["rid"]}) + "\n").encode())
         time.sleep(0.5)
 
     threading.Thread(target=serve, daemon=True).start()
