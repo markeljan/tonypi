@@ -118,10 +118,12 @@ def main() -> None:
         return not st.strip(), f"{head.strip()}" + ("" if not st.strip() else f"; uncommitted: {st.split()[:6]}")
 
     def tests():
-        r = subprocess.run(["/home/pi/tonypi/.venv/bin/python", "-m", "pytest", "-q",
+        r = subprocess.run(["/home/pi/tonypi/.venv/bin/python", "-m", "pytest", "-q", "-rf",
                             *map(str, sorted(REPO.glob("tests/test_hermes_*.py")))], cwd=REPO, capture_output=True,
                            text=True, timeout=300, env={**os.environ, "PYTHONPATH": str(REPO / "src")})
-        return r.returncode == 0, r.stdout.strip().splitlines()[-1]
+        lines = r.stdout.strip().splitlines()
+        failed = [ln.split(" - ")[0] for ln in lines if ln.startswith("FAILED")]
+        return r.returncode == 0, lines[-1] + (f"; {failed}" if failed else "")
 
     def probe():
         from tonypi.hermes.front import TIERS, PROVIDER

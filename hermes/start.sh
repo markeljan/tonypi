@@ -29,11 +29,16 @@ FRONT_ARGS=()
 case "$MODE" in
     voice-service)
         sudo systemctl start tonypi-voice   # stops tonypi-agent
-        for i in $(seq 30); do [ -S /run/tonypi/voice.sock ] && break; sleep 0.5; done
-        printf '{"op": "status"}\n' | timeout 5 "$PY" -c "
-import socket, sys
-s = socket.socket(socket.AF_UNIX); s.settimeout(5); s.connect('/run/tonypi/voice.sock')
-s.sendall(sys.stdin.read().encode()); print('tonypi-voice:', s.makefile().readline().strip())" || echo "tonypi-voice: no status"
+        "$PY" -c "
+import socket, time
+for _ in range(40):  # the service takes a few seconds to accept connections
+    try:
+        s = socket.socket(socket.AF_UNIX); s.settimeout(5); s.connect('/run/tonypi/voice.sock')
+        s.sendall(b'{\"op\": \"status\"}\n'); print('tonypi-voice:', s.makefile().readline().strip()); break
+    except OSError:
+        time.sleep(0.5)
+else:
+    print('tonypi-voice: not answering')"
         FRONT_ARGS=(--voice-service) ;;
     local) sudo systemctl stop tonypi-agent ;;
     none) sudo systemctl stop tonypi-agent; FRONT_ARGS=(--no-voice) ;;
