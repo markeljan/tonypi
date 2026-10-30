@@ -11,8 +11,9 @@ metadata:
 # Tune a motion
 
 Use when asked to fix, improve or invent a move ("your turns keep tipping you over", "learn to wave with both
-arms"), or after a move failed or `max_tilt_deg` was high. Someone should be watching the first tries; say what you
-are about to test. Only run test moves when the owner has said someone is next to Tony.
+arms"), or after a move failed or `max_tilt_deg` was high. Say what you are about to test. Falls are safe (Tony is
+built for them) and the body keeper gets him up, but each fall costs time: test small changes first.
+Turns don't use the tether's walking budget; walks do (`tether()` shows what's left).
 
 Joint map (servo id: L/R): 1/9 ankle roll, 2/10 ankle pitch, 3/11 knee, 4/12 hip pitch, 5/13 hip roll, 6/14 elbow,
 7/15 shoulder roll, 8/16 shoulder pitch. Positions 0-1000, 500 = centre, ≈0.24° per count. Frames:

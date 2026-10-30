@@ -24,7 +24,9 @@ TASKS = {
     "T4": "walk forward 3 steps, then turn left",
     "T5": "how's your battery and how hot are you?",
     "T6": "find the door and walk toward it",
+    "T9": "Your turns keep tipping you over. Fix turn_left: tune it, test it, and save your version as turn_left_hermes.",
 }
+WAIT_S = {"T9": 1200}  # per-task limit for the whole turn (default 300 s)
 STEER_T4 = "actually, turn right instead"
 T6_LIMIT_S = 60  # then "stop" (T8)
 
@@ -89,7 +91,7 @@ class Bench:
                 extra["T8_stop_to_body_stopped_s"] = round(cut[0] - ts, 2) if cut else "idle when stopped"
         self.wait(lambda: sum(e.get("type") == "done" for _, e in self.events) >= (2 if task == "T4" else 1)
                   or (task == "T6" and "T8_stop_to_body_stopped_s" in extra
-                      and any(e.get("type") == "done" for _, e in self.events)), 300)
+                      and any(e.get("type") == "done" for _, e in self.events)), WAIT_S.get(task, 300))
         end = max((t for t, e in self.events if e.get("type") == "done"), default=time.monotonic())
         tools = [(round(t - t0, 1), e.get("name"), e.get("preview", "")[:60]) for t, e in self.events
                  if e.get("type") == "action"]
@@ -100,8 +102,11 @@ class Bench:
                 "first_action_s": first_tool, "first_motion_s": round(st[0] - t0, 1) if st else None,
                 "total_s": round(end - t0, 1),
                 "said": [e["text"] for _, e in self.events if e.get("type") == "say"],
-                "tools": tools, "jobs": [(round(t - t0, 1), j.get("skill"), j.get("count"), j.get("state"))
-                                          for t, j in self.jobs],
+                "tools": tools, "jobs": [(round(t - t0, 1), j.get("skill"), j.get("count"), j.get("state"),
+                                           j.get("max_tilt_deg")) for t, j in self.jobs],
+                "body_notes": [e["text"] for _, e in self.events
+                               if e.get("type") == "info" and "Tony's body" in e.get("text", "") or
+                               e.get("type") == "info" and "fell" in e.get("text", "")],
                 "brain": next((i for i in info if i.startswith("brain:")), None),
                 "usage": next((i for i in info if i.startswith("run.")), None), **extra}
 
