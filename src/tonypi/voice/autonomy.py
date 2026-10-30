@@ -33,10 +33,13 @@ TICK_S = 15
 IDLE_S = 75  # quiet this long before a session starts
 COOLDOWN_S = 90  # between sessions
 SESSION_MAX_S = 900  # wall-clock cap per session
-SESSION_TOKENS = 400_000
-DAILY_TOKENS = 5_000_000  # autonomy tokens per day
+# Codex counts cached prompt tokens too: a body session used 399k in 146 s (2026-10-30). The weekly rate limit,
+# paced below, is the real governor; these caps only stop a runaway.
+SESSION_TOKENS = 1_500_000
+DAILY_TOKENS = 25_000_000  # autonomy tokens per day
 MAX_PRIMARY_PCT = 70  # rate-limit windows: leave headroom for conversation
 MAX_SECONDARY_PCT = 60
+PACE_SLACK_PCT = 25  # a window may be used up to (elapsed share of it + this), so autonomy spreads over the week
 BODY_MIN_MV = 11_000  # body work needs this much battery (or unknown battery and the charger tether on)
 BODY_MAX_C = 70  # hottest servo
 GOAL_SESSIONS_PER_DAY = 4  # one goal can't eat the whole day; others (or nothing) get a turn
@@ -98,7 +101,7 @@ def body_check(state: dict | None, st: dict, now: float, lock: str = "") -> tupl
     return True, ""
 
 
-def rate_limited(rl: dict | None) -> str:
+def rate_limited(rl: dict | None, now: float | None = None) -> str:
     """Why the rate limits forbid a session ('' = fine). Accepts the full account/rateLimits/read result or one
     snapshot; missing data is fine (Codex itself refuses when the account is out)."""
     if not rl:
@@ -109,9 +112,17 @@ def rate_limited(rl: dict | None) -> str:
     if snap.get("rateLimitReachedType"):
         return f"rate limit reached ({snap['rateLimitReachedType']})"
     for key, cap in (("primary", MAX_PRIMARY_PCT), ("secondary", MAX_SECONDARY_PCT)):
-        used = (snap.get(key) or {}).get("usedPercent")
-        if isinstance(used, (int, float)) and used >= cap:
+        win = snap.get(key) or {}
+        used = win.get("usedPercent")
+        if not isinstance(used, (int, float)):
+            continue
+        if used >= cap:
             return f"{key} rate limit {used:.0f}%"
+        mins, resets = win.get("windowDurationMins"), win.get("resetsAt")
+        if isinstance(mins, (int, float)) and mins > 0 and isinstance(resets, (int, float)):
+            elapsed = min(1.0, max(0.0, 1 - (resets - (now if now is not None else time.time())) / (mins * 60)))
+            if used >= elapsed * 100 + PACE_SLACK_PCT:
+                return f"{key} rate limit {used:.0f}% ahead of pace ({elapsed * 100:.0f}% of the window elapsed)"
     return ""
 
 

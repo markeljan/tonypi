@@ -298,3 +298,17 @@ def test_status():
     c.t += 42
     s = a.status()
     assert s["session"] == {"goal": "g1", "title": store.get_goal("g1")["title"], "s": 42, "body": True}
+
+
+def test_rate_limit_pacing_spreads_autonomy_over_the_window():
+    from tonypi.voice.autonomy import rate_limited
+
+    week = 10080
+    start = 1_000_000.0
+    snap = lambda used, elapsed: {"rateLimits": {"primary": {"usedPercent": used, "windowDurationMins": week,
+                                                             "resetsAt": start + week * 60}}}
+    day2 = start + 2 * 86400  # ~29 % of the week elapsed
+    assert rate_limited(snap(32, None), now=day2) == ""  # 32 < 29 + 25
+    assert "ahead of pace" in rate_limited(snap(60, None), now=day2)
+    assert "rate limit 70%" in rate_limited(snap(70, None), now=start + 6.9 * 86400)
+    assert rate_limited(snap(65, None), now=start + 6 * 86400) == ""  # late in the week, under the hard cap
