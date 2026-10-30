@@ -24,9 +24,11 @@ TASKS = {
     "T4": "walk forward 3 steps, then turn left",
     "T5": "how's your battery and how hot are you?",
     "T6": "find the door and walk toward it",
-    "T9": "Your turns keep tipping you over. Fix turn_left: tune it, test it, and save your version as turn_left_hermes.",
+    "T9": ("Your left turn keeps tipping you over. Improve turn_left: measure the default, change it in small steps, "
+           "test, and save your best version as turn_left_hermes. Don't change the default turn_left."),
 }
-WAIT_S = {"T9": 1200}  # per-task limit for the whole turn (default 300 s)
+WAIT_S = {"T9": 960}  # per-task wait for the turn to end (default 300 s)
+T9_LIMIT_S, T9_TURN_STEPS = 900, 40  # docs/HARNESS_BAKEOFF.md: 15 min or 40 turn steps, then "stop"
 STEER_T4 = "actually, turn right instead"
 T6_LIMIT_S = 60  # then "stop" (T8)
 
@@ -79,6 +81,18 @@ class Bench:
             extra["steer_to_turn_right_s"] = round(tr[0] - ts, 1) if tr else None
             extra["cut_after_steer_s"] = next((round(t - ts, 2) for t, j in self.jobs
                                                if t >= ts and j.get("state") == "cancelled"), None)
+        if task == "T9":  # stop at 15 min or 40 turn steps (run_skill turn* counts; each played keyframe set = 1)
+            def turn_steps() -> int:
+                return sum((j.get("count") or 1) if "turn" in (j.get("skill") or "") else 1
+                           for _, j in self.jobs if j.get("state") == "running"
+                           and ("turn" in (j.get("skill") or "") or j.get("skill") == "_play"))
+            while time.monotonic() - t0 < T9_LIMIT_S and turn_steps() < T9_TURN_STEPS:
+                if self.wait(lambda: any(e.get("type") == "done" for _, e in self.events), 1.0):
+                    break
+            else:
+                extra["T9_limit_hit"] = "time" if time.monotonic() - t0 >= T9_LIMIT_S else "turn steps"
+                self.send("stop")
+            extra["T9_turn_steps"] = turn_steps()
         if task == "T6":  # open-ended: stop after a minute (= T8)
             done = self.wait(lambda: any(e.get("type") == "done" for _, e in self.events), T6_LIMIT_S)
             if not done:
