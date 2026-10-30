@@ -1,20 +1,21 @@
-// Body peripheral: run_skill and stop. Skills are tonyd's (src/tonypi/tonyd/skills.py is the only list); the model
-// never sends joint targets.
+// Body peripheral: run_skill, list_skills, stop. Skills are tonyd's: the built-in ones, the default motion
+// sequences, and any the brain saved itself (studio.ts), which can override walk_forward, turn_left, ...
 //
 // Steering: pi delivers a steering message only after the running tool returns, so a motion tool must not keep
-// the body busy while the user has said something new. Walking and turning run one step per tonyd job and stop
-// between steps (a step always ends balanced, <= 1.75 s); other skills are cancelled at once. The tool then returns
-// "interrupted" and the model reads the new message.
+// the body busy while the user has said something new. Stepped skills (walk, turn, side step: any sequence with a
+// "*step") run one step per tonyd job and stop between steps (a step always ends balanced); other jobs are
+// cancelled at once. The tool then returns "stopped because the user sent a new message" and the model reads it.
 
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { StringEnum, Type } from "@earendil-works/pi-ai";
+import { Type } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import * as tonyd from "../tonyd.ts";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 
+/** Fallback when tonyd is down at startup: the built-in list in skills.py. */
 export function loadSkills(): Record<string, string> {
   const src = readFileSync(join(REPO, "src/tonypi/tonyd/skills.py"), "utf8");
   const block = src.slice(src.indexOf("SKILLS"), src.indexOf("}", src.indexOf("SKILLS")));
@@ -24,10 +25,9 @@ export function loadSkills(): Record<string, string> {
 const STEPPED = new Set(["walk_forward", "walk_backward", "turn_left", "turn_right", "step_left", "step_right",
   "step_in_place"]);
 const MAX_STEPS = 10;
-// skills after which Tony settles into a neutral stand once the agent is done (the voice agent's rule); a stand left
-// mid-gait can tip over once the servos unload
-const NO_SETTLE = /^(look_|nod$|shake_head$|settle$|stand$|lie_down$|sleep$|get_up$)/;
 const POLL_MS = 100;
+// skills after which Tony settles into a neutral stand once the agent is done (tonyd also does this itself now)
+const NO_SETTLE = /^(look_|nod$|shake_head$|settle$|stand$|lie_down$|sleep$|get_up$)/;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -39,28 +39,40 @@ function interruption(ctx: ExtensionContext, signal?: AbortSignal): string | nul
 }
 
 /** One tonyd job; cancelled when the turn is aborted, or (unless finishStep) when a new message arrives. */
-async function job(skill: string, count: number, ctx: ExtensionContext, signal: AbortSignal | undefined,
-                   finishStep: boolean): Promise<{ job: tonyd.Job; why: string | null }> {
-  const p = tonyd.run(skill, count);
+export async function job(start: () => Promise<tonyd.Job>, ctx: ExtensionContext, signal: AbortSignal | undefined,
+                          finishStep = false): Promise<{ job: tonyd.Job; why: string | null }> {
+  const p = start();
   let settled = false;
   let why: string | null = null;
   p.finally(() => (settled = true)).catch(() => {});
   while (!settled) {
     await Promise.race([p.catch(() => {}), sleep(POLL_MS)]);
     const w = settled ? null : interruption(ctx, signal);
-    if (w && !why && (w === "aborted" || !finishStep)) {
+    if (w && !why) {
       why = w;
-      await tonyd.stop().catch(() => {});
-    } else if (w && !why) {
-      why = w; // let this step finish, then stop
+      if (w === "aborted" || !finishStep) await tonyd.stop().catch(() => {});  // else: let this step finish
     }
   }
   return { job: await p, why };
 }
 
-export default function body(pi: ExtensionAPI) {
-  const skills = loadSkills();
-  const names = Object.keys(skills);
+/** Short job summary for the model: state, time, how far Tony leaned, what the body said. */
+export function describe(label: string, j: tonyd.Job, why: string | null, secs: string): string {
+  let msg = `${label}: ${j.state} (${secs} s${j.max_tilt_deg != null ? `, max tilt ${j.max_tilt_deg.toFixed(1)} deg` : ""})`;
+  if (why && j.state !== "done") msg += `; stopped because ${why}`;
+  else if (j.state === "failed") msg += `; the body refused or aborted it${j.error ? ` (${j.error})` : ""}`;
+  if (j.said.length) msg += `. Body said: ${j.said.join(" ")}`;
+  return msg + ".";
+}
+
+export default async function body(pi: ExtensionAPI) {
+  let skills: Record<string, string>;
+  try {
+    skills = await Promise.race([tonyd.skills(), sleep(1500).then(() => { throw new Error("timeout"); })]);
+    if (!skills || typeof skills !== "object") throw new Error("no skills list");
+  } catch {
+    skills = loadSkills();
+  }
   let moved = false;
 
   // reflex, no model: when pi has nothing left to do after body moves, settle. Not after an abort ("stop", or a
@@ -74,38 +86,57 @@ export default function body(pi: ExtensionAPI) {
   pi.registerTool(defineTool({
     name: "run_skill",
     label: "Run skill",
-    description: "Move Tony's body with one skill; returns when it ends. For walking, turning and side steps count = "
-      + "steps (1-10; a walk step is a few cm, a turn step roughly 20-30 degrees; open loop, it drifts). Skills: "
-      + names.map((n) => `${n} (${skills[n]})`).join("; "),
+    description: "Move Tony's body with one skill; returns when it ends, with the max tilt (how far Tony leaned). "
+      + "For walking, turning and side steps count = steps (1-10; a walk step is a few cm, a turn step roughly "
+      + "20-30 degrees; open loop, it drifts). Skills you saved yourself work too (list_skills). Skills: "
+      + Object.entries(skills).map(([n, d]) => `${n} (${d})`).join("; "),
     parameters: Type.Object({
-      skill: StringEnum(names as [string, ...string[]]),
+      skill: Type.String({ description: "skill name, e.g. wave, walk_forward, or one you saved" }),
       count: Type.Optional(Type.Integer({ minimum: 1, maximum: MAX_STEPS, description: "steps or repeats" })),
     }),
     executionMode: "sequential",
     async execute(_id, { skill, count = 1 }, signal, _onUpdate, ctx) {
       const pre = interruption(ctx, signal);
       if (pre) return text(`${skill} not started: ${pre}.`, { skill, done: 0, of: count, why: pre });
+      const info = ((await tonyd.skillDetails().catch(() => undefined)) ?? {})[skill];
+      const stepped = STEPPED.has(skill) || !!info?.motions?.some((m: string) => m.startsWith("*"));
       const t0 = Date.now();
       const said: string[] = [];
       let done = 0;
       let why: string | null = null;
       let state = "done";
-      const steps = STEPPED.has(skill) ? count : 1;
+      let tilt: number | null = null;
       if (!NO_SETTLE.test(skill)) moved = true;
-      for (let i = 0; i < steps; i++) {
-        const r = await job(skill, STEPPED.has(skill) ? 1 : Math.min(count, 5), ctx, signal, STEPPED.has(skill));
+      for (let i = 0; i < (stepped ? count : 1); i++) {
+        const r = await job(() => tonyd.run(skill, stepped ? 1 : Math.min(count, 5)), ctx, signal, stepped);
         said.push(...r.job.said);
         state = r.job.state;
-        if (r.job.state === "done") done += STEPPED.has(skill) ? 1 : count;
+        if (r.job.max_tilt_deg != null) tilt = Math.max(tilt ?? 0, r.job.max_tilt_deg);
+        if (r.job.state === "done") done += stepped ? 1 : count;
         why = r.why ?? (r.job.state === "done" ? interruption(ctx, signal) : null);
         if (r.job.state !== "done" || why) break;
       }
       const secs = ((Date.now() - t0) / 1000).toFixed(1);
-      let msg = STEPPED.has(skill) ? `${skill}: ${done} of ${count} steps done (${secs} s)` : `${skill}: ${state} (${secs} s)`;
+      const tiltS = tilt != null ? `, max tilt ${tilt.toFixed(1)} deg` : "";
+      let msg = stepped ? `${skill}: ${done} of ${count} steps done (${secs} s${tiltS})` : `${skill}: ${state} (${secs} s${tiltS})`;
       if (why && (done < count || state !== "done")) msg += `; stopped because ${why}`;
       else if (state === "failed") msg += "; the body refused or aborted it";
       if (said.length) msg += `. Body said: ${said.join(" ")}`;
-      return text(msg + ".", { skill, done, of: count, state, why, said });
+      return text(msg + ".", { skill, done, of: count, state, why, said, max_tilt_deg: tilt });
+    },
+  }));
+
+  pi.registerTool(defineTool({
+    name: "list_skills",
+    label: "List skills",
+    description: "Every skill the body can run now, including saved user skills and overrides: source "
+      + "(builtin/default/user) and the motions a sequence skill plays.",
+    parameters: Type.Object({}),
+    async execute() {
+      const d = await tonyd.skillDetails();
+      const lines = Object.entries(d).map(([n, v]: [string, any]) =>
+        `${n} [${v.source}]${v.motions ? ` = ${v.motions.join(" ")}` : ""}${v.description ? ` - ${v.description}` : ""}`);
+      return text(lines.join("\n"), d);
     },
   }));
 

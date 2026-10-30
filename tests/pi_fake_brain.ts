@@ -16,6 +16,12 @@ function decide(context: any) {
   const calls = msgs.filter((m: any) => m.role === "assistant").flatMap((m: any) => m.content.filter((c: any) => c.type === "toolCall"));
   const did = (skill: string) => calls.some((c: any) => c.arguments?.skill === skill);
   const run = (skill: string, count: number) => fauxAssistantMessage(fauxToolCall("run_skill", { skill, count }), { stopReason: "toolUse" });
+  if (/try the new turn/i.test(newest)) {
+    if (!calls.some((c: any) => c.name === "play_frames"))
+      return fauxAssistantMessage(fauxToolCall("play_frames", { frames: [{ ms: 300, pos: { "5": 520, "13": 480 } }] }), { stopReason: "toolUse" });
+    if (!did("my_turn")) return run("my_turn", 2);
+    return fauxAssistantMessage(fauxText("Tried it."));
+  }
   if (/turn right/i.test(newest)) return did("turn_right") ? fauxAssistantMessage(fauxText("Turned right.")) : run("turn_right", 2);
   if (/walk forward 3/i.test(newest)) {
     if (!did("walk_forward")) return run("walk_forward", 3);

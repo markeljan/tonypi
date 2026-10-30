@@ -17,13 +17,15 @@ log = logging.getLogger(__name__)
 REPO = Path(__file__).resolve().parents[3]
 EXTENSION = REPO / "pi" / "extension"
 SYSTEM_PROMPT = REPO / "pi" / "SYSTEM.md"
+SKILLS = REPO / "pi" / "skills"  # how-tos the model loads when needed (gait-tuning); it reads them with `read`
 SESSION_DIR = Path(os.environ.get("TONYPI_PI_SESSIONS", "/home/pi/.local/state/tonypi/pi-sessions"))
 
 
 def pi_command(model: str) -> list[str]:
     extra = [a for p in os.environ.get("TONYPI_PI_EXTRA_EXT", "").split(",") if p for a in ("-e", p)]
     return ["pi", "--mode", "rpc", "--offline", "--model", model, "--thinking", "low",
-            "--no-builtin-tools", "--no-context-files", "--no-skills", "--no-extensions", "--no-mcp",
+            "--no-builtin-tools", "--tools", "+read", "--no-context-files", "--no-skills", "--skill", str(SKILLS),
+            "--no-extensions", "--no-mcp",
             "--no-prompt-templates", "--no-themes", "-e", str(EXTENSION), *extra,
             "--system-prompt", SYSTEM_PROMPT.read_text(), "--session-dir", str(SESSION_DIR)]
 

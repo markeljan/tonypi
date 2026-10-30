@@ -26,6 +26,7 @@ class FakeTonyd:
     def __init__(self, path: str) -> None:
         self.path = path
         self.runs: list[tuple[float, str, int]] = []
+        self.plays: list[dict] = []
         self.stops: list[float] = []
         self.cancel = threading.Event()
         self.t0 = time.monotonic()
@@ -40,9 +41,27 @@ class FakeTonyd:
             threading.Thread(target=self._client, args=(conn,), daemon=True).start()
 
     def _client(self, conn) -> None:
+        try:
+            self._serve(conn)
+        except OSError:  # pi closed the socket (end of test)
+            pass
+
+    def _serve(self, conn) -> None:
         for line in conn.makefile("r"):
             msg = json.loads(line)
             op, rid = msg["op"], msg.get("rid")
+            if op == "skills":
+                details = {"wave": {"description": "wave", "source": "builtin"},
+                           "my_turn": {"motions": ["*my_turn_step"], "description": "user turn", "source": "user"}}
+                conn.sendall((json.dumps({"rid": rid, "ok": True, "skills": {k: v["description"] for k, v in details.items()},
+                                          "details": details}) + "\n").encode())
+                continue
+            if op == "play":
+                self.plays.append(msg)
+                reply = {"job": {"id": 99, "skill": "_play", "count": 1, "said": [], "error": None, "state": "done",
+                                 "seconds": 0.3, "max_tilt_deg": 4.2}}
+                conn.sendall((json.dumps({"rid": rid, "ok": True, **reply}) + "\n").encode())
+                continue
             if op == "run":
                 self.cancel.clear()
                 self.runs.append((round(time.monotonic() - self.t0, 2), msg["skill"], msg["count"]))
@@ -57,6 +76,41 @@ class FakeTonyd:
             else:
                 reply = {"state": {"busy": False}}
             conn.sendall((json.dumps({"rid": rid, "ok": True, **reply}) + "\n").encode())
+
+
+def start_pi(tmp_path: Path, monkeypatch, body_sock: str):
+    monkeypatch.setenv("TONYD_SOCK", body_sock)
+    monkeypatch.setattr(rpc, "SESSION_DIR", tmp_path / "sessions")
+    fake_brain = str(Path(__file__).with_name("pi_fake_brain.ts"))
+    monkeypatch.setattr(rpc, "pi_command", lambda model: [
+        "pi", "--mode", "rpc", "--offline", "--model", model, "--no-builtin-tools", "--no-context-files",
+        "--no-skills", "--no-extensions", "--no-mcp", "-e", str(rpc.EXTENSION), "-e", fake_brain,
+        "--no-session"])
+    events: list[dict] = []
+    settled = threading.Event()
+
+    def on_event(ev: dict) -> None:
+        events.append(ev)
+        if ev.get("type") == "agent_settled":
+            settled.set()
+
+    pi = rpc.PiRpc(on_event, model="fake/brain")
+    pi.start()
+    return pi, events, settled
+
+
+def test_studio_play_and_a_saved_stepped_skill(tmp_path: Path, monkeypatch):
+    body = FakeTonyd(str(tmp_path / "tonyd.sock"))
+    pi, events, settled = start_pi(tmp_path, monkeypatch, str(tmp_path / "tonyd.sock"))
+    try:
+        pi.send("prompt", message="try the new turn")
+        assert settled.wait(30), "pi never settled"
+    finally:
+        pi.close()
+    assert body.plays and body.plays[0]["frames"] == [{"ms": 300, "pos": {"5": 520, "13": 480}}]
+    assert [(s, c) for _, s, c in body.runs if s == "my_turn"] == [("my_turn", 1), ("my_turn", 1)]  # one step per job
+    results = {e["toolName"]: e["result"]["content"][0]["text"] for e in events if e.get("type") == "tool_execution_end"}
+    assert "max tilt 4.2" in results["play_frames"], results
 
 
 def test_steer_mid_walk_turns_right_instead(tmp_path: Path, monkeypatch):

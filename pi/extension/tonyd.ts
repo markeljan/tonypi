@@ -47,10 +47,19 @@ export interface Job {
   said: string[];
   error: string | null;
   seconds: number | null;
+  max_tilt_deg: number | null;
 }
 
 export const run = async (skill: string, count = 1, waitS = 180): Promise<Job> =>
   (await call("run", { skill, count, wait: true, wait_s: waitS }, (waitS + 5) * 1000)).job;
+/** A brain's own keyframes, not saved: [{ms, pos: {"4": 620}}]. hold_s keeps the last pose with torque on. */
+export const play = async (frames: unknown[], hold_s = 0, waitS = 120): Promise<Job> =>
+  (await call("play", { frames, hold_s, wait: true, wait_s: waitS }, (waitS + 5) * 1000)).job;
+export const pose = async (positions: Record<string, number>, ms = 500, hold_s = 10): Promise<Job> =>
+  (await call("pose", { positions, ms, hold_s, wait: true, wait_s: 30 }, 35_000)).job;
+export const joints = () => call("joints") as Promise<{ raw: Record<string, number | null>; pos: Record<string, number | null> }>;
+export const torque = (ids: number[] | undefined, on: boolean, hold_s = 0) => call("torque", { ids, on, hold_s });
+export const skillDetails = async () => (await call("skills")).details as Record<string, any>;
 export const stop = () => call("stop");
 export const state = async (fresh = false) => (await call("state", { fresh }, 5_000)).state;
 export const head = async (pan_deg: number, tilt_deg: number, ms = 400) =>
