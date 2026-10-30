@@ -300,14 +300,39 @@ def run_t9(c: Conn, tonyd: TonydClient, label: str) -> dict:
     }
 
 
+def dry_run(c: Conn, tonyd: TonydClient, category: str, text: str, timeout: float) -> dict:
+    """E2E dry run: one live task, the harness's own task log, recorded for `tonypi-harness --check`."""
+    tonyd.call("tether", reset=True)
+    n0 = len(c.events)
+    c.send(text)
+    log = c.wait(lambda e: e["type"] == "task_log", timeout, n0)
+    evs = c.events[n0:]
+    rec = {"when": time.strftime("%Y-%m-%dT%H:%M:%S"), "text": text, **(log or {"status": "no task_log (timeout)"}),
+           "said": [e["text"] for e in evs if e["type"] == "say"],
+           "actions": [e["name"] for e in evs if e["type"] == "action"]}
+    rec.pop("type", None)
+    path = Path.home() / ".local/state/tonypi/harness-own/dry-runs.json"
+    runs = json.loads(path.read_text()) if path.exists() else {}
+    runs[category] = rec
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(runs, indent=1))
+    return rec
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("tasks", nargs="+", choices=sorted(TASKS))
+    ap.add_argument("tasks", nargs="*", help=" ".join(sorted(TASKS)))
+    ap.add_argument("--dry", nargs=2, metavar=("CATEGORY", "TEXT"), help="E2E dry run: walk|find|motion and a task")
     ap.add_argument("--label", default="", help="free text stored with each result (e.g. 'claude opus low')")
     ap.add_argument("--timeout", type=float, default=150)
     args = ap.parse_args()
     c, tonyd = Conn(), TonydClient()
+    if args.dry:
+        print(json.dumps(dry_run(c, tonyd, args.dry[0], args.dry[1], args.timeout)), flush=True)
+        return
     for name in args.tasks:
+        if name not in TASKS:
+            raise SystemExit(f"unknown task {name}; known: {' '.join(sorted(TASKS))}")
         r = run_t9(c, tonyd, args.label) if name == "T9" else run_task(c, tonyd, name, args.timeout)
         r["label"] = args.label
         print(json.dumps(r), flush=True)
