@@ -114,9 +114,13 @@ class Camera:
                 return None
             return self._frame, self._t
 
-    def jpeg(self, quality: int = 85, max_age: float = 2.0) -> tuple[bytes, float] | None:
+    def jpeg(self, quality: int = 85, max_age: float = 2.0, newer_than: float | None = None) -> tuple[bytes, float] | None:
+        """newer_than: wait (up to 1.5 s) for a frame captured after that monotonic time, e.g. after a head move."""
         import cv2
 
+        deadline = time.monotonic() + 1.5
+        while newer_than is not None and self._t <= newer_than and time.monotonic() < deadline:
+            time.sleep(0.02)
         got = self.latest(max_age)
         if got is None:
             return None
@@ -124,9 +128,9 @@ class Camera:
         ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, quality])
         return (buf.tobytes(), t) if ok else None
 
-    def snapshot(self, path: Path, quality: int = 85) -> float | None:
+    def snapshot(self, path: Path, quality: int = 85, newer_than: float | None = None) -> float | None:
         """Writes the latest frame as JPEG (atomically). Returns the frame's age in seconds, or None."""
-        got = self.jpeg(quality)
+        got = self.jpeg(quality, newer_than=newer_than)
         if got is None:
             return None
         data, t = got
