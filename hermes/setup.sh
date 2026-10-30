@@ -63,6 +63,7 @@ elif brain == "anthropic":  # untested (the owner uses the ChatGPT login)
             task.update(provider="anthropic", model=cfg["model"]["default"])
 elif brain == "local":
     cfg.pop("fallback_providers")
+    cfg["compression"]["threshold_tokens"] = 7000  # LFM3: 8,192 tokens per llama-server slot
     for task in cfg["auxiliary"].values():
         if "provider" in task:
             task.update(provider="custom", model="lfm3-omni-2b", base_url="http://127.0.0.1:8080/v1")

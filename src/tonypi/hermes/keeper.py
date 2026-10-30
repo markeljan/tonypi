@@ -46,6 +46,7 @@ class BodyKeeper:
         self.last_stop = -1e9
         self.getups: list[float] = []
         self.helpless = False  # gave up getting up; waits for a human or an up-skill
+        self.events: list[dict] = []  # {"t", "kind": fall|get_up|help, "tilt_deg"} for the task log
 
     # ---- inputs -----------------------------------------------------------------------------------------------
 
@@ -111,6 +112,12 @@ class BodyKeeper:
                 act = "settle" if not lying else None
             else:
                 act = None
+        if act in ("help", "get_up"):
+            if act == "get_up" and (not self.events or self.events[-1]["kind"] not in ("fall", "get_up")
+                                    or now - self.events[-1]["m"] > 30):  # a new fall, not a 2nd try at the same
+                self.events.append({"t": round(time.time(), 1), "m": now, "kind": "fall",
+                                    "tilt_deg": st.get("tilt_deg")})
+            self.events.append({"t": round(time.time(), 1), "m": now, "kind": act, "tilt_deg": st.get("tilt_deg")})
         if act == "help":
             self.say("I fell over and can't get up by myself. Please help me up.")
             if self.on_fall:

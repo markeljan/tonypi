@@ -28,16 +28,17 @@ fallback_providers:
 
 compression:
   enabled: true
-  # absolute trigger, applied to every model including fallbacks: the real local window is 8,192 tokens/slot
-  threshold_tokens: 7000
+  # absolute trigger for every model including fallbacks. Cloud brain: compact long tasks (camera images pile up)
+  # well before they get slow; setup.sh --brain local sets 7000 (the real LFM3 window is 8,192 tokens per slot).
+  threshold_tokens: 60000
   protect_first_n: 0
   protect_last_n: 8
 
 # The robot is the only toolset: no terminal, files, browser, web, code execution or delegation.
 platform_toolsets:
-  cli: [mcp-tonypi, memory, skills]
-  api_server: [mcp-tonypi, memory, skills]
-  telegram: [mcp-tonypi, memory, skills]
+  cli: [mcp-tonypi, mcp-tonypi-self, memory, skills]
+  api_server: [mcp-tonypi, mcp-tonypi-self, memory, skills]
+  telegram: [mcp-tonypi, mcp-tonypi-self, memory, skills]
 
 mcp_servers:
   tonypi:   # the robot: skills, head, camera, state, speech, and motion authoring (joints, keyframes, calibration)
@@ -46,6 +47,16 @@ mcp_servers:
     connect_timeout: 10
     tools:
       resources: false   # no resource/prompt wrapper tools: every tool schema costs local-model context
+      prompts: false
+  tonypi-self:   # task_done + self-update (own SOUL, skills, harness code; tests, commit, reload): src/tonypi/hermes/self_mcp.py
+    command: /home/pi/tonypi/.venv/bin/python
+    args: [-m, tonypi.hermes.self_mcp]
+    env:
+      PYTHONPATH: __REPO__/src
+      TONYPI_REPO: __REPO__
+    timeout: 320
+    tools:
+      resources: false
       prompts: false
 
 skills:
@@ -60,7 +71,7 @@ memory:
   nudge_interval: 10
 
 agent:
-  max_turns: 40
+  max_turns: 120           # a task may take 10 minutes of look / move / check
   image_input_mode: native  # snapshot/video frames go to the main model as images
   reasoning_effort: low     # default when a request names none; the voice front end picks per task (front.py TIERS)
 
