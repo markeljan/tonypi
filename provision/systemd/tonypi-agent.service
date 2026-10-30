@@ -14,6 +14,8 @@ RuntimeDirectoryPreserve=yes
 Environment=PYTHONUNBUFFERED=1
 ExecStart=/home/pi/tonypi/.venv/bin/tonypi-agent
 Restart=on-failure
+# voice front end: keep it over dev jobs and the LLM
+OOMScoreAdjust=-500
 RestartSec=5
 
 [Install]

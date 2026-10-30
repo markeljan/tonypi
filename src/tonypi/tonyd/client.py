@@ -133,3 +133,19 @@ class TonydClient:
 
     def skills(self) -> dict[str, str]:
         return self.call("skills")["skills"]
+
+    # ---- writing your own moves (see tonyd/studio.py) ------------------------------------------------------------
+
+    def joints(self) -> dict:
+        return self.call("joints")
+
+    def play(self, frames: list[dict], hold_s: float = 0, wait: bool = True, timeout: float = 180) -> dict:
+        r = self.call("play", timeout=timeout + 5 if wait else 10, frames=frames, hold_s=hold_s, wait=wait,
+                      wait_s=timeout)
+        return r["job"]
+
+    def pose(self, positions: dict, ms: int = 500, hold_s: float = 0, wait: bool = True) -> dict:
+        return self.call("pose", timeout=30, positions=positions, ms=ms, hold_s=hold_s, wait=wait, wait_s=25)["job"]
+
+    def torque(self, ids: list[int] | None, on: bool, hold_s: float = 0) -> None:
+        self.call("torque", ids=ids, on=on, hold_s=hold_s)

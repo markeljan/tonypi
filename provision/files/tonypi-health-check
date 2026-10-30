@@ -1,0 +1,8 @@
+#!/bin/bash
+# watchdog test-binary: exit 0 = healthy. The watchdog daemon reboots the Pi if this keeps failing for retry-timeout
+# (see watchdog.conf). The 2026-10-29 hangs: ping answered, sshd accepted TCP but never sent its banner.
+if systemctl is-active --quiet ssh.service; then
+  banner=$(timeout 20 bash -c 'exec 3<>/dev/tcp/127.0.0.1/22; head -c 8 <&3' 2>/dev/null)
+  [[ $banner == SSH-* ]] || { echo "sshd sent no banner within 20 s"; exit 1; }
+fi
+exit 0

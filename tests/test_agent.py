@@ -80,6 +80,11 @@ def _body(lying, asleep=False):
     b = Body.__new__(Body)
     b.board, b.cancelled, b._abort_reason, b._last_dance, b.asleep = _FakeBoard(lying), threading.Event(), None, None, asleep
     b.player = _FakePlayer(b.board)
+    import tempfile
+    from pathlib import Path
+    from tonypi.tonyd.body import DEFAULT_SKILLS
+    from tonypi.tonyd.studio import Studio
+    b.studio = Studio(Path(tempfile.mkdtemp()), default_skills=DEFAULT_SKILLS)
     return b
 
 
