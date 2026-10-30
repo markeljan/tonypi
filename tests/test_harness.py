@@ -410,6 +410,74 @@ def test_task_cap_cuts_the_brain(tonyd, tasklog, monkeypatch):
     asyncio.run(main())
 
 
+@pytest.fixture
+def repo(monkeypatch, tmp_path):
+    """learning.py on a throwaway git repo (never commits into the real branch)."""
+    import subprocess
+
+    from tonypi.harness import learning
+    r = tmp_path / "repo"
+    (r / "src/tonypi/harness").mkdir(parents=True)
+    (r / "src/tonypi/harness/x.py").write_text("X = 1\n")
+    (r / "README").write_text("hi\n")
+    for cmd in (["init", "-q"], ["add", "-A"], ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init"]):
+        subprocess.run(["git", *cmd], cwd=r, check=True)
+    monkeypatch.setenv("GIT_AUTHOR_NAME", "t"), monkeypatch.setenv("GIT_AUTHOR_EMAIL", "t@t")
+    monkeypatch.setenv("GIT_COMMITTER_NAME", "t"), monkeypatch.setenv("GIT_COMMITTER_EMAIL", "t@t")
+    monkeypatch.setattr(learning, "REPO", r)
+    monkeypatch.setattr(learning, "LESSONS", r / "src/tonypi/harness/learned.md")
+    monkeypatch.setattr(learning, "EXPORT", r / "data/learned_own")
+    monkeypatch.setattr(learning, "USER_DIR", tmp_path / "user")
+    return r
+
+
+def test_lessons_persist_commit_and_reach_the_brain(repo):
+    from tonypi.harness import learning
+    from tonypi.harness.core import Harness
+    h = Harness([], [Scripted(None)])
+    lp = learning.Learning()
+    lp.attach(h)
+    assert lp.add_lesson("Scan before walking toward a target.", "go to the chair")
+    assert not lp.add_lesson("scan before walking toward a target.")  # dedupe
+    assert "Scan before walking" in h.system_prompt() and h.notes and "Scan before walking" in h.notes[0]
+    assert "learned" in learning.git("log", "-1", "--format=%s")
+
+
+def test_learned_moves_are_exported(repo, tmp_path):
+    from tonypi.harness import learning
+    (tmp_path / "user/motions").mkdir(parents=True)
+    (tmp_path / "user/motions/jack_own.json").write_text('{"frames": []}')
+    (tmp_path / "user/motions/other.json").write_text('{"frames": []}')
+    (tmp_path / "user/skills.json").write_text('{"jack_own": {"motions": ["jack_own"]}, "x_pi": {"motions": []}}')
+    learning.Learning().after_task({"created": ["motion:jack_own"]})
+    assert (repo / "data/learned_own/motions/jack_own.json").exists()
+    assert not (repo / "data/learned_own/motions/other.json").exists()
+    assert list(json.loads((repo / "data/learned_own/skills.json").read_text())) == ["jack_own"]
+    assert "learned moves" in learning.git("log", "-1", "--format=%s")
+
+
+@pytest.mark.parametrize("edit,tests_ok,kept", [
+    ("src/tonypi/harness/x.py", True, True),   # good change: committed, reload pending
+    ("src/tonypi/harness/x.py", False, False),  # tests fail: reverted
+    ("README", True, False),                    # outside the harness: reverted
+])
+def test_improve_code(repo, monkeypatch, tmp_path, edit, tests_ok, kept):
+    import sys
+    import threading as th
+
+    from tonypi.harness import learning
+    from tonypi.harness.peripherals import Ctx
+    fake = tmp_path / "dev.py"
+    fake.write_text(f"import pathlib; p = pathlib.Path({str(repo / edit)!r}); p.write_text('X = 2\\n')\n")
+    monkeypatch.setenv("TONYPI_DEV_CMD", f"{sys.executable} {fake}")
+    monkeypatch.setattr(learning, "TEST_CMD", ["true" if tests_ok else "false"])
+    lp = learning.Learning()
+    res = lp.improve_code({"request": "make X two, it reads better"}, Ctx(th.Event(), lambda *a, **k: None))
+    assert (repo / edit).read_text() == ("X = 2\n" if kept else ("X = 1\n" if edit.endswith(".py") else "hi\n"))
+    assert res.error is not kept and lp.reload_pending is kept
+    assert ("self-update" in learning.git("log", "-1", "--format=%s")) is kept
+
+
 def test_backend_order(monkeypatch):
     monkeypatch.setenv("TONYPI_BRAIN", "local,claude")
     assert [b.name for b in backends.build()] == ["local"]

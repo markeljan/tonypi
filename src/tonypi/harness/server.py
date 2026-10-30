@@ -10,7 +10,7 @@ Socket protocol (same events as tonypi-agent, so tonypi-chat works with TONYPI_S
   -> "/status"                        a status event
   <- {"type": "heard"|"thinking"|"action"|"tool_result"|"say"|"info"|"plan"|"usage"|"done"|"status", "t": ...}
 
-Environment: TONYPI_BRAIN (default codex,local; claude optional), TONYPI_PERIPHERALS (body,camera,voice,iphone),
+Environment: TONYPI_BRAIN (default codex,local; claude optional), TONYPI_PERIPHERALS (body,camera,voice,learning,iphone),
 TONYPI_CODEX_TIER (auto|fast|multi|advanced), TONYPI_CODEX_FAST/MULTI/ADVANCED ("model:effort"), TONYPI_STEER_MODE
 (cut|steer), TONYPI_HARNESS_VOICE (stream|transcribe). Claude: CLAUDE_CODE_OAUTH_TOKEN in secrets.env.
 """
@@ -58,11 +58,14 @@ class Frontend:
             from tonypi.agent.speech import Speaker
             self.speaker = Speaker()
         self.tonyd = TonydClient(on_event=self._on_tonyd_event)
-        names = os.environ.get("TONYPI_PERIPHERALS", "body,camera,voice,iphone").split(",")
+        names = os.environ.get("TONYPI_PERIPHERALS", "body,camera,voice,learning,iphone").split(",")
         self.peripherals = peripherals.build([n.strip() for n in names if n.strip()], tonyd=self.tonyd,
                                              speaker=self.speaker, on_say=lambda s: self.emit("say", text=s))
         self.harness = Harness(self.peripherals, backends.build(brain), emit=self.emit,
                                on_task_done=self._task_done)
+        self.learning = next((p for p in self.peripherals if p.name == "learning"), None)
+        if self.learning:
+            self.learning.attach(self.harness)
         self.listener = None
         if voice:
             from tonypi.agent.speech import Listener
@@ -102,6 +105,8 @@ class Frontend:
         asyncio.run_coroutine_threadsafe(self.harness.submit(text, source), self.loop)
 
     def _task_done(self, source: str) -> None:
+        if self.learning and self.learning.reload_pending:  # self-update committed: hot reload once idle
+            self.loop.call_later(1.0, self._reload_when_idle)
         if source == "voice" and self.listener and not self.harness.stopped:
             voice = self.harness.peripherals.get("voice")
 
@@ -111,6 +116,17 @@ class Frontend:
                 self.listener.followup()
 
             threading.Thread(target=later, daemon=True).start()
+
+    def _reload_when_idle(self) -> None:
+        voice = self.harness.peripherals.get("voice")
+        if self.harness.busy() or (voice and not voice.idle()):
+            self.loop.call_later(1.0, self._reload_when_idle)
+            return
+        from tonypi.harness.learning import reexec
+        self.emit("info", text="reloading with the new code")
+        if self.listener:
+            self.listener.stop()
+        reexec()
 
     # ---- socket -----------------------------------------------------------------------------------------------
 

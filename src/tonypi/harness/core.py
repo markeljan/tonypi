@@ -90,6 +90,8 @@ class Harness:
         self.tasklog: TaskLog | None = None
         self.on_lesson: Callable[[str, str], None] | None = None  # (lesson, task text): self-update (learning.py)
         self.extra_prompt: Callable[[], str] | None = None  # learned instructions, appended to the system prompt
+        self.on_task_end: Callable[[dict], None] | None = None  # (task log record): export learned moves
+        self.notes: list[str] = []  # for the running brain session, sent with its next turn (new lessons ...)
 
     # ---- plumbing ---------------------------------------------------------------------------------------------
 
@@ -271,6 +273,11 @@ class Harness:
             tl.t_done = time.time()
             self.tasklog = None
             rec = tl.write()
+            if self.on_task_end:
+                try:
+                    await asyncio.to_thread(self.on_task_end, rec)
+                except Exception:
+                    log.exception("task-end hook failed")
             self.emit("task_log", **{k: rec[k] for k in ("status", "total_s", "first_action_s", "tool_calls",
                                                           "falls", "continues", "pushbacks", "created", "summary")})
             self.emit("info", text=f"task finished in {time.monotonic() - t0:.1f} s ({tl.status})")

@@ -308,6 +308,9 @@ class CodexBackend:
         model, _, effort = TIERS[self.tier].partition(":")
         self.h.emit("info", text=f"codex tier {self.tier}: {model}, effort {effort or 'default'}")
         self.turn, self.fatal, self.did_tools, self.failed_tools, self.outcome = None, None, 0, 0, None
+        if self.h.notes:  # e.g. a lesson saved since the last turn: the session's instructions don't have it yet
+            notes, self.h.notes = self.h.notes, []
+            text = "".join(f"[Harness note: {n}]\n" for n in notes) + text
         params = {"threadId": self.thread_id, "model": model, "outputSchema": OUTCOME_SCHEMA,
                   "input": [{"type": "text", "text": f"[{source}] {text}" if source == "voice" else text}]}
         if effort:

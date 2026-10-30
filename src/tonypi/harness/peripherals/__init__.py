@@ -67,6 +67,7 @@ class Peripheral:
 
 def build(names: list[str], **deps) -> list[Peripheral]:
     """Instantiate peripherals by name. deps: shared objects some of them need (tonyd client, speaker)."""
+    from tonypi.harness import learning
     from tonypi.harness.peripherals import body, camera, iphone, voice
 
     registry: dict[str, Callable[[], Peripheral]] = {
@@ -74,6 +75,7 @@ def build(names: list[str], **deps) -> list[Peripheral]:
         "camera": lambda: camera.CameraPeripheral(deps["tonyd"]),
         "voice": lambda: voice.VoicePeripheral(deps.get("speaker"), deps.get("on_say")),
         "iphone": lambda: iphone.IphonePeripheral(),
+        "learning": lambda: learning.Learning(),
     }
     out = []
     for n in names:
