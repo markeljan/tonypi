@@ -72,6 +72,8 @@ before `tools/bench.py`** or anything else that opens the board.
   (re-unloads torque left on, warns on overheating / low battery as `warn` events, which the agent speaks).
 - `head` takes degrees (pan + = left, ±60; tilt + = up, −40..25). `snapshot` writes `/run/tonypi/snap-NNNNNN.jpg` from the
   latest frame (~30 ms; the camera thread keeps capturing at 15 fps).
+  Camera unplugged / back → `warn` event (`kind: "camera"`), which the agent says ("Camera disconnected." /
+  "Camera reconnected."; after the current command if busy; at startup if the camera is missing).
 - MCP: `tonypi-mcp.service` → `http://127.0.0.1:8765/mcp` (Streamable HTTP, no auth, localhost only by default). Tools:
   `list_skills, run_skill, stop, get_state, look, snapshot (image), say`. `.mcp.json` in the repo points Claude Code at it.
 

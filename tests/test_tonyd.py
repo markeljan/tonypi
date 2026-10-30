@@ -130,3 +130,30 @@ def test_state_and_no_camera(robot):
     assert st["battery_mv"] == 11500 and st["hottest"] == [1, "left ankle", 40] and st["camera"]["ok"] is False
     with pytest.raises(TonydError, match="camera"):
         c.snapshot()
+
+
+def test_camera_lost_and_back_are_announced():
+    from tonypi.tonyd.camera import Camera
+
+    cam = Camera()
+    d = Tonyd(_Body(), cam)
+    events = []
+    d.emit = lambda event, **kw: events.append((event, kw))
+    cam._set_connected(True)   # opened fine at startup: no news
+    cam._set_connected(True)
+    cam._set_connected(False)  # unplugged
+    cam._set_connected(False)  # still gone: said once
+    cam._set_connected(True)   # back
+    assert events == [("warn", {"text": "Camera disconnected.", "kind": "camera"}),
+                      ("warn", {"text": "Camera reconnected.", "kind": "camera"})]
+
+
+def test_camera_missing_at_startup_is_announced():
+    from tonypi.tonyd.camera import Camera
+
+    cam = Camera()
+    d = Tonyd(_Body(), cam)
+    events = []
+    d.emit = lambda event, **kw: events.append(kw["text"])
+    cam._set_connected(False)
+    assert events == ["Camera disconnected."]

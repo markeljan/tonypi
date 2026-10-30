@@ -8,7 +8,7 @@ Brains (the voice agent, the MCP server, scripts) talk to it over a Unix socket 
 
 ops: ping, skills, run, stop, state, head, snapshot, relax, subscribe.
 One skill runs at a time and the newest preempts. Safety lives here, never in a brain: servo temperature and
-fall guards (body.py), torque off whenever idle, and low-battery / overheating warnings.
+fall guards (body.py), torque off whenever idle, and low-battery / overheating / camera lost-or-back warnings.
 """
 
 from __future__ import annotations
@@ -78,6 +78,8 @@ class Tonyd:
         self.cached_t = 0.0
         self.head_deg = {"pan": 0.0, "tilt": 0.0}
         self._snap_ids = itertools.count(1)
+        if camera is not None:
+            camera.on_change = self._camera_changed
 
     # ---- events ---------------------------------------------------------------------------------------------
 
@@ -223,6 +225,11 @@ class Tonyd:
                 log.warning(msg)
                 self.emit("warn", text=msg)
 
+    def _camera_changed(self, ok: bool) -> None:
+        text = "Camera reconnected." if ok else "Camera disconnected."
+        (log.info if ok else log.warning)(text)
+        self.emit("warn", text=text, kind="camera")
+
     # ---- head, camera ---------------------------------------------------------------------------------------
 
     def head(self, pan_deg: float = 0.0, tilt_deg: float = 0.0, ms: int = 400) -> dict:
@@ -344,8 +351,10 @@ def main() -> None:
     ap.add_argument("--no-camera", action="store_true")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    camera = None if args.no_camera else Camera().start()
-    d = Tonyd(Body(), camera).start()
+    camera = None if args.no_camera else Camera()
+    d = Tonyd(Body(), camera).start()  # wires camera.on_change before the camera thread runs
+    if camera:
+        camera.start()
     d.head(0, 0)
     try:
         d.serve()

@@ -8,6 +8,7 @@ import os
 import threading
 import time
 from pathlib import Path
+from typing import Callable
 
 log = logging.getLogger(__name__)
 
@@ -32,6 +33,17 @@ class Camera:
         self._running = False
         self._missing_logged = False
         self.frames = 0
+        self.connected: bool | None = None  # None until the first open attempt
+        self.on_change: Callable[[bool], None] | None = None  # called when the camera is lost / found again
+
+    def _set_connected(self, ok: bool) -> None:
+        prev, self.connected = self.connected, ok
+        if ok == prev or (prev is None and ok) or self.on_change is None:  # opening fine at startup is no news
+            return
+        try:
+            self.on_change(ok)
+        except Exception:
+            log.exception("camera on_change failed")
 
     def start(self) -> "Camera":
         self._running = True
@@ -68,12 +80,14 @@ class Camera:
             if cap is None:
                 cap = self._open()
                 if cap is None:
+                    self._set_connected(False)  # the device is gone (a reopen that works at once is not a loss)
                     if not self._missing_logged:
                         log.warning("no camera found (is the USB cable seated?); retrying every 3 s")
                         self._missing_logged = True
                     time.sleep(3)
                     continue
                 log.info("camera open: %s", self.device)
+                self._set_connected(True)
                 self._missing_logged, failures = False, 0
             ok, frame = cap.read()
             if not ok:
