@@ -361,6 +361,9 @@ def main() -> None:
     ap.add_argument("--mute", action="store_true", help="no speaker either (text benchmarks)")
     ap.add_argument("--model", default=os.environ.get("TONYPI_PI_MODEL", "tony/brain"))
     args = ap.parse_args()
+    # voice: streaming ASR text only, no LFM3 re-transcription on :8080 (owner's call, 2026-10-29: cloud brain only;
+    # set TONYPI_ASR_URL=http://127.0.0.1:8080/v1/chat/completions to bring the second pass back)
+    os.environ.setdefault("TONYPI_ASR_URL", "")
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     Front(voice=not args.no_voice, speak=not args.mute, model=args.model).run()
 

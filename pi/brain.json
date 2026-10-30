@@ -1,0 +1,11 @@
+{
+  "tiers": {
+    "simple":    {"model": "openai-codex/gpt-6.1-terra", "thinking": "off"},
+    "multistep": {"model": "openai-codex/gpt-6.1-terra", "thinking": "medium"},
+    "advanced":  {"model": "openai-codex/gpt-6.1-sol",   "thinking": "medium"}
+  },
+  "multistep_words": "\\b(then|after(wards)?|before|and (tell|turn|walk|look|wave|go|come|say|dance|bow)|tell me (if|whether|what|which|how many))\\b",
+  "advanced_words": "\\b(find|search|look for|go to|walk (to|toward|towards)|explore|navigate|follow|figure out|bring|fetch|get (me|that|this|the)|come here)\\b",
+  "local": "local/lfm3-omni-2b",
+  "cloud_cooldown_s": 120
+}

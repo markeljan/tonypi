@@ -38,6 +38,19 @@ case $MODE in
     b V-T4 --voice "walk forward 3 steps, then turn left" "@6" "actually, turn right instead"
     b V-T8 --voice "find the door and walk toward it" "@30" "stop"
     ;;
+  terra-off|terra-low|tiered)  # T1-T5 per model setting (owner: terra fast by default, sol for hard tasks)
+    case $MODE in
+      terra-off) start_front TONYPI_BRAIN_MODEL=openai-codex/gpt-6.1-terra TONYPI_BRAIN_THINKING=off ;;
+      terra-low) start_front TONYPI_BRAIN_MODEL=openai-codex/gpt-6.1-terra TONYPI_BRAIN_THINKING=low ;;
+      tiered)    start_front TONYPI_X=1 ;;
+    esac
+    b T5 "how's your battery and how hot are you?"
+    b T1 "wave"
+    b T2 "what do you see?"
+    b T3 "look left and tell me if there's a chair"
+    b T4 "walk forward 3 steps, then turn left" "@7" "actually, turn right instead"
+    if [ $MODE = tiered ]; then b T6 "find the door and walk toward it" "@60" "stop"; fi
+    ;;
   steer)
     start_front TONYPI_X=1
     b T4b "walk forward 3 steps, then turn left" "@7" "actually, turn right instead"
