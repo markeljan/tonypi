@@ -17,8 +17,8 @@ function decide(context: any) {
   const did = (skill: string) => calls.some((c: any) => c.arguments?.skill === skill);
   const run = (skill: string, count: number) => fauxAssistantMessage(fauxToolCall("run_skill", { skill, count }), { stopReason: "toolUse" });
   if (users.some((u: any) => /step onto the rug/i.test(text(u)))) {  // keeps trying the same thing
-    const all = JSON.stringify(context.messages);
-    if (all.includes("[stuck check]")) return fauxAssistantMessage(fauxText("Stuck: asking for help."));
+    const results = JSON.stringify(msgs.filter((m: any) => m.role === "toolResult"));
+    if (results.includes("[stuck check]")) return fauxAssistantMessage(fauxText("Stuck: asking for help."));
     return run("step_in_place", 1);
   }
   if (users.some((u: any) => /walk to the box/i.test(text(u)))) {
