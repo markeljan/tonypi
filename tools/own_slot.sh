@@ -9,13 +9,18 @@ cd "$(dirname "$0")/.."
 exec 9>/run/lock/tonypi-robot.lock
 echo "waiting for the robot lock..."
 flock 9
-# voice: the shared tonypi-voice service (GPT-Live-1) owns mic + speaker when it runs; else this harness's local
-# listener needs them, so tonypi-agent steps aside. Only what was running before is started again.
-agent_was=$(systemctl is-active tonypi-agent)
-restore() { [ "$agent_was" = active ] && sudo systemctl start tonypi-agent; echo "tonypi-agent: $(systemctl is-active tonypi-agent)"; }
+# voice: the shared tonypi-voice service (GPT-Live-1) owns mic + speaker for the slot; starting it stops
+# tonypi-agent (the units conflict), starting tonypi-agent again at the end stops it.
+restore() { sudo systemctl start tonypi-agent; echo "tonypi-agent: $(systemctl is-active tonypi-agent)"; }
 trap restore EXIT
-[ "$agent_was" = active ] && sudo systemctl stop tonypi-agent
-echo "tonypi-voice: $(systemctl is-active tonypi-voice 2>/dev/null)"
+if [[ " $* " != *" --mute "* ]]; then
+  sudo systemctl start tonypi-voice
+  for i in $(seq 30); do
+    mode=$(.venv/bin/python -c "import json,socket; s=socket.socket(socket.AF_UNIX); s.connect('/run/tonypi/voice.sock'); s.sendall(b'{\"op\":\"status\",\"rid\":1}\\n'); print(json.loads(s.makefile().readline()).get('mode'))" 2>/dev/null)
+    [ -n "$mode" ] && break; sleep 0.5
+  done
+  echo "tonypi-voice: $(systemctl is-active tonypi-voice), mode ${mode:-?}"
+fi
 .venv/bin/python -c "from tonypi.tonyd.client import TonydClient as T; print('tether:', T().call('tether', reset=True)['tether'])"
 .venv/bin/tonypi-harness --check || echo "(readiness: see the unchecked items above)"
 args=("$@")
