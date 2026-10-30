@@ -81,6 +81,9 @@ before `tools/bench.py`** or anything else that opens the board.
   latest frame (~30 ms; the camera thread keeps capturing at 15 fps).
   Camera unplugged / back → `warn` event (`kind: "camera"`), which the agent says ("Camera disconnected." /
   "Camera reconnected."; after the current command if busy; at startup if the camera is missing).
+- **Tether** (charging cable): the board reports only voltage, so it's a setting (`tether.json` in the user dir, default
+  on, `max_steps` 10): walking skills (walk_*, step_left/right, any skill named *walk*) share a step budget since set/reset;
+  turns don't count. `tether {on, max_steps, reset}` op / MCP tool. Turn it off when Tony runs on battery.
 - Writing moves (`studio.py`): user layer in `~/.local/share/tonypi/` (`motions/*.json` override `data/motions` by name,
   `skills.json` = name → motion sequence with `"*step"` repeated by count, `calibration.json` = per-servo `trim` +
   soft `limits`). Ops `joints, play {frames, hold_s}, pose {positions, ms, hold_s}, torque {ids, on}, motions,

@@ -8,7 +8,8 @@ Brains (the voice agent, the MCP server, scripts) talk to it over a Unix socket 
 
 ops: ping, skills, run, stop, state, head, snapshot, relax, subscribe,
      and for brains that write their own moves (studio.py): joints, pose, play, torque, motions, motion_get,
-     motion_save, motion_delete, skill_save, skill_delete, calibration, servo_calibration, servo_calibrate.
+     motion_save, motion_delete, skill_save, skill_delete, calibration, servo_calibration, servo_calibrate;
+     tether {on, max_steps, reset} (walking-step budget while plugged into the charger).
 One body job runs at a time and the newest preempts. What stays here whatever a brain does: stop, servo temperature
 (body.py), torque off whenever idle, and low-battery / overheating / camera lost-or-back warnings. Falls are the
 brain's job: tonyd reports tilt and `lying`, and only stops a job for tilting if it asks (`guard_tilt_deg`).
@@ -36,6 +37,16 @@ from tonypi.tonyd.studio import parse_frames
 
 log = logging.getLogger("tonypi.tonyd")
 SNAP_DIR = Path(os.environ.get("TONYD_SNAP_DIR", "/run/tonypi"))
+# Tethered to the charger (the board only reports voltage, so this is a setting, not detected): walking steps
+# since the tether was set or reset are capped so the cable isn't dragged. Turns and in-place moves don't count.
+TETHER_DEFAULT = {"on": True, "max_steps": 10}
+WALKING = {"walk_forward", "walk_backward", "step_left", "step_right"}
+
+
+def is_walking(skill: str) -> bool:
+    return skill in WALKING or "walk" in skill  # user gaits like walk_forward_own count too
+
+
 IDLE_RELAX_S = 1.5  # torque off this long after the last skill (a brain's next step usually comes sooner)
 WATCH_S = 20
 IDLE_HOT_C = 80
@@ -82,6 +93,7 @@ class Tonyd:
         self.last_skill_end = 0.0
         self.torque_maybe_on = True
         self.hold_s = 0.0  # the last job asked to hold its pose this long
+        self.walked = 0  # walking steps since the tether was set / reset
         self.last_warn = 0.0
         self.cached: dict = {}
         self.cached_t = 0.0
@@ -112,12 +124,34 @@ class Tonyd:
         out.update(self.body.studio.skills())
         return out
 
+    def tether(self, on: bool | None = None, max_steps: int | None = None, reset: bool = False) -> dict:
+        path = self.body.studio.user_dir / "tether.json"
+        t = {**TETHER_DEFAULT, **(json.loads(path.read_text()) if path.exists() else {})}
+        if on is not None or max_steps is not None:
+            if on is not None:
+                t["on"] = bool(on)
+            if max_steps is not None:
+                t["max_steps"] = max(1, min(100, int(max_steps)))
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(t) + "\n")
+            reset = True
+        if reset:
+            self.walked = 0
+        return {**t, "walked": self.walked}
+
     def submit(self, skill: str, count: int = 1, frames=None, hold_s: float = 0.0,
                guard_tilt_deg: float | None = None) -> Job:
         if frames is not None:
             frames, skill = [{"ms": f.ms, "pos": f.pos} for f in parse_frames(frames)], "_play"
         elif skill not in (known := self.skills()):
             raise ValueError(f"unknown skill {skill!r}; known: {', '.join(known)}")
+        steps = max(1, min(MAX_COUNT, int(count)))
+        tether = self.tether()
+        if tether["on"] and is_walking(skill):
+            if self.walked + steps > tether["max_steps"]:
+                raise ValueError(f"tethered to the charger: {self.walked} of {tether['max_steps']} walking steps used. "
+                                 "Turn and walk back, then tether reset; or tether off once unplugged")
+            self.walked += steps
         job = Job(next(self.ids), skill, max(1, min(MAX_COUNT, int(count))),
                   hold_s=max(0.0, min(120.0, float(hold_s or 0))), frames=frames,
                   guard_tilt_deg=None if guard_tilt_deg is None else max(5.0, min(120.0, float(guard_tilt_deg))))
@@ -200,6 +234,7 @@ class Tonyd:
             "sensors_age_s": round(time.monotonic() - self.cached_t, 1) if self.cached_t else None,
             "head_deg": dict(self.head_deg),
             "camera": self.camera.status() if self.camera else {"ok": False, "device": None},
+            "tether": self.tether(),
         }
 
     def _refresh(self) -> dict:
@@ -324,6 +359,8 @@ class Tonyd:
                 self.body.relax()
                 self.torque_maybe_on = False
             reply({"relaxed": True})
+        elif op == "tether":
+            reply({"tether": self.tether(msg.get("on"), msg.get("max_steps"), bool(msg.get("reset")))})
         elif op == "joints":
             got = self.lock.acquire(timeout=0.5)  # reading mid-motion is fine, just not racing the watchdog
             try:

@@ -33,7 +33,8 @@ mcp = MCPServer(
         "it in small steps; check max_tilt_deg in the result. Falls are yours to handle: nothing stops a move for "
         "tilting unless you pass guard_tilt_deg, and nothing stands Tony up unless you run settle / get_up. tonyd "
         "only stops what overheats, and switches servos off 1.5 s after the last move (in whatever pose; end in a "
-        "stable one, or hold_s) to keep them cool."
+        "stable one, or hold_s) to keep them cool. While plugged into the charger (tether on) walking is limited to "
+        "a step budget; see tether()."
     ),
 )
 tonyd = TonydClient()
@@ -199,6 +200,15 @@ def servo_calibrate(servo_id: int, reason: str, offset: int | None = None, limit
     writes the offset to the servo's EEPROM (limits always persist). Prefer calibration() trim for small fixes."""
     with _robot():
         return tonyd.call("servo_calibrate", id=servo_id, offset=offset, limits=limits, save=save, reason=reason)
+
+
+@mcp.tool()
+def tether(on: bool | None = None, max_steps: int | None = None, reset: bool = False) -> dict:
+    """Charging-cable tether. While on, walking skills (walk_*, step_left/right, any skill named *walk*) may use at
+    most max_steps steps in total (default 10) so the cable isn't dragged; turns don't count. reset=True after
+    walking back to the charger; on=False once unplugged. No arguments = just read it."""
+    with _robot():
+        return tonyd.call("tether", on=on, max_steps=max_steps, reset=reset)["tether"]
 
 
 @mcp.tool()
