@@ -113,11 +113,16 @@ class TonydClient:
 
     # ---- conveniences -----------------------------------------------------------------------------------------
 
-    def run(self, skill: str, count: int = 1, wait: bool = True, timeout: float = 180) -> dict:
-        """Returns the job dict (state: done / failed / cancelled, plus anything the body said)."""
+    def run(self, skill: str, count: int = 1, wait: bool = True, timeout: float = 180, **kw) -> dict:
+        """Returns the job dict (state: done / failed / cancelled, plus anything the body said).
+        kw: guard_tilt_deg, label, trace, hold_s (see tonyd)."""
         r = self.call("run", timeout=timeout + 5 if wait else 10, skill=skill, count=count, wait=wait,
-                      wait_s=timeout)
+                      wait_s=timeout, **kw)
         return r["job"]
+
+    def job(self, job_id: int | None = None) -> dict:
+        """A finished job's record (tonyd keeps the last 200; all of them in jobs.jsonl). None = the last one."""
+        return self.call("job", id=job_id)["job"]
 
     def stop(self, latch: bool = False) -> None:
         self.call("stop", latch=latch)
@@ -148,9 +153,9 @@ class TonydClient:
     def joints(self) -> dict:
         return self.call("joints")
 
-    def play(self, frames: list[dict], hold_s: float = 0, wait: bool = True, timeout: float = 180) -> dict:
+    def play(self, frames: list[dict], hold_s: float = 0, wait: bool = True, timeout: float = 180, **kw) -> dict:
         r = self.call("play", timeout=timeout + 5 if wait else 10, frames=frames, hold_s=hold_s, wait=wait,
-                      wait_s=timeout)
+                      wait_s=timeout, **kw)
         return r["job"]
 
     def pose(self, positions: dict, ms: int = 500, hold_s: float = 0, wait: bool = True) -> dict:

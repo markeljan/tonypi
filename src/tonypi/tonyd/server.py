@@ -9,7 +9,11 @@ Brains (the voice agent, the MCP server, scripts) talk to it over a Unix socket 
 ops: ping, skills, run, stop, state, head, snapshot, scan, burst, relax, subscribe,
      and for brains that write their own moves (studio.py): joints, pose, play, torque, motions, motion_get,
      motion_save, motion_delete, skill_save, skill_delete, calibration, servo_calibration, servo_calibrate;
-     tether {on, max_steps, reset} (walking-step budget while plugged into the charger).
+     tether {on, max_steps, reset} (walking-step budget while plugged into the charger);
+     job {id} (a finished job's record; no id = the last one).
+Every finished job is appended to JOBS_LOG (wall-clock times, tilt/yaw, end posture, temperatures, battery) and the
+last KEEP_JOBS stay in memory, so results survive the caller (learning runs, a brain that didn't wait). run/play with
+`trace: true` also write the IMU at ~50 Hz to TRACE_DIR/<id>.jsonl.
 One body job runs at a time and the newest preempts. What stays here whatever a brain does: stop, servo temperature
 (body.py), torque off whenever idle, and low-battery / overheating / camera lost-or-back warnings. Falls are the
 brain's job: tonyd reports tilt and `lying`, and only stops a job for tilting if it asks (`guard_tilt_deg`).
@@ -18,9 +22,12 @@ brain's job: tonyd reports tilt and `lying`, and only stops a job for tilting if
 from __future__ import annotations
 
 import argparse
+import collections
+import hashlib
 import itertools
 import json
 import logging
+import math
 import os
 import queue
 import socket
@@ -29,6 +36,7 @@ import time
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 
+from tonypi.brain import JOBS_LOG
 from tonypi.tonyd import SOCK
 from tonypi.tonyd.body import LOW_BATTERY_MV, Body
 from tonypi.tonyd.camera import Camera
@@ -52,6 +60,9 @@ WATCH_S = 20
 IDLE_HOT_C = 80
 WARN_EVERY_S = 300
 KEEP_SNAPSHOTS = 40  # scan + burst can take a dozen at once
+KEEP_JOBS = 200  # finished job records answered by the `job` op
+TRACE_DIR = JOBS_LOG.parent / "traces"
+TRACE_HZ, KEEP_TRACES = 50, 300
 
 # head: PWM pulse = centre + degrees * US_PER_DEG (500-2500 us ~ 180 deg). Pan + = left, tilt + = up.
 PAN, TILT = 2, 1
@@ -76,11 +87,25 @@ class Job:
     max_tilt_raw_deg: float | None = None  # the same from the accelerometer alone (spikes on fast moves)
     yaw_deg: float | None = None  # how far he turned during the job, from the gyro (+ = left)
     rot_deg: list[float] | None = None  # gyro integral on each axis during the job (x, y, z)
+    label: str | None = None  # the caller's tag (e.g. a learning experiment id), kept in the job log
+    params: dict | None = None  # what ran: frames count/ms/hash for "_play"
+    t_start: float | None = None  # wall clock (epoch s), to line up with phone frames and logs
+    t_end: float | None = None
+    end_tilt_deg: float | None = None  # posture right after the job (fell = lying_after)
+    lying_after: bool | None = None
+    hottest_before: list | None = None  # [servo, joint, deg C] (cached reading before, fresh one after)
+    hottest_after: list | None = None
+    battery_mv: int | None = None
+    trace: str | None = None  # path of the IMU trace when asked for (trace: true)
     frames: list | None = field(default=None, repr=False)  # a brain's own keyframes ("_play")
     finished: threading.Event = field(default_factory=threading.Event, repr=False)
+    want_trace: bool = field(default=False, repr=False)
 
     def public(self) -> dict:
-        return {f.name: getattr(self, f.name) for f in fields(self) if f.name not in ("finished", "frames")}
+        return {f.name: getattr(self, f.name) for f in fields(self) if f.name not in _INTERNAL}
+
+
+_INTERNAL = ("finished", "frames", "want_trace")
 
 
 class Tonyd:
@@ -90,7 +115,6 @@ class Tonyd:
         self.lock = threading.Lock()  # held while a skill runs, and by the watchdog's bus reads
         self.queue: queue.Queue[Job] = queue.Queue(maxsize=1)
         self.current: Job | None = None
-        self.ids = itertools.count(1)
         self.subs: dict[socket.socket, threading.Lock] = {}
         self.subs_lock = threading.Lock()
         self.last_skill_end = 0.0
@@ -103,6 +127,8 @@ class Tonyd:
         self.cached_t = 0.0
         self.head_deg = {"pan": 0.0, "tilt": 0.0}
         self._snap_ids = itertools.count(1)
+        self.recent: collections.deque[dict] = collections.deque(maxlen=KEEP_JOBS)  # finished job records
+        self.ids = itertools.count(self._last_logged_id() + 1)  # ids stay unique in the log across restarts
         if camera is not None:
             camera.on_change = self._camera_changed
 
@@ -144,9 +170,13 @@ class Tonyd:
         return {**t, "walked": self.walked}
 
     def submit(self, skill: str, count: int = 1, frames=None, hold_s: float = 0.0,
-               guard_tilt_deg: float | None = None) -> Job:
+               guard_tilt_deg: float | None = None, label: str | None = None, trace: bool = False) -> Job:
+        params = None
         if frames is not None:
             frames, skill = [{"ms": f.ms, "pos": f.pos} for f in parse_frames(frames)], "_play"
+            canon = json.dumps([[f["ms"], sorted(f["pos"].items())] for f in frames], separators=(",", ":"))
+            params = {"frames": len(frames), "ms": sum(f["ms"] for f in frames),
+                      "hash": hashlib.sha1(canon.encode()).hexdigest()[:10]}
         elif skill not in (known := self.skills()):
             raise ValueError(f"unknown skill {skill!r}; known: {', '.join(known)}")
         if self.stop_latched:
@@ -160,7 +190,8 @@ class Tonyd:
             self.walked += steps
         job = Job(next(self.ids), skill, max(1, min(MAX_COUNT, int(count))),
                   hold_s=max(0.0, min(120.0, float(hold_s or 0))), frames=frames,
-                  guard_tilt_deg=None if guard_tilt_deg is None else max(5.0, min(120.0, float(guard_tilt_deg))))
+                  guard_tilt_deg=None if guard_tilt_deg is None else max(5.0, min(120.0, float(guard_tilt_deg))),
+                  label=None if label is None else str(label)[:80], params=params, want_trace=bool(trace))
         self.body.cancel()  # the newest command preempts whatever is running
         self._drop_queued()
         self.queue.put(job)
@@ -186,8 +217,76 @@ class Tonyd:
         job.state, job.error = state, error
         if job.started is not None:
             job.seconds = round(time.monotonic() - job.started, 2)
+        job.t_end = round(time.time(), 3)
+        rec = job.public()
+        self.recent.append(rec)
         job.finished.set()
-        self.emit("job", **job.public())
+        self.emit("job", **rec)
+        try:
+            JOBS_LOG.parent.mkdir(parents=True, exist_ok=True)
+            with open(JOBS_LOG, "a") as f:
+                f.write(json.dumps(rec, separators=(",", ":")) + "\n")
+        except OSError as e:
+            log.warning("job log: %s", e)
+
+    def job(self, job_id=None) -> dict:
+        """A job's record: the last finished one, or by id (running/queued ones too)."""
+        if job_id is None:
+            if not self.recent:
+                raise ValueError("no finished job yet")
+            return self.recent[-1]
+        jid = int(job_id)
+        cur = self.current
+        if cur is not None and cur.id == jid:
+            return cur.public()
+        for rec in reversed(self.recent):
+            if rec["id"] == jid:
+                return rec
+        raise ValueError(f"no job {jid} among the last {KEEP_JOBS} (older ones: {JOBS_LOG})")
+
+    @staticmethod
+    def _last_logged_id() -> int:
+        try:
+            with open(JOBS_LOG, "rb") as f:
+                f.seek(0, os.SEEK_END)
+                f.seek(max(0, f.tell() - 8192))
+                lines = f.read().splitlines()
+            for line in reversed(lines):
+                try:
+                    return int(json.loads(line)["id"])
+                except (ValueError, KeyError, TypeError):
+                    continue
+        except OSError:
+            pass
+        return 0
+
+    def _hottest(self, st: dict | None) -> list | None:
+        h = (st or {}).get("hottest")
+        return None if h is None else list(h)
+
+    def _trace(self, job: Job, done: threading.Event) -> None:
+        """IMU at ~TRACE_HZ during a job: fused tilt, pitch/roll of the gravity direction, raw gyro (deg/s)."""
+        b, rows, t0 = self.body, [], time.monotonic()
+        while not done.wait(1 / TRACE_HZ):
+            g, imu = getattr(b, "_grav", None), getattr(b.board, "imu", None)
+            tilt = b.tilt_deg()
+            row = {"t": round(time.monotonic() - t0, 3), "tilt": None if tilt is None else round(tilt, 1)}
+            if g is not None:  # upright: gravity along -X; pitch about Z+ (face-down side), roll sideways (sign TBD)
+                row["pitch"] = round(math.degrees(math.atan2(g[2], -g[0])), 1)
+                row["roll"] = round(math.degrees(math.atan2(g[1], -g[0])), 1)
+            if getattr(imu, "gyro", None) is not None:
+                row["gyro"] = [round(v, 1) for v in imu.gyro]
+            rows.append(row)
+        try:
+            TRACE_DIR.mkdir(parents=True, exist_ok=True)
+            path = TRACE_DIR / f"{job.id}.jsonl"
+            head = {"job": job.id, "skill": job.skill, "t0": job.t_start, "hz": TRACE_HZ}
+            path.write_text("".join(json.dumps(r, separators=(",", ":")) + "\n" for r in [head, *rows]))
+            job.trace = str(path)
+            for old in sorted(TRACE_DIR.glob("*.jsonl"), key=lambda p: p.stat().st_mtime)[:-KEEP_TRACES]:
+                old.unlink(missing_ok=True)
+        except OSError as e:
+            log.warning("trace: %s", e)
 
     def _worker(self) -> None:
         while True:
@@ -195,11 +294,18 @@ class Tonyd:
             with self.lock:
                 self.current = job
                 self.body.cancelled.clear()
-                job.state, job.started = "running", time.monotonic()
+                job.state, job.started, job.t_start = "running", time.monotonic(), round(time.time(), 3)
+                job.hottest_before = self._hottest(self.cached)  # no bus reads before a move: the last reading
                 heading0 = getattr(self.body, "heading_deg", None)
                 rot0 = list(getattr(self.body, "rot_deg", []))
+                tracing = threading.Event()
+                tracer = None
+                if job.want_trace:
+                    tracer = threading.Thread(target=self._trace, args=(job, tracing), daemon=True)
+                    tracer.start()
                 self.emit("job", **job.public())
                 log.info("skill %s x%d (job %d)", job.skill, job.count, job.id)
+                state, error = "failed", None
                 try:
                     if job.skill == "settle":
                         self.body.settle()
@@ -214,15 +320,33 @@ class Tonyd:
                     if heading0 is not None:
                         job.yaw_deg = round(self.body.heading_deg - heading0, 1)
                         job.rot_deg = [round(a - b, 1) for a, b in zip(self.body.rot_deg, rot0)]
-                    self._finish(job, state)
                 except Exception as e:
                     log.exception("skill %s failed", job.skill)
-                    self._finish(job, "failed", f"{type(e).__name__}: {e}")
+                    error = f"{type(e).__name__}: {e}"
+                try:
+                    self._after_job(job, tracer, tracing)
+                except Exception:
+                    log.exception("job %d: reading the result failed", job.id)
                 finally:
+                    self._finish(job, state, error)
                     self.hold_s = job.hold_s
                     self.current = None
                     self.last_skill_end = time.monotonic()
                     self.torque_maybe_on = True
+
+    def _after_job(self, job: Job, tracer: threading.Thread | None, tracing: threading.Event) -> None:
+        """Posture, temperatures and battery right after the job (one status read, ~0.1 s), for the job record."""
+        if tracer is not None:
+            tracing.set()
+            tracer.join(2)
+        tilt = self.body.tilt_deg()
+        job.end_tilt_deg = None if tilt is None else round(tilt, 1)
+        job.lying_after = bool(self.body.lying())
+        job.battery_mv = getattr(self.body.board, "battery_mv", None)
+        if job.skill.startswith("look_") or job.skill in ("nod", "shake_head"):
+            return  # head only: no new temperatures to learn
+        st = self._refresh()
+        job.hottest_after = self._hottest(st)
 
     # ---- state ----------------------------------------------------------------------------------------------
 
@@ -382,7 +506,8 @@ class Tonyd:
                 msg = {**msg, "frames": [{"ms": msg.get("ms", 500), "pos": msg.get("positions") or {}}]}
             job = self.submit(str(msg.get("skill", "")), msg.get("count", 1),
                               frames=msg.get("frames") if op != "run" else None, hold_s=msg.get("hold_s", 0),
-                              guard_tilt_deg=msg.get("guard_tilt_deg"))
+                              guard_tilt_deg=msg.get("guard_tilt_deg"), label=msg.get("label"),
+                              trace=bool(msg.get("trace")) and op != "pose")
             if not msg.get("wait"):
                 reply({"job": job.public()})
                 return
@@ -393,6 +518,8 @@ class Tonyd:
                 reply({"job": job.public(), "timed_out": not job.finished.is_set()})
 
             threading.Thread(target=waiter, daemon=True).start()
+        elif op == "job":
+            reply({"job": self.job(msg.get("id"))})
         elif op == "stop":
             self.stop(bool(msg.get("latch")))
             reply({"stopped": True, "latched": self.stop_latched})

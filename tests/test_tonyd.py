@@ -76,6 +76,13 @@ class _Body:
         return {"torque_on": 0, "temps": {1: 40}, "hottest": (1, "left ankle", 40), "battery_mv": 11500}
 
 
+@pytest.fixture(autouse=True)
+def _private_job_log(tmp_path, monkeypatch):
+    """Finished jobs go to a temporary jobs.jsonl / traces dir, never the real ones."""
+    monkeypatch.setattr(server, "JOBS_LOG", tmp_path / "jobs.jsonl")
+    monkeypatch.setattr(server, "TRACE_DIR", tmp_path / "traces")
+
+
 @pytest.fixture
 def robot():
     sock = Path(tempfile.mkdtemp()) / "tonyd.sock"
@@ -412,3 +419,51 @@ def test_stop_latch_refuses_motion_until_unlatched(robot):
     assert c.run("wave")["state"] == "done"
     c.stop()  # a plain stop doesn't latch
     assert c.run("wave")["state"] == "done"
+
+
+# ---- job records (learning runs read them) --------------------------------------------------------------------
+
+def test_finished_jobs_are_logged_and_answered_by_id(robot):
+    import json
+
+    d, c = robot
+    first = c.run("wave", label="exp-1")
+    assert first["t_start"] and first["t_end"] >= first["t_start"] and first["lying_after"] is False
+    assert first["end_tilt_deg"] == 2.0 and first["hottest_after"] == [1, "left ankle", 40]
+    assert first["battery_mv"] == 11500 and first["label"] == "exp-1"
+    second = c.play(STEP)
+    assert second["params"]["frames"] == 2 and second["params"]["ms"] == 600 and len(second["params"]["hash"]) == 10
+    assert second["hottest_before"] == [1, "left ankle", 40]  # the reading after the previous job
+    assert c.job()["id"] == second["id"] and c.job(first["id"])["label"] == "exp-1"
+    with pytest.raises(TonydError, match="no job"):
+        c.job(9999)
+    lines = [json.loads(x) for x in server.JOBS_LOG.read_text().splitlines()]
+    assert [x["id"] for x in lines] == [first["id"], second["id"]] and lines[0]["state"] == "done"
+    assert "frames" not in lines[1]  # the keyframes themselves stay out of the log
+    assert Tonyd(_Body()).ids.__next__() == second["id"] + 1  # a restarted tonyd keeps ids unique in the log
+
+
+def test_cancelled_and_failed_jobs_are_recorded_too(robot):
+    d, c = robot
+    d.body.seconds = 5
+    c.run("dance", wait=False)
+    time.sleep(0.1)
+    c.stop()
+    for _ in range(50):
+        if not c.state()["busy"]:
+            break
+        time.sleep(0.05)
+    assert c.job()["state"] == "cancelled" and c.job()["skill"] == "dance"
+    assert c.run("squat")["state"] == "failed" and c.job()["said"]
+
+
+def test_job_trace_is_opt_in(robot):
+    import json
+
+    d, c = robot
+    d.body.seconds = 0.2
+    assert c.run("wave")["trace"] is None
+    job = c.run("wave", trace=True)
+    rows = [json.loads(x) for x in Path(job["trace"]).read_text().splitlines()]
+    assert rows[0]["job"] == job["id"] and rows[0]["hz"] == server.TRACE_HZ
+    assert len(rows) > 5 and rows[1]["tilt"] == 2.0

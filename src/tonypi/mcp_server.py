@@ -1,4 +1,4 @@
-"""tonypi-mcp: the robot as an MCP server (Streamable HTTP), for Claude Code, Hermes, or any MCP client.
+"""tonypi-mcp: the robot as an MCP server (Streamable HTTP), for Tony's Codex brain, Claude Code, or any MCP client.
 
 A thin layer over tonyd's socket (body, camera) and the agent's socket (speech). It holds no robot state and
 never touches the hardware, so it can restart freely. Default: http://127.0.0.1:8765/mcp
@@ -19,6 +19,7 @@ from mcp.server.mcpserver.utilities.types import Image
 from tonypi.tonyd.client import TonydClient, TonydError
 
 AGENT_SOCK = os.environ.get("TONYPI_SOCK", "/run/tonypi/agent.sock")
+VOICE_SOCK = os.environ.get("TONYPI_VOICE_SOCK", "/run/tonypi/voice.sock")
 
 mcp = MCPServer(
     "tonypi",
@@ -34,7 +35,9 @@ mcp = MCPServer(
         "tilting unless you pass guard_tilt_deg, and nothing stands Tony up unless you run settle / get_up. tonyd "
         "only stops what overheats, and switches servos off 1.5 s after the last move (in whatever pose; end in a "
         "stable one, or hold_s) to keep them cool. While plugged into the charger (tether on) walking is limited to "
-        "a step budget; see tether()."
+        "a step budget; see tether(). To learn a move, measure it: trial / compare score repeated runs (falls are "
+        "data: it gets up and goes on), body_sweep maps joints, ledger / library / body_model keep what was learned, "
+        "get_job reads any finished job."
     ),
 )
 tonyd = TonydClient()
@@ -68,9 +71,10 @@ def run_skill(skill: str, count: int = 1, wait: bool = True, guard_tilt_deg: flo
 
 
 @mcp.tool()
-def wait_motion(timeout_s: float = 3.0) -> dict:
-    """Wait up to timeout_s (max 3) for the running body job to finish, then report it. Use after
-    run_skill(wait=False) in a loop for long moves: you stay steerable between the short waits."""
+def wait_motion(timeout_s: float = 3.0, job_id: int | None = None) -> dict:
+    """Wait up to timeout_s (max 3) for the running body job to finish. Use after run_skill(wait=False) in a loop
+    for long moves: you stay steerable between the short waits. busy=false: `job` is the finished record (job_id's,
+    else the last one: state, max_tilt_deg, yaw_deg, end_tilt_deg, lying_after, seconds); busy=true: the running job."""
     import time
 
     end = time.monotonic() + max(0.0, min(3.0, float(timeout_s)))
@@ -78,9 +82,24 @@ def wait_motion(timeout_s: float = 3.0) -> dict:
         while True:
             st = tonyd.state()
             if not st["busy"] or time.monotonic() >= end:
-                return {"busy": st["busy"], "job": st["job"], "tilt_deg": st["tilt_deg"], "lying": st["lying"],
+                job = st["job"]
+                if not st["busy"]:
+                    try:
+                        job = tonyd.job(job_id)
+                    except TonydError:  # nothing finished yet since tonyd started
+                        job = None
+                return {"busy": st["busy"], "job": job, "tilt_deg": st["tilt_deg"], "lying": st["lying"],
                         "heading_deg": st.get("heading_deg"), "stop_latched": st.get("stop_latched")}
             time.sleep(0.2)
+
+
+@mcp.tool()
+def get_job(job_id: int | None = None) -> dict:
+    """A body job's record by id (default: the last finished one; tonyd keeps 200, all are in
+    ~/.local/share/tonypi/jobs.jsonl): skill, state, said, seconds, t_start/t_end (epoch), max_tilt_deg, yaw_deg,
+    rot_deg, end_tilt_deg, lying_after, hottest_before/after [servo, joint, C], battery_mv, label, trace path."""
+    with _robot():
+        return tonyd.job(job_id)
 
 
 @mcp.tool()
@@ -256,20 +275,115 @@ def tether(on: bool | None = None, max_steps: int | None = None, reset: bool = F
         return tonyd.call("tether", on=on, max_steps=max_steps, reset=reset)["tether"]
 
 
+# ---- body learning (tonypi.learn; docs/BODY_LEARNING.md) -----------------------------------------------------------
+
+MCP_BUDGET_S = 200  # a learning call returns within this (the brain's MCP tool timeout is 240 s); rerun for more
+
+
+def _lab():
+    from tonypi.learn.runner import Lab
+
+    return Lab(tonyd=tonyd)
+
+
+@contextmanager
+def _learning():
+    from tonypi.learn.runner import LabError
+
+    try:
+        yield
+    except (LabError, TonydError, OSError, ValueError) as e:
+        raise ToolError(str(e)) from e
+
+
+def _spec(skill, frames, base, gait, count, guard_tilt_deg, objective, label, trace=False, start=None,
+          setup=None) -> dict:
+    return {"skill": skill, "frames": frames, "base": base, "gait": gait, "count": count, "objective": objective,
+            "guard_tilt_deg": guard_tilt_deg, "label": label, "trace": trace, "start": start, "setup": setup}
+
+
+@mcp.tool()
+def trial(skill: str | None = None, frames: list[dict] | None = None, base: str | None = None,
+          gait: dict | None = None, count: int = 1, trials: int = 3, guard_tilt_deg: float | None = None,
+          objective: str = "generic", label: str | None = None, trace: bool = False, start: str = "stand",
+          setup: str | None = None) -> dict:
+    """Measured trials of ONE move, the way to judge a move by numbers. Give one of: skill (a name), frames (your
+    keyframes, repeated `count` times), or base (a motion name) + gait {time_scale, amplitude, offset {servo: delta},
+    mirror, repeat}. objective: walk | turn | balance | pose | recover | generic (sets the score and the default
+    guard: 40 deg for walk/turn, none for recover, 30 otherwise). Each trial: preflight (refuses if busy, stop latch,
+    battery < 10.9 V, a servo >= 70 C; gets up first if lying), settle, run with the guard, phone recording in
+    companion mode, score, ledger line; a fall is data (get_up, max twice, then it stops). start="as_is" skips the
+    get_up and settle; setup=<skill> runs that skill unmeasured before each trial (implies as_is): measure getting up
+    with skill="get_up", setup="lie_down", objective="recover" (key defaults to "get_up@lie_down"). trials 1-30,
+    stops early at ~200 s. Returns per-trial score/tilt/yaw/displacement and a summary (mean, std, falls);
+    `stopped` says why it ended early."""
+    with _learning():
+        return _lab().batch(_spec(skill, frames, base, gait, count, guard_tilt_deg, objective, label, trace, start,
+                                  setup), trials, budget_s=MCP_BUDGET_S)
+
+
+@mcp.tool()
+def compare(base: dict | str, candidate: dict | str, trials: int = 5, objective: str | None = None) -> dict:
+    """A/B test, interleaved (base, candidate, base, ...). Each side is a skill name or a spec dict like trial's
+    arguments ({"skill"} | {"frames", "count"} | {"base", "gait", "count"}, plus guard_tilt_deg, start, setup).
+    trials per side (>= 5 for a verdict). verdict: "promote" (candidate mean beats base by > 1 pooled std, 0 falls;
+    then save it with save_motion/save_skill), "worse", "no clear difference", "reject: the candidate fell more",
+    or "more trials needed". Results go to the ledger and the library."""
+    with _learning():
+        return _lab().compare(base, candidate, trials, objective, budget_s=MCP_BUDGET_S)
+
+
+@mcp.tool()
+def body_sweep(joints: list[int] | None = None, lying: bool = True) -> dict:
+    """Map joints by measurement: lying=True lies down (legs unloaded) and sweeps each joint +-150 counts in 3 s ramps
+    (default the 10 leg servos), lying=False stands and sweeps (default the 6 arm servos); then gets up / settles.
+    Per joint: sign (+1 follows the command, 0 blocked), range reached, error, speed, IMU response. Saved to
+    body_model(). Stops at ~200 s: rerun with the joints it lists as not swept."""
+    with _learning():
+        return _lab().sweep(joints, lying, budget_s=MCP_BUDGET_S)
+
+
+@mcp.tool()
+def ledger(skill: str | None = None, label: str | None = None, limit: int = 20) -> list[dict]:
+    """The newest learning records (trials and sweeps), oldest first: filter by skill key / candidate hash / what,
+    and by label. Each has exp id, score, metrics, verdict, job id, phone episode id and a one-line note."""
+    with _learning():
+        return _lab().ledger(skill, label, max(1, min(200, int(limit))))
+
+
+@mcp.tool()
+def body_model() -> dict:
+    """What body_sweep measured, per servo: name, pose (lying/standing), base, plus/minus target and reached,
+    sign, range_seen, speed_cps, max_error, rot_deg, n, t."""
+    with _learning():
+        return _lab().body_model()
+
+
+@mcp.tool()
+def library() -> dict:
+    """The skill library: per skill key, the objective, candidates (what, params, n, mean, std, falls), incumbent
+    and best candidate hashes, promote_suggested, surface, evidence (exp ids)."""
+    with _learning():
+        return _lab().library()
+
+
 @mcp.tool()
 def say(text: str) -> dict:
     """Speak out loud through Tony's speaker (interrupts nothing; returns as soon as speaking starts)."""
-    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    s.settimeout(5)
-    try:
-        s.connect(AGENT_SOCK)
-        s.sendall((json.dumps({"op": "say", "text": text}) + "\n").encode())
-        s.makefile("r").readline()
-    except OSError as e:
-        raise ToolError(f"tonypi-agent (speech) not reachable at {AGENT_SOCK}: {e}") from e
-    finally:
-        s.close()
-    return {"said": text}
+    errors = []
+    for path in (VOICE_SOCK, AGENT_SOCK):  # live mode (tonypi-voice) first, then the local fallback agent
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.settimeout(5)
+        try:
+            s.connect(path)
+            s.sendall((json.dumps({"op": "say", "text": text}) + "\n").encode())
+            s.makefile("r").readline()
+            return {"said": text}
+        except OSError as e:
+            errors.append(f"{path}: {e}")
+        finally:
+            s.close()
+    raise ToolError("no speech service reachable (" + "; ".join(errors) + ")")
 
 
 def main() -> None:
