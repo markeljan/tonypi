@@ -25,6 +25,7 @@ from tonypi.motion.library import DATA_DIR, Frame, Motion
 USER_DIR = Path(os.environ.get("TONYPI_USER_DIR", Path.home() / ".local/share/tonypi"))
 NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,47}$")
 SERVO_IDS = range(1, 17)
+OPTIONAL_IDS = {17, 18}  # grippers on the Pro variant only; ignored here
 MIN_FRAME_MS, MAX_FRAME_MS, MAX_FRAMES = 20, 10_000, 400
 
 
@@ -49,6 +50,7 @@ def parse_frames(frames) -> list[Frame]:
             pos = {int(k): int(v) for k, v in f["pos"].items()}
         except (KeyError, TypeError, ValueError, AttributeError) as e:
             raise StudioError(f"frame {i}: needs {{'ms': int, 'pos': {{servo_id: position}}}} ({e})") from e
+        pos = {k: v for k, v in pos.items() if k not in OPTIONAL_IDS}  # factory files carry the absent grippers
         if not MIN_FRAME_MS <= ms <= MAX_FRAME_MS:
             raise StudioError(f"frame {i}: ms must be {MIN_FRAME_MS}..{MAX_FRAME_MS}")
         bad = {k: v for k, v in pos.items() if k not in SERVO_IDS or not 0 <= v <= 1000}
