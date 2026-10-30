@@ -10,7 +10,7 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import * as tonyd from "../tonyd.ts";
-import { describe, job, text } from "./body.ts";
+import { describe, GUARD_TILT_DEG, job, text } from "./body.ts";
 
 const SERVOS = "L/R: 1/9 ankle roll, 2/10 ankle pitch, 3/11 knee, 4/12 hip pitch, 5/13 hip roll, 6/14 elbow, "
   + "7/15 shoulder roll, 8/16 shoulder pitch; positions 0..1000, 500 = centre, ~0.24 deg per count";
@@ -46,14 +46,15 @@ export default function studio(pi: ExtensionAPI) {
     name: "play_frames",
     label: "Play frames",
     description: "Play your own keyframes without saving them, e.g. [{\"ms\": 400, \"pos\": {\"4\": 620, \"12\": 380}}]. "
-      + "Servos left out keep their position. Same guards as skills (tilt > 70 deg aborts). hold_s > 0 keeps the last "
-      + `pose with torque on that long instead of settling. Returns state and max tilt. ${SERVOS}.`,
+      + "Servos left out keep their position. It stops if Tony tilts past guard_tilt_deg. The last pose is held with "
+      + `torque on for hold_s (then Tony goes limp in it: end in a stable pose). Returns state and max tilt. ${SERVOS}.`,
     parameters: Type.Object({ frames: Type.Array(Frame, { minItems: 1, maxItems: 400 }),
-      hold_s: Type.Optional(Type.Number({ minimum: 0, maximum: 120 })) }),
+      hold_s: Type.Optional(Type.Number({ minimum: 0, maximum: 120, description: "default 10" })),
+      guard_tilt_deg: Type.Optional(Type.Number({ minimum: 5, maximum: 120, description: `default ${GUARD_TILT_DEG}` })) }),
     executionMode: "sequential",
-    async execute(_id, { frames, hold_s = 0 }, signal, _u, ctx) {
+    async execute(_id, { frames, hold_s = 10, guard_tilt_deg = GUARD_TILT_DEG }, signal, _u, ctx) {
       const t0 = Date.now();
-      const r = await job(() => tonyd.play(frames, hold_s), ctx, signal);
+      const r = await job(() => tonyd.play(frames, { hold_s, guard_tilt_deg }), ctx, signal);
       return text(describe(`play ${frames.length} frames`, r.job, r.why, ((Date.now() - t0) / 1000).toFixed(1)), r.job);
     },
   }));
@@ -64,10 +65,11 @@ export default function studio(pi: ExtensionAPI) {
     description: `Move some servos to positions over ms and hold (torque on) for hold_s (max 120). For trying a pose `
       + `or calibrating. ${SERVOS}.`,
     parameters: Type.Object({ positions: Type.Record(Type.String(), Type.Integer({ minimum: 0, maximum: 1000 })),
-      ms: Type.Optional(Type.Integer({ minimum: 20, maximum: 10000 })), hold_s: Type.Optional(Type.Number({ minimum: 0, maximum: 120 })) }),
+      ms: Type.Optional(Type.Integer({ minimum: 20, maximum: 10000 })), hold_s: Type.Optional(Type.Number({ minimum: 0, maximum: 120 })),
+      guard_tilt_deg: Type.Optional(Type.Number({ minimum: 5, maximum: 120 })) }),
     executionMode: "sequential",
-    async execute(_id, { positions, ms = 500, hold_s = 10 }, signal, _u, ctx) {
-      const r = await job(() => tonyd.pose(positions, ms, hold_s), ctx, signal);
+    async execute(_id, { positions, ms = 500, hold_s = 10, guard_tilt_deg = GUARD_TILT_DEG }, signal, _u, ctx) {
+      const r = await job(() => tonyd.pose(positions, ms, { hold_s, guard_tilt_deg }), ctx, signal);
       return text(describe("pose", r.job, r.why, ((r.job.seconds ?? 0)).toFixed(1)), r.job);
     },
   }));
@@ -98,11 +100,10 @@ export default function studio(pi: ExtensionAPI) {
 
   op("save_skill", "Save skill", "Define a skill as a motion sequence; \"*name\" repeats with count. E.g. a new "
     + `turn: save_skill("turn_left${SUFFIX}_v2", ["*turn_left${SUFFIX}_v2"]). Names must contain "${SUFFIX}". `
-    + "upright: get up first if lying. settle: stand before going limp afterwards.",
+    + "run_skill gets up first if Tony is lying and settles after the task.",
     Type.Object({ name: Type.String(), motions: Type.Array(Type.String(), { minItems: 1 }),
-      description: Type.Optional(Type.String()), upright: Type.Optional(Type.Boolean()), settle: Type.Optional(Type.Boolean()) }),
-    ({ name, motions, description = "", upright = true, settle = true }) =>
-      (own(name), tonyd.call("skill_save", { name, motions, description, upright, settle })));
+      description: Type.Optional(Type.String()) }),
+    ({ name, motions, description = "" }) => (own(name), tonyd.call("skill_save", { name, motions, description })));
 
   op("delete_skill", "Delete skill", "Delete a user skill (restores the default skill of that name, if any).",
     Type.Object({ name: Type.String() }), ({ name }) => (own(name), tonyd.call("skill_delete", { name })));
@@ -113,4 +114,18 @@ export default function studio(pi: ExtensionAPI) {
     Type.Object({ trim: Type.Optional(Type.Record(Type.String(), Type.Integer({ minimum: -200, maximum: 200 }))),
       limits: Type.Optional(Type.Record(Type.String(), Type.Union([Type.Array(Type.Integer(), { minItems: 2, maxItems: 2 }), Type.Null()]))) }),
     async ({ trim, limits }) => (await tonyd.call("calibration", { trim, limits })).calibration);
+
+  op("servo_calibration", "Servo calibration", "What the servos themselves store (EEPROM): offset (-125..125) and "
+    + "angle limits per servo. Read-only. Most fixes belong in `calibration` (trim, soft limits), not here.",
+    Type.Object({ ids: Type.Optional(Type.Array(Type.Integer({ minimum: 1, maximum: 16 }))) }),
+    ({ ids }) => tonyd.call("servo_calibration", { ids }), (r) => json(r.servos));
+
+  op("servo_calibrate", "Servo calibrate", "Change a servo's own EEPROM offset or angle limits. Only to fix a bad "
+    + "calibration you have evidence for (e.g. a joint off-centre in the stand pose); never to tune a gait. reason "
+    + "is required and logged; save=true makes the offset permanent. Tell the person before you do it.",
+    Type.Object({ id: Type.Integer({ minimum: 1, maximum: 16 }), reason: Type.String({ minLength: 10 }),
+      offset: Type.Optional(Type.Integer({ minimum: -125, maximum: 125 })),
+      limits: Type.Optional(Type.Array(Type.Integer({ minimum: 0, maximum: 1000 }), { minItems: 2, maxItems: 2 })),
+      save: Type.Optional(Type.Boolean()) }),
+    ({ id, reason, offset, limits, save = false }) => tonyd.call("servo_calibrate", { id, reason, offset, limits, save }));
 }

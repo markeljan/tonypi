@@ -13,8 +13,10 @@ one small change at a time, measured, and never replace a working default until 
 - Say what you are going to try. **Ask for someone to watch and be ready to catch Tony**, and wait for a yes.
   Tony must stand on the floor, not on a table.
 - `get_state` first: upright, battery above ~11.0 V, hottest servo under ~65 C. If not, stop and say why.
-- Stop testing and report back if a trial reaches **max tilt above 25 deg**, the body aborts a move, a servo gets
-  above 75 C, or the person says stop.
+- Run every trial with **`guard_tilt_deg: 25`** (run_skill, play_frames, set_pose): the body stops the move if Tony
+  tilts past it. Nothing else catches a bad gait: the body has no tilt guard of its own, and balance is your job.
+- Stop testing and report back if a guard trips twice, a servo gets above 75 C, or the person says stop. If Tony
+  falls, the front end gets him up by itself; wait for that, then `get_state` before going on.
 
 ## Tools
 
@@ -31,19 +33,20 @@ opposite directions around 500. Check against the default before assuming.
 
 1. **Baseline.** `list_skills` shows what the skill plays (`turn_left = *turn_left`: one motion repeated per
    step). `get_motion` the motion and read it: frame times (`ms`), which servos move, how far. Run the default
-   3 times at `count` 1 and write down each max tilt. For a turn, also note how far it turns: take a `snapshot`
+   3 times at `count` 1 (with `guard_tilt_deg: 25`) and write down each max tilt. For a turn, also note how far it turns: take a `snapshot`
    before and after and compare, or ask the person.
 2. **One hypothesis.** Common causes of a wobbly or falling step:
    - frames too fast (short `ms`): Tony swings past balance. Try 1.2-1.5x longer frames;
    - too much hip roll (5/13) or ankle roll (1/9) swing: move them 10-20 counts closer to the stand pose;
    - the foot lifts before the weight has shifted: add or lengthen a frame that leans first;
    - the step ends away from the stand pose, so the next step starts off balance: make the last frame
-     match the first.
+     match the first. A step must end in a pose Tony can hold limp: the body goes limp in whatever pose a job
+     ends (after a short hold), and run_skill settles into a stand only when the whole task is done.
 3. **Small change, new name.** Copy the frames, change only what the hypothesis says (at most about 20 counts per
    servo, or one timing change), and `save_motion` under a new name with `_pi`, e.g. `turn_left_pi_v2`.
    Make it a skill: `save_skill("turn_left_pi_v2", ["*turn_left_pi_v2"], "...")`. The motion library is shared
    with other brains on this robot, so names you save must contain `_pi`, and defaults are never overwritten.
-4. **Test.** `run_skill("turn_left_pi_v2", 1)` three times, the same as the baseline. Compare the max tilts and the
+4. **Test.** `run_skill("turn_left_pi_v2", 1, guard_tilt_deg=25)` three times, the same as the baseline. Compare the max tilts and the
    turn amount. Then try `count` 2 or 3, still watching the tilt.
 5. **Keep or revert.** Better means a lower or equal max tilt on every trial, no aborts, and still a useful turn.
    If it's worse, go back to the previous version and try a different hypothesis. Three to five rounds is plenty.

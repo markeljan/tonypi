@@ -32,7 +32,10 @@ log = logging.getLogger("tonypi.pi_front")
 SOCK = os.environ.get("TONYPI_PI_SOCK", "/run/tonypi/pi.sock")
 LOG = Path(os.environ.get("TONYPI_PI_LOG", "/home/pi/.local/state/tonypi/pi-front.jsonl"))
 IDLE_RESET_S = float(os.environ.get("TONYPI_PI_IDLE_RESET_S", "600"))  # fresh pi session after this long idle
-MOTION_TOOLS = {"run_skill", "look"}
+MOTION_TOOLS = {"run_skill", "look", "play_frames", "set_pose"}
+FALL_REFLEX = os.environ.get("TONYPI_FALL_REFLEX", "1") == "1"
+FALL_CONFIRM_S = 1.0  # lying this long, not on purpose -> it was a fall
+FLOOR_SKILLS = {"lie_down", "sleep", "get_up", "stand", "settle"}  # pass through "lying" on purpose
 
 
 class Speech:
@@ -88,6 +91,75 @@ def fast_stop_listener():
     return FastStopListener
 
 
+class FallReflex:
+    """Gets Tony up after an unexpected fall, without the model (tonyd stopped doing this, 2026-10-29).
+
+    Lying (tilt > 60 deg, from tonyd's IMU state, no bus reads) for FALL_CONFIRM_S, when he wasn't told to lie down
+    or sleep and no floor skill is running: stop the body, abort pi, say so, run get_up (front/back is tonyd's
+    pick from the IMU). One retry; then ask for help and wait until someone stands him up.
+    """
+
+    def __init__(self, front: "Front", poll_s: float = 0.25) -> None:
+        self.front, self.poll_s = front, poll_s
+        self.on_purpose = False  # last body skill was lie_down / sleep
+        self.since: float | None = None
+        self.gave_up = False
+        self.recoveries = 0
+
+    def on_job(self, ev: dict) -> None:
+        skill = ev.get("skill", "")
+        if skill.startswith("look_") or skill in ("nod", "shake_head", "settle"):
+            return
+        if ev.get("state") in ("running", "done"):
+            self.on_purpose = skill in ("lie_down", "sleep")
+
+    def check(self, st: dict, now: float) -> bool:
+        """One poll; returns True when it decides Tony fell (the caller then recovers)."""
+        job = st.get("job") or {}
+        if not st.get("lying") or st.get("asleep") or self.on_purpose or job.get("skill") in FLOOR_SKILLS:
+            self.since = None
+            if not st.get("lying"):
+                self.gave_up = False
+            return False
+        if self.gave_up:
+            return False
+        self.since = self.since or now
+        return now - self.since >= FALL_CONFIRM_S
+
+    def recover(self) -> None:
+        f = self.front
+        self.recoveries += 1
+        log.warning("fall reflex: Tony is lying and wasn't told to; getting up")
+        f.emit("info", text="fall detected: getting up (reflex, no model)")
+        f.stop_all()
+        f.speech.say("Oops, I fell over. Getting up.")
+        for attempt in (1, 2):
+            try:
+                job = f.tonyd.run("get_up", timeout=60)
+                f.emit("body", job=job.get("id"), skill="get_up", state=job.get("state"))
+            except TonydError as e:
+                log.warning("get_up failed: %s", e)
+            time.sleep(1.0)
+            if not f.tonyd.state().get("lying"):
+                f.emit("info", text=f"back up after {attempt} attempt(s)")
+                self.since = None
+                return
+        self.gave_up = True
+        f.speech.say("I can't get up by myself. Please help me stand.")
+        f.emit("info", text="fall reflex gave up: still lying after 2 get_up attempts")
+
+    def loop(self) -> None:
+        while True:
+            time.sleep(self.poll_s)
+            try:
+                if self.check(self.front.tonyd.state(), time.monotonic()):
+                    self.recover()
+            except TonydError:
+                time.sleep(2)
+            except Exception:
+                log.exception("fall reflex")
+
+
 class Command:
     def __init__(self, rid: int, text: str, source: str) -> None:
         self.rid, self.text, self.source = rid, text, source
@@ -110,6 +182,7 @@ class Front:
             from tonypi.agent.speech import Speaker
             speaker = Speaker()
         self.speech = Speech(speaker)
+        self.fall = FallReflex(self)
         self.tonyd = TonydClient(on_event=self._on_tonyd)
         self.pi = PiRpc(self._on_pi, model=model)
         self.ids = itertools.count(1)
@@ -288,6 +361,8 @@ class Front:
     # ---- tonyd ----------------------------------------------------------------------------------------------
 
     def _on_tonyd(self, ev: dict) -> None:
+        if ev.get("event") == "job":
+            self.fall.on_job(ev)
         if ev.get("event") == "job" and ev.get("state") in ("done", "failed", "cancelled"):
             self.emit("body", job=ev.get("id"), skill=ev.get("skill"), state=ev.get("state"))
         if ev.get("event") == "warn":  # overheating / low battery: no model needed
@@ -344,6 +419,8 @@ class Front:
     def run(self) -> None:
         self.pi.start()
         threading.Thread(target=self._serve, name="socket", daemon=True).start()
+        if FALL_REFLEX:
+            threading.Thread(target=self.fall.loop, name="fall-reflex", daemon=True).start()
         if self.listener:
             self.listener.start()
         self.speech.say("Tony is ready.")

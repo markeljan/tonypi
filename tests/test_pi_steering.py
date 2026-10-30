@@ -28,6 +28,7 @@ class FakeTonyd:
         self.runs: list[tuple[float, str, int]] = []
         self.plays: list[dict] = []
         self.saves: list[dict] = []
+        self.run_msgs: list[dict] = []
         self.stops: list[float] = []
         self.cancel = threading.Event()
         self.t0 = time.monotonic()
@@ -68,6 +69,7 @@ class FakeTonyd:
             if op == "run":
                 self.cancel.clear()
                 self.runs.append((round(time.monotonic() - self.t0, 2), msg["skill"], msg["count"]))
+                self.run_msgs.append(msg)
                 ok = not self.cancel.wait(STEP_S * msg["count"])
                 job = {"id": len(self.runs), "skill": msg["skill"], "count": msg["count"], "said": [], "error": None,
                        "state": "done" if ok else "cancelled", "seconds": None}
@@ -161,6 +163,9 @@ def test_steer_mid_walk_turns_right_instead(tmp_path: Path, monkeypatch):
     assert skills.count("walk_forward") == 1, body.runs  # the first step finishes, the other two never start
     assert "turn_left" not in skills
     assert skills[-2:] == ["turn_right", "settle"], body.runs  # settles once pi is done
+    walk = body.run_msgs[0]
+    assert walk["guard_tilt_deg"] == 70 and walk["hold_s"] == 10  # balance is the harness's job now
+    assert "guard_tilt_deg" not in body.run_msgs[-1] and body.run_msgs[-1]["hold_s"] == 0  # settle
     t_turn = next(t for t, s, _ in body.runs if s == "turn_right")
     assert t_turn - t_steer < STEP_S + 1.5, f"steer took {t_turn - t_steer:.2f} s to land"
     results = [e for e in events if e.get("type") == "tool_execution_end" and e["toolName"] == "run_skill"]

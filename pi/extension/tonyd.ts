@@ -50,13 +50,17 @@ export interface Job {
   max_tilt_deg: number | null;
 }
 
-export const run = async (skill: string, count = 1, waitS = 180): Promise<Job> =>
-  (await call("run", { skill, count, wait: true, wait_s: waitS }, (waitS + 5) * 1000)).job;
-/** A brain's own keyframes, not saved: [{ms, pos: {"4": 620}}]. hold_s keeps the last pose with torque on. */
-export const play = async (frames: unknown[], hold_s = 0, waitS = 120): Promise<Job> =>
-  (await call("play", { frames, hold_s, wait: true, wait_s: waitS }, (waitS + 5) * 1000)).job;
-export const pose = async (positions: Record<string, number>, ms = 500, hold_s = 10): Promise<Job> =>
-  (await call("pose", { positions, ms, hold_s, wait: true, wait_s: 30 }, 35_000)).job;
+/** Per job: hold_s keeps the end pose with torque on (else tonyd goes limp 1.5 s after the job, in whatever pose);
+ *  guard_tilt_deg stops the job if Tony tilts past it (tonyd has no tilt guard of its own any more). */
+export interface JobOpts { hold_s?: number; guard_tilt_deg?: number | null }
+const opts = (o: JobOpts) => ({ hold_s: o.hold_s ?? 0, ...(o.guard_tilt_deg != null ? { guard_tilt_deg: o.guard_tilt_deg } : {}) });
+export const run = async (skill: string, count = 1, o: JobOpts = {}, waitS = 180): Promise<Job> =>
+  (await call("run", { skill, count, wait: true, wait_s: waitS, ...opts(o) }, (waitS + 5) * 1000)).job;
+/** A brain's own keyframes, not saved: [{ms, pos: {"4": 620}}]. */
+export const play = async (frames: unknown[], o: JobOpts = {}, waitS = 120): Promise<Job> =>
+  (await call("play", { frames, wait: true, wait_s: waitS, ...opts(o) }, (waitS + 5) * 1000)).job;
+export const pose = async (positions: Record<string, number>, ms = 500, o: JobOpts = {}): Promise<Job> =>
+  (await call("pose", { positions, ms, wait: true, wait_s: 30, ...opts({ hold_s: 10, ...o }) }, 35_000)).job;
 export const joints = () => call("joints") as Promise<{ raw: Record<string, number | null>; pos: Record<string, number | null> }>;
 export const torque = (ids: number[] | undefined, on: boolean, hold_s = 0) => call("torque", { ids, on, hold_s });
 export const skillDetails = async () => (await call("skills")).details as Record<string, any>;

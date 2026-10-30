@@ -1,5 +1,13 @@
 // Body peripheral: run_skill, list_skills, stop. Skills are tonyd's: the built-in ones, the default motion
-// sequences, and any the brain saved itself (studio.ts), which can override walk_forward, turn_left, ...
+// sequences, and any the brain saved itself (studio.ts).
+//
+// Balance is ours, not tonyd's (since main ef99364 tonyd only stops, guards temperature, and goes limp 1.5 s after
+// the last job in whatever pose it ended). Without the model:
+// - every job carries a tilt guard (GUARD_TILT_DEG, tighter if the model asks; not for getting up / lying down);
+// - body moves hold their end pose (HOLD_S) so Tony doesn't go limp mid-step while the model thinks;
+// - a body move while lying gets up first;
+// - when pi has nothing left to do after body moves (aborted or not), Tony settles into a neutral stand.
+// The front end's fall reflex (src/tonypi/pi_front) gets him up after an unexpected fall.
 //
 // Steering: pi delivers a steering message only after the running tool returns, so a motion tool must not keep
 // the body busy while the user has said something new. Stepped skills (walk, turn, side step: any sequence with a
@@ -26,8 +34,12 @@ const STEPPED = new Set(["walk_forward", "walk_backward", "turn_left", "turn_rig
   "step_in_place"]);
 const MAX_STEPS = 10;
 const POLL_MS = 100;
-// skills after which Tony settles into a neutral stand once the agent is done (tonyd also does this itself now)
+// head-only skills, and skills that end in a stable pose: no hold, no settle after them, no get-up before them
 const NO_SETTLE = /^(look_|nod$|shake_head$|settle$|stand$|lie_down$|sleep$|get_up$)/;
+const FLOOR = /^(get_up|stand|lie_down|sleep|settle)$/;  // these pass through lying: no tilt guard
+const HEAD = /^(look_|nod$|shake_head$)/;
+export const GUARD_TILT_DEG = Number(process.env.TONYPI_GUARD_TILT_DEG ?? 70);  // dances lean past 50 on purpose
+const HOLD_S = Number(process.env.TONYPI_HOLD_S ?? 10);
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -75,12 +87,12 @@ export default async function body(pi: ExtensionAPI) {
   }
   let moved = false;
 
-  // reflex, no model: when pi has nothing left to do after body moves, settle. Not after an abort ("stop", or a
-  // new command replacing the task): stop means stop, and a new command moves the body anyway.
-  pi.on("agent_settled", (event: any) => {
+  // reflex, no model: when pi has nothing left to do after body moves, settle into a neutral stand, also after an
+  // abort ("stop", or a new command that only talks): going limp mid-step tips Tony over.
+  pi.on("agent_settled", () => {
     if (!moved) return;
     moved = false;
-    if (!event.aborted) tonyd.run("settle", 1, 30).catch(() => {});
+    tonyd.run("settle", 1).catch(() => {});  // no-op when lying; a new command's move preempts it
   });
 
   pi.registerTool(defineTool({
@@ -93,11 +105,26 @@ export default async function body(pi: ExtensionAPI) {
     parameters: Type.Object({
       skill: Type.String({ description: "skill name, e.g. wave, walk_forward, or one you saved" }),
       count: Type.Optional(Type.Integer({ minimum: 1, maximum: MAX_STEPS, description: "steps or repeats" })),
+      guard_tilt_deg: Type.Optional(Type.Number({ minimum: 5, maximum: 120,
+        description: `stop if Tony tilts past this (default ${GUARD_TILT_DEG}; use ~25 when testing a new gait)` })),
     }),
     executionMode: "sequential",
-    async execute(_id, { skill, count = 1 }, signal, _onUpdate, ctx) {
+    async execute(_id, { skill, count = 1, guard_tilt_deg }, signal, _onUpdate, ctx) {
       const pre = interruption(ctx, signal);
       if (pre) return text(`${skill} not started: ${pre}.`, { skill, done: 0, of: count, why: pre });
+      const notes: string[] = [];
+      if (!FLOOR.test(skill) && !HEAD.test(skill)) {
+        const st = await tonyd.state().catch(() => null);
+        if (st?.lying) {  // tonyd no longer gets up by itself before moving
+          const up = await job(() => tonyd.run("get_up"), ctx, signal);
+          notes.push(`I was lying down, so I got up first (${up.job.state})`);
+          if (up.job.state !== "done") return text(`${notes[0]}; ${skill} not started.`, { skill, done: 0, of: count, state: "failed" });
+        }
+      }
+      const o: tonyd.JobOpts = {
+        guard_tilt_deg: FLOOR.test(skill) ? null : guard_tilt_deg ?? GUARD_TILT_DEG,
+        hold_s: NO_SETTLE.test(skill) ? 0 : HOLD_S,
+      };
       const info = ((await tonyd.skillDetails().catch(() => undefined)) ?? {})[skill];
       const stepped = STEPPED.has(skill) || !!info?.motions?.some((m: string) => m.startsWith("*"));
       const t0 = Date.now();
@@ -108,7 +135,7 @@ export default async function body(pi: ExtensionAPI) {
       let tilt: number | null = null;
       if (!NO_SETTLE.test(skill)) moved = true;
       for (let i = 0; i < (stepped ? count : 1); i++) {
-        const r = await job(() => tonyd.run(skill, stepped ? 1 : Math.min(count, 5)), ctx, signal, stepped);
+        const r = await job(() => tonyd.run(skill, stepped ? 1 : Math.min(count, 5), o), ctx, signal, stepped);
         said.push(...r.job.said);
         state = r.job.state;
         if (r.job.max_tilt_deg != null) tilt = Math.max(tilt ?? 0, r.job.max_tilt_deg);
@@ -122,6 +149,7 @@ export default async function body(pi: ExtensionAPI) {
       if (why && (done < count || state !== "done")) msg += `; stopped because ${why}`;
       else if (state === "failed") msg += "; the body refused or aborted it";
       if (said.length) msg += `. Body said: ${said.join(" ")}`;
+      if (notes.length) msg = `${notes.join("; ")}. ${msg}`;
       return text(msg + ".", { skill, done, of: count, state, why, said, max_tilt_deg: tilt });
     },
   }));

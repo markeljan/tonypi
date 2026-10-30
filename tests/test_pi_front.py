@@ -143,3 +143,30 @@ def test_voice_stop_fires_on_the_streaming_transcript():
     finally:
         Listener._done = orig
     assert stops == [1] and passed == ["stop", "walk forward"]
+
+
+def test_fall_reflex_decisions():
+    r = daemon.FallReflex(front=None)
+    lying = {"lying": True, "asleep": False, "job": None}
+    assert not r.check(lying, 10.0)          # just started lying: wait to confirm
+    assert not r.check(lying, 10.5)
+    assert r.check(lying, 11.1)              # still lying after FALL_CONFIRM_S: a fall
+    r = daemon.FallReflex(front=None)
+    r.on_job({"skill": "lie_down", "state": "running"})
+    assert not r.check(lying, 0) and not r.check(lying, 5)       # told to lie down
+    r.on_job({"skill": "look_left", "state": "done"})            # head moves don't change that
+    assert not r.check(lying, 6)
+    r.on_job({"skill": "walk_forward", "state": "running"})      # a body move: lying is no longer on purpose
+    assert not r.check(lying, 7) and r.check(lying, 8.1)
+    r = daemon.FallReflex(front=None)
+    assert not r.check({**lying, "job": {"skill": "get_up"}}, 0)  # getting up passes through "lying"
+    assert not r.check({**lying, "job": {"skill": "get_up"}}, 5)
+    assert not r.check({**lying, "asleep": True}, 9)
+    r = daemon.FallReflex(front=None)
+    assert not r.check(lying, 0)
+    assert not r.check({"lying": False}, 0.5)                    # a wobble that recovered
+    assert not r.check(lying, 0.9) and not r.check(lying, 1.5)   # the timer restarted
+    r.gave_up = True
+    assert not r.check(lying, 10)                                # gave up: wait for help
+    r.check({"lying": False}, 11)
+    assert not r.gave_up
