@@ -50,6 +50,32 @@ export default function camera(pi: ExtensionAPI) {
   }));
 
   pi.registerTool(defineTool({
+    name: "scan",
+    label: "Scan",
+    description: "Look around without moving the body: sweep the head from left to right and take a photo at each "
+      + "angle (default 5 photos: pan 60, 30, 0, -30, -60; + = left), then look straight again. Each photo is "
+      + "labelled with its pan angle, so you know which way to turn (body turn left = positive). The camera sees "
+      + "about 60 degrees across.",
+    parameters: Type.Object({
+      tilt_deg: Type.Optional(Type.Number({ minimum: -40, maximum: 25, description: "head tilt, default 0; -20 to see the floor" })),
+      photos: Type.Optional(Type.Integer({ minimum: 3, maximum: 7, description: "default 5" })),
+    }),
+    executionMode: "sequential",
+    async execute(_id, { tilt_deg = 0, photos = 5 }, signal) {
+      const content: any[] = [];
+      for (let i = 0; i < photos && !signal?.aborted; i++) {
+        const pan = Math.round(60 - (120 * i) / (photos - 1));
+        await tonyd.head(pan, tilt_deg, 300);
+        await sleep(i === 0 ? HEAD_SETTLE_MS + 200 : HEAD_SETTLE_MS);
+        const p = await photo();
+        content.push({ type: "text", text: `pan ${pan} deg (${pan > 0 ? "left" : pan < 0 ? "right" : "straight ahead"}), tilt ${tilt_deg}` }, p.image);
+      }
+      await tonyd.head(0, tilt_deg);
+      return { content, details: { photos: content.length / 2, tilt_deg } };
+    },
+  }));
+
+  pi.registerTool(defineTool({
     name: "video",
     label: "Video",
     description: "Short video: a burst of 2-6 photos over up to 5 s, oldest first. Use it to see motion or change.",

@@ -16,6 +16,13 @@ function decide(context: any) {
   const calls = msgs.filter((m: any) => m.role === "assistant").flatMap((m: any) => m.content.filter((c: any) => c.type === "toolCall"));
   const did = (skill: string) => calls.some((c: any) => c.arguments?.skill === skill);
   const run = (skill: string, count: number) => fauxAssistantMessage(fauxToolCall("run_skill", { skill, count }), { stopReason: "toolUse" });
+  if (users.some((u: any) => /walk to the box/i.test(text(u)))) {
+    const all = JSON.stringify(context.messages);
+    if (!did("walk_forward")) return run("walk_forward", 1);
+    if (all.includes("[task loop") && !calls.some((c: any) => c.name === "task_done"))
+      return fauxAssistantMessage(fauxToolCall("task_done", { success: true, summary: "walked one step to the box" }), { stopReason: "toolUse" });
+    return fauxAssistantMessage(fauxText("I'm at the box."));  // first time: forgets task_done
+  }
   if (/try the new turn/i.test(newest)) {
     if (!calls.some((c: any) => c.name === "save_motion"))  // over a default name: must be refused
       return fauxAssistantMessage(fauxToolCall("save_motion", { name: "turn_left", frames: [{ ms: 300, pos: { "5": 520 } }] }), { stopReason: "toolUse" });

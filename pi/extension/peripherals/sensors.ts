@@ -9,6 +9,7 @@ const LIMIT_C = 85; // servos self-protect here; tonyd refuses motions from 81 C
 export function summary(st: any): string {
   const parts: string[] = [];
   if (st.tilt_deg != null) parts.push(st.lying ? `lying down (tilt ${st.tilt_deg} deg)` : `upright (tilt ${st.tilt_deg} deg)`);
+  if (st.heading_deg != null) parts.push(`heading ${st.heading_deg} deg (gyro, + = left, drifts slowly)`);
   if (st.asleep) parts.push("asleep (motors off)");
   if (st.battery_mv) parts.push(`battery ${(st.battery_mv / 1000).toFixed(2)} V (3S LiPo: 12.6 full, 10.5 low)`);
   if (st.hottest) parts.push(`hottest servo ${st.hottest[1]} at ${st.hottest[2]} C (limit ${LIMIT_C} C)`);

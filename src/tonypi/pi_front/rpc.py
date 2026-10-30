@@ -21,19 +21,25 @@ SKILLS = REPO / "pi" / "skills"  # how-tos the model loads when needed (gait-tun
 SESSION_DIR = Path(os.environ.get("TONYPI_PI_SESSIONS", "/home/pi/.local/state/tonypi/pi-sessions"))
 
 
-def pi_command(model: str) -> list[str]:
+def pi_command(model: str, session: str | None = None) -> list[str]:
+    """session: a session file to continue (hot reload after a self-update keeps the conversation)."""
     extra = [a for p in os.environ.get("TONYPI_PI_EXTRA_EXT", "").split(",") if p for a in ("-e", p)]
+    if session:
+        extra += ["--session", session]
+    # read/edit/write: skills are read on demand; edit/write let Tony change his own files (pi/extension/self.ts
+    # confines them to pi/ and the front end)
     return ["pi", "--mode", "rpc", "--offline", "--model", model, "--thinking", "low",
-            "--no-builtin-tools", "--tools", "+read", "--no-context-files", "--no-skills", "--skill", str(SKILLS),
+            "--no-builtin-tools", "--tools", "+read,+edit,+write", "--no-context-files", "--no-skills", "--skill", str(SKILLS),
             "--no-extensions", "--no-mcp",
             "--no-prompt-templates", "--no-themes", "-e", str(EXTENSION), *extra,
             "--system-prompt", SYSTEM_PROMPT.read_text(), "--session-dir", str(SESSION_DIR)]
 
 
 class PiRpc:
-    def __init__(self, on_event: Callable[[dict], None], model: str = "tony/brain") -> None:
+    def __init__(self, on_event: Callable[[dict], None], model: str = "tony/brain", session: str | None = None) -> None:
         self.on_event = on_event
         self.model = model
+        self.session = session
         self._ids = itertools.count(1)
         self._pending: dict[str, Future] = {}
         self._wlock = threading.Lock()
@@ -42,7 +48,7 @@ class PiRpc:
     def start(self) -> None:
         SESSION_DIR.mkdir(parents=True, exist_ok=True)
         env = {**os.environ, "TONYPI_FRONTEND": "1"}
-        self.proc = subprocess.Popen(pi_command(self.model), cwd=REPO, env=env, stdin=subprocess.PIPE,
+        self.proc = subprocess.Popen(pi_command(self.model, self.session), cwd=REPO, env=env, stdin=subprocess.PIPE,
                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         threading.Thread(target=self._read, name="pi-stdout", daemon=True).start()
         threading.Thread(target=self._stderr, name="pi-stderr", daemon=True).start()

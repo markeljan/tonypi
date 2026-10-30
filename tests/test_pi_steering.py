@@ -87,7 +87,7 @@ def start_pi(tmp_path: Path, monkeypatch, body_sock: str):
     monkeypatch.setenv("TONYD_SOCK", body_sock)
     monkeypatch.setattr(rpc, "SESSION_DIR", tmp_path / "sessions")
     fake_brain = str(Path(__file__).with_name("pi_fake_brain.ts"))
-    monkeypatch.setattr(rpc, "pi_command", lambda model: [
+    monkeypatch.setattr(rpc, "pi_command", lambda model, session=None: [
         "pi", "--mode", "rpc", "--offline", "--model", model, "--no-builtin-tools", "--no-context-files",
         "--no-skills", "--no-extensions", "--no-mcp", "-e", str(rpc.EXTENSION), "-e", fake_brain,
         "--no-session"])
@@ -128,7 +128,7 @@ def test_steer_mid_walk_turns_right_instead(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("TONYPI_PI_SESSIONS", str(tmp_path / "sessions"))
     monkeypatch.setattr(rpc, "SESSION_DIR", tmp_path / "sessions")
     fake_brain = str(Path(__file__).with_name("pi_fake_brain.ts"))
-    monkeypatch.setattr(rpc, "pi_command", lambda model: [
+    monkeypatch.setattr(rpc, "pi_command", lambda model, session=None: [
         "pi", "--mode", "rpc", "--offline", "--model", model, "--no-builtin-tools", "--no-context-files",
         "--no-skills", "--no-extensions", "--no-mcp", "-e", str(rpc.EXTENSION), "-e", fake_brain,
         "--no-session"])
@@ -175,3 +175,18 @@ def test_steer_mid_walk_turns_right_instead(tmp_path: Path, monkeypatch):
     results = [e for e in events if e.get("type") == "tool_execution_end" and e["toolName"] == "run_skill"]
     walk = results[0]["result"]["content"][0]["text"]
     assert "1 of 3 steps" in walk and "new message" in walk, walk
+
+
+def test_task_loop_sends_the_model_back_until_task_done(tmp_path: Path, monkeypatch):
+    body = FakeTonyd(str(tmp_path / "tonyd.sock"))
+    pi, events, settled = start_pi(tmp_path, monkeypatch, str(tmp_path / "tonyd.sock"))
+    try:
+        pi.send("prompt", message="walk to the box")
+        assert settled.wait(30), "pi never settled"
+    finally:
+        pi.close()
+    nudges = [e for e in events if e.get("type") == "entry_appended" and (e.get("entry") or {}).get("customType") == "tony-persist"]
+    done = [e for e in events if e.get("type") == "tool_execution_end" and e["toolName"] == "task_done"]
+    assert len(nudges) == 1 and done, [e.get("type") for e in events]
+    assert done[0]["result"]["details"]["success"] is True
+    assert [s for _, s, _ in body.runs].count("walk_forward") == 1

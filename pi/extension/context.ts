@@ -4,7 +4,7 @@
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-const KEEP = Number(process.env.TONYPI_KEEP_IMAGES ?? 3);
+const KEEP = Number(process.env.TONYPI_KEEP_IMAGES ?? 7);  // a full scan
 
 export default function context(pi: ExtensionAPI) {
   pi.on("context", (event) => {

@@ -47,7 +47,7 @@ def front() -> daemon.Front:
     f.speech = daemon.Speech(None)
     f.tonyd, f.pi = FakeTonyd(), FakePi()
     f.ids = iter(range(1, 100))
-    f.cmd, f.running, f.tools_running, f.restarting = None, False, 0, False
+    f.cmd, f.running, f.tools_running, f.restarting, f.reload = None, False, 0, False, None
     f.last_settled = time.monotonic()
     f.lock = threading.RLock()
     f.clients, f.clients_lock = set(), threading.Lock()

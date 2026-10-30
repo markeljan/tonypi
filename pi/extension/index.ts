@@ -12,6 +12,8 @@ import sensors from "./peripherals/sensors.ts";
 import speech from "./peripherals/speech.ts";
 import studio from "./peripherals/studio.ts";
 import router from "./router.ts";
+import self from "./self.ts";
+import task from "./task.ts";
 
 export const PERIPHERALS = { body, studio, camera, sensors, speech, iphone };
 
@@ -22,4 +24,6 @@ export default async function tonypi(pi: ExtensionAPI) {
   }
   router(pi);
   context(pi);
+  task(pi);
+  self(pi);
 }

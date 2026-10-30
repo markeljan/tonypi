@@ -20,6 +20,7 @@ import logging
 import os
 import queue
 import socket
+import sys
 import threading
 import time
 from pathlib import Path
@@ -129,6 +130,7 @@ class FallReflex:
     def recover(self) -> None:
         f = self.front
         self.recoveries += 1
+        task = f.cmd  # what Tony was doing: continued once he's up
         log.warning("fall reflex: Tony is lying and wasn't told to; getting up")
         f.emit("info", text="fall detected: getting up (reflex, no model)")
         f.stop_all()
@@ -143,6 +145,8 @@ class FallReflex:
             if not f.tonyd.state().get("lying"):
                 f.emit("info", text=f"back up after {attempt} attempt(s)")
                 self.since = None
+                if task is not None:
+                    f.continue_after_fall(task)
                 return
         self.gave_up = True
         f.speech.say("I can't get up by myself. Please help me stand.")
@@ -160,9 +164,13 @@ class FallReflex:
                 log.exception("fall reflex")
 
 
+FALL_NOTE = "[body] You fell over during the task; the body got you back up and you are standing again."
+
+
 class Command:
     def __init__(self, rid: int, text: str, source: str) -> None:
         self.rid, self.text, self.source = rid, text, source
+        self.goal = text  # the user's task (a fall re-prompt keeps the original)
         self.t0 = time.monotonic()
         self.marks: dict[str, float] = {}
         self.tools: list[str] = []
@@ -170,6 +178,11 @@ class Command:
         self.tokens = {"input": 0, "output": 0, "cacheRead": 0}
         self.cost = 0.0
         self.how = "prompt"
+        self.falls = 0          # fall reflex recoveries during this task
+        self.nudges = 0         # times the task loop sent the model back in
+        self.created: list[str] = []   # motions / skills the brain saved
+        self.commits: list[str] = []   # self-updates (self_commit)
+        self.result: dict | None = None  # task_done(success, summary)
 
     def mark(self, name: str) -> None:
         self.marks.setdefault(name, round(time.monotonic() - self.t0, 2))
@@ -184,7 +197,8 @@ class Front:
         self.speech = Speech(speaker)
         self.fall = FallReflex(self)
         self.tonyd = TonydClient(on_event=self._on_tonyd)
-        self.pi = PiRpc(self._on_pi, model=model)
+        self.pi = PiRpc(self._on_pi, model=model, session=os.environ.pop("TONYPI_PI_RESUME", None))
+        self.reload: str | None = None  # "pi" / "frontend" after a self_commit, done once pi settles
         self.ids = itertools.count(1)
         self.cmd: Command | None = None  # the newest command; pi's current run belongs to it
         self.running = False  # pi has a run in progress (agent_start .. agent_settled)
@@ -267,6 +281,13 @@ class Front:
         finally:
             self.restarting = False
 
+    def continue_after_fall(self, task: Command) -> None:
+        """The fall reflex got Tony up: the task goes on (the model is told what happened)."""
+        goal = task.goal
+        rid = self.submit(f"{FALL_NOTE} Continue the task until it's done: {goal}", "reflex")
+        if self.cmd is not None and self.cmd.rid == rid:
+            self.cmd.goal, self.cmd.falls = goal, task.falls + 1
+
     def stop_all(self) -> None:
         """No LLM involved: body first, then speech, then pi's run."""
         try:
@@ -304,6 +325,16 @@ class Front:
         elif t == "tool_execution_end":
             self.tools_running = max(0, self.tools_running - 1)
             res = ev.get("result") or {}
+            det = res.get("details") or {}
+            name = ev.get("toolName")
+            if cmd and name == "task_done":
+                cmd.result = {"success": det.get("success"), "summary": det.get("summary")}
+            elif cmd and name in ("save_motion", "save_skill") and not ev.get("isError"):
+                cmd.created.append(f"{name.split('_')[1]}:{det.get('saved')}")
+            elif name == "self_commit" and det.get("sha"):
+                if cmd:
+                    cmd.commits.append(det["sha"])
+                self.reload = "frontend" if det.get("frontend") else ("pi" if det.get("reload") else self.reload)
             texts = [c.get("text", "") for c in res.get("content", []) if c.get("type") == "text"]
             if ev.get("toolName") != "say":
                 self.emit("info", id=cmd and cmd.rid, text=f"{ev.get('toolName')}: {' '.join(texts)[:200]}"
@@ -321,6 +352,10 @@ class Front:
                 self.emit("info", id=cmd and cmd.rid, text=f"model error: {m.get('errorMessage')}")
             elif text and m.get("stopReason") != "aborted":
                 self._say(text, cmd)
+        elif t == "entry_appended" and (ev.get("entry") or {}).get("customType") == "tony-persist":
+            if cmd:
+                cmd.nudges += 1
+            self.emit("info", id=cmd and cmd.rid, text="task loop: not done yet, trying again")
         elif t in ("auto_retry_start", "auto_retry_end", "compaction_start", "compaction_end"):
             self.emit("info", id=cmd and cmd.rid, text=f"pi {t} {ev.get('errorMessage') or ''}".strip())
         elif t == "agent_settled" and self.restarting:
@@ -333,6 +368,9 @@ class Front:
                 if cmd is self.cmd and cmd is not None:
                     self.cmd = None
                     self._finish(cmd, error=bool(ev.get("aborted")))
+            if self.reload:
+                threading.Thread(target=self._reload, args=(self.reload,), daemon=True).start()
+                self.reload = None
         elif t == "pi_exit":
             self.emit("info", text=f"pi exited ({ev.get('code')}); restarting")
             self.running, self.tools_running = False, 0
@@ -340,6 +378,26 @@ class Front:
 
     def _respawn(self) -> None:
         time.sleep(2)
+        self.pi.start()
+
+    def _reload(self, what: str) -> None:
+        """After a self-update: restart pi on the same session (new extension code, skills, config; the conversation
+        continues), or the whole front end when its own code changed."""
+        try:
+            session = self.pi.send("get_state").get("sessionFile")
+        except Exception as e:
+            log.warning("reload: no session file (%s)", e)
+            session = None
+        self.emit("info", text=f"self-update: reloading {what}")
+        log.info("reloading %s (session %s)", what, session)
+        self.pi.on_event = lambda ev: None  # the old pi's exit is expected
+        self.pi.close()
+        if what == "frontend":
+            if self.listener:
+                self.listener.stop()
+            env = {**os.environ, **({"TONYPI_PI_RESUME": session} if session else {})}
+            os.execve(sys.executable, [sys.executable, "-m", "tonypi.pi_front.daemon", *sys.argv[1:]], env)
+        self.pi = PiRpc(self._on_pi, model=self.pi.model, session=session)
         self.pi.start()
 
     def _say(self, text: str, cmd: Command | None) -> None:
@@ -351,7 +409,9 @@ class Front:
     def _finish(self, cmd: Command, superseded: bool = False, error: bool = False) -> None:
         cmd.mark("done")
         rec = {"id": cmd.rid, "text": cmd.text, "source": cmd.source, "how": cmd.how, "tools": cmd.tools,
-               "models": sorted(cmd.models), "tokens": cmd.tokens, "cost_usd": round(cmd.cost, 5), **cmd.marks,
+               "n_tools": len(cmd.tools), "models": sorted(cmd.models), "tokens": cmd.tokens,
+               "cost_usd": round(cmd.cost, 5), **cmd.marks, "result": cmd.result, "nudges": cmd.nudges,
+               "falls": cmd.falls, "created": cmd.created, "commits": cmd.commits,
                "superseded": superseded, "aborted": error, "wall": time.strftime("%H:%M:%S")}
         try:
             LOG.parent.mkdir(parents=True, exist_ok=True)

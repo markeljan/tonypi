@@ -1,0 +1,3 @@
+- 2026-10-29: the default turn_left turns only ~1-4 deg per step on the rug and leans 19-26 deg; turn_left_pi (frames x1.3, ankle roll swing 10 counts nearer neutral) turns ~4-8 deg per step and leans 15-23 deg.
+- 2026-10-29: a fast deep hip bend (hip pitch 4/12 to 900/100 in 250 ms) tips Tony onto his front; the fall reflex gets him up in about 6.5 s.
+- 2026-10-29: guard_tilt_deg trips only if the tilt stays past it for 0.3 s; single peaks can exceed it.
