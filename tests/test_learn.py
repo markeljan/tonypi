@@ -350,6 +350,55 @@ def test_trial_preserves_unknown_start_measurements_without_setup(lab):
     assert not row["metrics"]["recovery_goal_eligible"]
 
 
+def test_trial_retains_signed_trace_evidence_before_files_are_pruned(lab, tmp_path):
+    original_call, original_job = lab.tonyd.call, lab.tonyd._job
+    setup_trace, trial_trace = tmp_path / "setup.jsonl", tmp_path / "trial.jsonl"
+
+    def call(op, timeout=10, **kw):
+        if op == "skills":
+            return {"details": {k: {"motions": [f"*{k}"]} for k in ("get_up", "lie_down")}}
+        return original_call(op, timeout, **kw)
+
+    def job(skill, count, kw, frames=None):
+        result = original_job(skill, count, kw, frames)
+        if skill in ("lie_down", "get_up"):
+            path = setup_trace if skill == "lie_down" else trial_trace
+            path.write_text('{"job":1}\ninvalid\n[]\n{"pitch":NaN}\n{"pitch":true}\n'
+                            '{"t":0.02,"pitch":-88.0,"tilt":88.0}\n'
+                            '{"t":0.04,"pitch":-91.0,"tilt":91.0}\n')
+            result["trace"] = str(path)
+        if skill == "get_up":
+            setup_trace.unlink()
+        return result
+
+    lab.tonyd.call, lab.tonyd._job = call, job
+    original_stop = lab.phone.record_stop
+    lab.phone.record_stop = lambda: trial_trace.unlink() or original_stop()
+    lab.batch({"skill": "get_up", "setup": "lie_down", "objective": "recover", "trace": True}, 1)
+    row = _ledger(lab)[0]
+    summary = {"pitch_samples": 2, "first": {"t": 0.02, "pitch": -88.0, "tilt": 88.0},
+               "last": {"t": 0.04, "pitch": -91.0, "tilt": 91.0}, "pitch_min_deg": -91.0,
+               "pitch_max_deg": -88.0}
+    assert row["trace_summary"] == row["setup"]["trace_summary"] == summary
+    assert not setup_trace.exists() and not trial_trace.exists()
+
+
+@pytest.mark.parametrize("contents", [None, "bad\n{}\n[]\n", b"\xff\xfe"])
+def test_unavailable_or_unusable_trace_does_not_interrupt_trial(lab, tmp_path, contents):
+    path = tmp_path / "trace.jsonl"
+    if contents is not None:
+        path.write_bytes(contents if isinstance(contents, bytes) else contents.encode())
+    original_job = lab.tonyd._job
+    lab.tonyd._job = lambda *args: {**original_job(*args), "trace": str(path)}
+    result = lab.batch({"skill": "wave", "trace": True}, 1)
+    assert result["stopped"] is None
+    summary = _ledger(lab)[0]["trace_summary"]
+    if contents is None or isinstance(contents, bytes):
+        assert summary is None
+    else:
+        assert summary["pitch_samples"] == 0
+
+
 def test_batch_marks_the_robot_lock_as_the_labs(lab):
     from tonypi.voice.autonomy import robot_lock_holder
 

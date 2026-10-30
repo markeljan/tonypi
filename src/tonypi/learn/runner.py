@@ -24,6 +24,7 @@ import json
 import logging
 import os
 import time
+from math import isfinite
 from pathlib import Path
 
 from tonypi.learn import gait, metrics
@@ -61,6 +62,35 @@ def learn_dir() -> Path:
 def _hot(st: dict) -> tuple | None:
     h = st.get("hottest")
     return tuple(h) if h and h[2] is not None and h[2] >= MAX_HOT_C else None
+
+
+def _trace_summary(path: str | None) -> dict | None:
+    """Keep signed pitch evidence before tonyd prunes traces; this does not identify the recovery branch."""
+    if not path:
+        return None
+    out = {"pitch_samples": 0, "first": None, "last": None, "pitch_min_deg": None, "pitch_max_deg": None}
+    try:
+        with open(path) as f:
+            for line in f:
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                if not isinstance(row, dict):
+                    continue
+                sample = {k: v for k, v in row.items() if k in ("t", "pitch", "tilt")
+                          and isinstance(v, (int, float)) and not isinstance(v, bool) and isfinite(v)}
+                if "pitch" not in sample:
+                    continue
+                pitch = sample["pitch"]
+                if not out["pitch_samples"]:
+                    out.update(first=sample, pitch_min_deg=pitch, pitch_max_deg=pitch)
+                out.update(last=sample, pitch_min_deg=min(out["pitch_min_deg"], pitch),
+                           pitch_max_deg=max(out["pitch_max_deg"], pitch))
+                out["pitch_samples"] += 1
+    except (OSError, UnicodeError, TypeError, ValueError, OverflowError):
+        return None
+    return out
 
 
 class Lab:
@@ -309,7 +339,7 @@ class Lab:
         if p.get("setup"):
             self._check()
             job = self.tonyd.run(p["setup"], timeout=90, trace=p["trace"] or None)
-            setup = {"skill": p["setup"], "job": job}
+            setup = {"skill": p["setup"], "job": job, "trace_summary": _trace_summary(job.get("trace"))}
             if job["state"] == "cancelled":
                 raise Interrupted(f"setup {p['setup']} was cancelled (stop, or another brain moved)")
             if job["state"] != "done":
@@ -330,6 +360,7 @@ class Lab:
                 job = self.tonyd.run(p["skill"], p["count"], timeout=120, hold_s=p["hold_s"], **kw)
             else:
                 job = self.tonyd.play(p["frames"], hold_s=p["hold_s"], timeout=120, **kw)
+            trace_summary = _trace_summary(job.get("trace"))
         finally:
             self.sleep(TAIL_S)
             after = self._state()
@@ -348,6 +379,7 @@ class Lab:
                "skill": p["skill"], "what": p["what"], "cand": p["cand"], "params": p["params"], "count": p["count"],
                "objective": p["objective"], "guard_tilt_deg": p["guard"], "metrics": m, "score": m["score"],
                "episode": (episode or {}).get("id"), "job": job.get("id"), "trace": job.get("trace"),
+               "trace_summary": trace_summary,
                "before": {k: before.get(k) for k in ("lying", "tilt_deg")}, "setup": setup,
                "verdict": verdict, "said": job.get("said") or None, "phone": note,
                "battery_mv": after.get("battery_mv"), "hottest": after.get("hottest")}
