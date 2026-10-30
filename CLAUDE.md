@@ -118,10 +118,12 @@ GPT-Live-1 (`gpt-live-1-codex`) via `codex app-server` realtime v3 over WebRTC (
 text (typed request), status, tasks, ping, inject (a WAV as if the user spoke; tests). Half duplex by
 default (mic silenced while Tony talks: no echo cancellation). "Stop" / "halt" / "freeze" is caught by the voice
 service itself and stops tonyd directly with a latch (motion refused until the user speaks again), whatever the brain
-does. **Wake word** (2026-10-30): the GPT-Live session sleeps after 30 s idle (`TONYPI_VOICE_IDLE_S`; no user speech,
-L turn or running task); "Tony" / "hey Tony" (local sherpa-onnx spotter, which also hears "stop/freeze/halt")
-starts it again in ~4.5 s and replays the held mic into it. The brain keeps running while the voice sleeps. The
-speaker (aplay) and mic (arecord) reopen themselves after a USB drop.
+does. **Wake word** (2026-10-30): the GPT-Live session sleeps after 30 s idle (`TONYPI_VOICE_IDLE_S`; no delegation,
+L turn, running task or Tony speaking; background talk counts for at most 120 s); "Tony" / "hey Tony" (local
+sherpa-onnx spotter) starts it again in ~4.5 s and replays the held mic into it (answer heard ~8-10 s after the
+wake word). The spotter's "stop/freeze/halt" latches only while the body works. The brain keeps running while the
+voice sleeps; if GPT-Live keeps failing, the local ears take requests to the brain and Piper answers. The speaker
+(aplay, also when stalled) and mic (arecord) reopen themselves after a USB drop. Details: docs/BRAIN.md.
 
 ## Live mode (default, 2026-10-30): GPT-Live-1 + Tony's own Codex brain, full access
 Architecture, data files and runbook: **docs/BRAIN.md** (docs/LIVE_MODE_SPEC.md is the older spec; BRAIN.md wins).

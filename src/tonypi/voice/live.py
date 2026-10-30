@@ -48,7 +48,9 @@ L_MAX_INPUT_TOKENS = 90_000  # ... or when its last request sent more input toke
 IDLE_END_S = 60  # an autonomy session or goal worker with no turn for this long has finished
 BRIDGE_QUIET_S = 2.0  # bridge an undelegated request after this much user silence
 BRIDGE_AFTER_L_TURN_S = 3.0  # ... but not if an L turn started this recently (it has the request)
+BRIDGE_ADDRESSED_S = 60.0  # ... and only if it names Tony or follows a wake / exchange this recently
 DEDUPE_S = 20.0  # the same line (role + words) isn't logged twice within this window
+DUPLICATE_DELEGATION_S = 10.0  # the same words delegated again this soon after one Codex took: not bridged
 # Robot MCP tools that move the body: hidden from autonomy sessions when the body gates fail.
 BODY_TOOLS = ["say", "run_skill", "play_frames", "set_pose", "set_torque", "trial", "compare", "body_sweep",
               "servo_calibrate", "calibration", "look", "scan", "video", "simulation_execute"]
@@ -257,6 +259,8 @@ SOURCE_LABELS = {
     "phone_mic": "Source: heard by Tony's iPhone on its stand (companion mode; its speech recognition may contain "
                  "mistakes). Tony's own mic heard no speech around then, so this is not a copy of a voice request",
     "phone_app": "Source: typed in Tony's iPhone app (not spoken)",
+    "local_asr": "Source: spoken to Tony's own mic, transcribed by his offline recogniser because his GPT-Live voice "
+                 "is down (expect recognition mistakes; your [FINAL] is spoken by the local voice)",
 }
 # A companion phone and Tony's own mic often hear the same words: a phone_mic request is dropped if Tony's mic heard
 # user speech from PHONE_ECHO_S before it arrived until PHONE_WAIT_S after (by then GPT-Live has its own copy).
@@ -289,10 +293,14 @@ class LiveBrain(Live):
         # Codex's own link to the live call (its "sideband") sometimes misses a delegation, or its turn stalls; our data
         # channel sees every delegation, so we bridge: hand the request to L ourselves and speak L's answer.
         self.codex_took: float = 0.0  # last time Codex reported a handoff_request
-        self.bridged: dict[str, str] = {}  # L turn id -> delegation item id we answer ourselves
+        self.bridged: dict[str, tuple[str, int]] = {}  # L turn id -> (delegation item id, voice_gen) we answer
         self.l_turn_started = self.l_last_item = 0.0
         self.last_delegation: tuple[str, str] | None = None
         self.last_delegation_t = 0.0
+        self.last_delegation_gen = 0  # the voice session it came from
+        self.last_typed_t = 0.0  # last typed / phone / local-ASR request
+        self.l_turn_owner = False  # L's turn serves the owner (spoken or typed request): its answer must be heard
+        self._tonyd_note = ""
         self.last_user_speech_t = 0.0  # Tony's own mic: last user transcript piece
         self.last_input_t = time.monotonic()  # last request from anyone (a fresh start counts: no instant autonomy)
         self._l_tokens_saved = 0
@@ -378,17 +386,9 @@ class LiveBrain(Live):
 
     def _initial_items(self) -> list[dict]:
         note = [f"Session context from Tony's voice service ({time.strftime('%a %d %b %H:%M')})."]
-        try:
-            from tonypi.tonyd.client import TonydClient
-
-            s = TonydClient().state()
-            # no battery or other changing numbers here: GPT-Live would answer from this note instead of checking
-            note.append(f"At session start Tony was {'lying down' if s['lying'] else 'upright'}, camera "
-                        f"{'ok' if s['camera']['ok'] else 'missing'}. For battery, posture, what's in view or anything "
-                        "else that changes, always hand off to the brain to check.")
-        except Exception:
-            pass
-        if getattr(self, "wake_reason", "").startswith("wake word"):
+        if self._tonyd_note:
+            note.append(self._tonyd_note)
+        if "TONY" in getattr(self, "wake_reason", ""):
             note.append("The user just woke you by saying your name; their words follow. If they said only your "
                         "name, answer with one short word such as \"Yes?\"; otherwise hand their request to the brain.")
         reason = self._load_state().get("restart_reason")
@@ -402,6 +402,27 @@ class LiveBrain(Live):
         if recent:
             note.append(f"Earlier conversation, for reference only (still hand every request to the brain): {recent}")
         return [{"role": "developer", "text": " ".join(note)}]
+
+    @staticmethod
+    def _read_tonyd_note() -> str:
+        try:
+            from tonypi.tonyd.client import TonydClient
+
+            c = TonydClient()
+            try:
+                s = c.state()
+            finally:
+                c.close()
+        except Exception:
+            return ""
+        # no battery or other changing numbers here: GPT-Live would answer from this note instead of checking
+        return (f"At session start Tony was {'lying down' if s['lying'] else 'upright'}, camera "
+                f"{'ok' if s['camera']['ok'] else 'missing'}. For battery, posture, what's in view or anything else "
+                "that changes, always hand off to the brain to check.")
+
+    async def start_voice(self) -> None:
+        self._tonyd_note = await asyncio.to_thread(self._read_tonyd_note)
+        await super().start_voice()
 
     def realtime_params(self, sdp: str) -> dict:
         return {
@@ -433,15 +454,23 @@ class LiveBrain(Live):
                 log.info("phone_mic %r dropped: %s", text, why)
                 return {"dropped": why}
             await asyncio.sleep(PHONE_WAIT_S)
-            if self.last_user_speech_t >= arrived - PHONE_ECHO_S:
+            hub = self.hub
+            if (self.last_user_speech_t >= arrived - PHONE_ECHO_S
+                    or getattr(hub, "last_wake_t", -1e9) >= arrived - PHONE_ECHO_S
+                    or getattr(self.audio, "replaying", False)):
+                # (a wake word: the held mic audio with these words is being replayed into the voice)
                 log.info("phone_mic %r dropped: Tony's own mic heard the user too", text)
                 return {"dropped": "Tony's own microphone heard the user at the same time; the voice has it"}
         else:
             self._move_asked(text)  # phone speech doesn't clear the stop latch, nor the body pause
         self._user_activity()
+        self.last_typed_t = time.monotonic()
+        self.l_turn_owner = True  # also when this steers a running turn: its answer is for the owner
         self.convo.add("user", text, source=source)
-        if hasattr(self.hub, "wake"):  # L's answer is spoken by the voice session: have one
-            await self.hub.wake(f"{source} request", hold=False)
+        if hasattr(self.hub, "wake") and source != "local_asr":
+            # L's answer is spoken by the voice session: start one, without holding up the turn (an answer that comes
+            # before it is up waits in hub.pending_speech; without a session Piper says it)
+            asyncio.create_task(self.hub.wake(f"{source} request", hold=False))
         inp = [{"type": "text", "text": text}]
         label = SOURCE_LABELS.get(source, f"Source: {source} in the app (not spoken)")
         ctx = {"source": {"kind": "application", "value": label}}
@@ -502,18 +531,41 @@ class LiveBrain(Live):
                 or any(w["status"] == "running" for w in self.workers.values()))
 
     def last_activity(self) -> float:
-        return max(super().last_activity(), self.last_user_speech_t, self.last_input_t, self.l_turn_started,
-                   self.l_last_item, self.last_delegation_t)
+        """Real exchanges only (speech that leads nowhere is heard_t, capped by the hub)."""
+        return max(super().last_activity(), self.last_typed_t, self.l_turn_started, self.l_last_item,
+                   self.last_delegation_t)
+
+    def heard_t(self) -> float:
+        return max(super().heard_t(), self.last_user_speech_t)
 
     def speak(self, text: str) -> bool:
-        """Spoken by GPT-Live while the session is up; while it sleeps, by Piper on the speaker."""
+        """Spoken by GPT-Live while the session is up; while it starts, queued for it; while it sleeps, by Piper."""
         if super().speak(text):
             return True
-        say_local = getattr(self.hub, "say_local", None)
-        if say_local is None or getattr(self.hub, "voice", "on") == "starting":
+        hub = self.hub
+        if getattr(hub, "voice", "on") == "starting" and isinstance(getattr(hub, "pending_speech", None), list):
+            hub.pending_speech.append(text)
+            return True
+        say_local = getattr(hub, "say_local", None)
+        if say_local is None:
             return False
         asyncio.get_running_loop().create_task(say_local(text))
         return True
+
+    def body_work_active(self) -> bool:
+        """Body work that may be between two moves (tonyd idle): a body task, an autonomy session with the body, a
+        learning batch holding the robot lock."""
+        if self.body_task_running():
+            return True
+        a = self.auto
+        if a and not a.get("closed") and a.get("body_ok"):
+            return True
+        try:
+            from tonypi.voice.autonomy import robot_lock_holder
+
+            return bool(robot_lock_holder())
+        except Exception:
+            return False
 
     def _user_activity(self) -> None:
         """The owner spoke or typed: an autonomy session gives him the robot and the brain back."""
@@ -540,12 +592,20 @@ class LiveBrain(Live):
         item = ev.get("item") or {}
         if typ == "delegation.created":  # Codex should take it; we log, run the switch reflex, and check it did
             text = " ".join(c.get("text", "") for c in item.get("content", []) if isinstance(c, dict)).strip()
-            log.info("delegation: %r", text)
+            now = time.monotonic()
+            prev, prev_t = self.last_delegation, self.last_delegation_t
+            # GPT-Live sometimes delegates the same words twice, ~3 s apart: Codex takes the first and folds the copy
+            # into that turn, so bridging the copy would answer it twice (2026-10-30)
+            repeat = (prev is not None and _words(prev[1]) == _words(text) and now - prev_t < DUPLICATE_DELEGATION_S
+                      and max(self.codex_took, self.l_turn_started) >= prev_t)
+            log.info("delegation: %r%s", text, " (a repeat of the one just taken: not bridged)" if repeat else "")
             self.last_delegation = (item.get("id", ""), text)
-            self.last_delegation_t = time.monotonic()
+            self.last_delegation_t = now
+            self.last_delegation_gen = self.voice_gen
             self.hub.on_live_delegation(text)
-            asyncio.get_running_loop().call_later(3.0, lambda: asyncio.create_task(
-                self._ensure_taken(item.get("id", ""), text, time.monotonic() - 3.0)))
+            if not repeat:
+                asyncio.get_running_loop().call_later(3.0, lambda: asyncio.create_task(
+                    self._ensure_taken(item.get("id", ""), text, time.monotonic() - 3.0)))
             return True
         if typ == "input_transcript.added":
             self._utt["user"].append(item.get("text", ""))
@@ -610,18 +670,25 @@ class LiveBrain(Live):
             if len(re.findall(r"\w+", text)) <= 2:
                 log.info("not bridging fragment %r", text)
                 return
+            recent = max(getattr(self.hub, "last_wake_t", -1e9), self.last_delegation_t, self.last_typed_t,
+                         self.spoke_t, self.voice_started_t)
+            if not re.search(r"\bton(y|i)\b", text, re.I) and now - recent > BRIDGE_ADDRESSED_S:
+                log.info("not bridging %r: not addressed to Tony (a TV? people talking)", text)
+                return
             log.warning("GPT-Live didn't hand off %r: bridging it", text)
             self.convo.add("user", text, source="voice (bridged)")
             await self._bridge("", text)
 
-    async def _bridge(self, item_id: str, text: str) -> None:
-        """Hand a spoken request to L ourselves (turn or steer); its [FINAL] is appended to the delegation by us."""
+    async def _bridge(self, item_id: str, text: str, gen: int | None = None) -> None:
+        """Hand a spoken request to L ourselves (turn or steer); its [FINAL] is appended to the delegation by us
+        (gen: the voice session the delegation belongs to; an older one's answer is spoken as Tony instead)."""
+        gen = self.voice_gen if gen is None else gen
         msg = f"<realtime_delegation>\n  <input>{text}</input>\n  <transcript_delta>user: {text}</transcript_delta>\n</realtime_delegation>"
         inp = [{"type": "text", "text": msg}]
         if self.l_turn:
             try:
                 await self._rpc("turn/steer", {"threadId": self.tid, "expectedTurnId": self.l_turn, "input": inp})
-                self.bridged[self.l_turn] = item_id
+                self.bridged[self.l_turn] = (item_id, gen)
                 return
             except Exception as e:
                 log.info("bridge steer failed (%s): new turn", e)
@@ -632,7 +699,7 @@ class LiveBrain(Live):
             return
         turn = (r.get("turn") or {}).get("id")
         if turn:
-            self.bridged[turn] = item_id
+            self.bridged[turn] = (item_id, gen)
 
     async def watchdog(self) -> None:
         """A turn with no progress for 30 s is stuck (seen when Codex's link to the call dropped): interrupt, re-run.
@@ -654,9 +721,11 @@ class LiveBrain(Live):
                 await self._rpc("turn/interrupt", {"threadId": self.tid, "turnId": stuck}, timeout=10)
             except Exception as e:
                 log.warning("interrupt failed: %s", e)
-            if self.last_delegation:
+            # re-run only the request of this turn (not an old "walk forward"); from an older session (the link
+            # dropped and came back) its answer is spoken as Tony, not into the dead delegation
+            if self.last_delegation and self.last_delegation_t >= self.l_turn_started - 5:
                 try:
-                    await self._bridge(*self.last_delegation)
+                    await self._bridge(*self.last_delegation, gen=self.last_delegation_gen)
                 except Exception as e:
                     log.warning("re-running the stuck request failed: %s", e)
         for task_id, w in list(self.workers.items()):
@@ -699,6 +768,8 @@ class LiveBrain(Live):
             if tid == self.tid:
                 self.l_turn = turn
                 self.l_turn_started = time.monotonic()
+                self.l_turn_owner = (getattr(self.hub, "voice", "on") != "off"
+                                     or time.monotonic() - self.last_typed_t < 10)
             elif auto:
                 auto["turn"], auto["last"] = turn, time.monotonic()
             elif tid in self.by_thread:
@@ -711,15 +782,21 @@ class LiveBrain(Live):
                 self.last_message[tid] = it.get("text") or ""
                 if tid == self.tid:
                     log.info("brain: %s", (it.get("text") or "")[:300])
-                    item_id = self.bridged.get(params.get("turnId", ""))
-                    if item_id is not None:  # we bridged this request, so we deliver the answer ourselves
-                        text = (it.get("text") or "").strip()
-                        quiet = text.startswith(("[COMMENTARY]", "[ANALYSIS]", "[STATUS]"))
-                        clean = text.split("]", 1)[1].strip() if text.startswith("[") and "]" in text[:16] else text
-                        if clean and item_id:
-                            self.append(item_id, clean, speak=not quiet)
-                        elif clean and not quiet:  # no delegation to answer: speak it as Tony
+                    text = (it.get("text") or "").strip()
+                    quiet = text.startswith(("[COMMENTARY]", "[ANALYSIS]", "[STATUS]"))
+                    clean = text.split("]", 1)[1].strip() if text.startswith("[") and "]" in text[:16] else text
+                    bridged = self.bridged.get(params.get("turnId", ""))
+                    if bridged is not None:  # we bridged this request, so we deliver the answer ourselves
+                        item_id, gen = bridged
+                        # into its delegation only while its session is the current one; else say it as Tony
+                        if clean and item_id and gen == self.voice_gen and self.append(item_id, clean, speak=not quiet):
+                            pass
+                        elif clean and not quiet:
                             self.speak(clean)
+                    elif clean and not quiet and self.l_turn_owner and getattr(self.hub, "voice", "on") != "on":
+                        # Codex speaks L's answers only through a live session: none now (asleep, starting, or
+                        # GPT-Live down: a typed / local-ASR request), so speak() queues it or says it with Piper
+                        self.speak(clean)
         elif method == "turn/completed":
             if tid == self.tid:
                 self.l_turn = None

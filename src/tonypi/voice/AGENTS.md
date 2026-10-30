@@ -25,8 +25,10 @@ is the autonomy scheduler (pure policy plus a tick loop). `client.py` is the voi
 - The stop reflex is safety code: `STOP_WORDS`, `_stop_body` and the latch/unlatch in `service.py`. Changing it needs
   the owner's yes. Stop never waits for a model.
 - The GPT-Live session sleeps after 30 s idle and the wake spotter ("Tony") starts it again on the same L thread
-  (`Hub.wake/sleep_voice/keep_voice`, `Live.start_voice/stop_voice`). Anything that must be heard while it sleeps
-  goes through `speak()` (Piper fallback) or wakes it first (`hub.wake`). Keep "stop" in the spotter.
+  (`Hub.wake/sleep_voice/keep_voice`, `Live.start_voice/stop_voice`; docs/BRAIN.md "Wake"). Anything that must be
+  heard while it sleeps goes through `speak()` (queued while starting, Piper while asleep) or wakes it (`hub.wake`).
+  Keep "stop" in the spotter, the never-unlatch-on-stop-words rule and `release_hold`'s wake-up chunk (without it the
+  mic track deadlocks and GPT-Live hears nothing). `{"op":"record"}` saves what the mic hears, for debugging.
 - Keep these hard rules: the phone_mic echo drop (a phone request Tony's own mic also heard is dropped), only Tony's
   own mic clears the stop latch, a worker result is spoken once, no relay of quiet [COMMENTARY].
 - Logs: `journalctl -u tonypi-voice`, `~/.local/share/tonypi/live/conversation.jsonl`, `tasks.jsonl`, `state.json`.
