@@ -67,6 +67,13 @@ case $MODE in
     b S1 "turn left 2 steps"
     sleep 5
     ;;
+  e2e-dry)  # E2E dry run, one task per category, 3 min cap each (docs/E2E_TEST.md); tether reset per task
+    start_front TONYPI_X=1
+    tether_reset() { $PY -c "from tonypi.tonyd.client import TonydClient as T; print('tether', T().call('tether', reset=True)['tether'])"; }
+    tether_reset; TIMEOUT=200 b E1 "walk to the door" "@180" "stop"
+    tether_reset; TIMEOUT=200 b E2 "find the black office chair" "@180" "stop"
+    tether_reset; TIMEOUT=200 b E3 "do a jumping jack" "@180" "stop"
+    ;;
   getup)  # a body move while lying gets up first
     start_front TONYPI_X=1
     b G2 "lie down"
