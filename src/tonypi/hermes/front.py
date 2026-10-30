@@ -243,6 +243,9 @@ class Front:
         before = self._authored()
         falls0 = len(self.keeper.events) if self.keeper is not None else 0
         prompt, report = text, None
+        watchdog = threading.Timer(TASK_CAP_S, self._time_up, args=(task,))
+        watchdog.daemon = True
+        watchdog.start()
         while True:
             turn_wall = time.time()
             out = self._turn(prompt, rid, model, effort, t0, task)
@@ -263,11 +266,13 @@ class Front:
             prompt = CONTINUE_PROMPT.format(task=text, n=task["retries"] + 1)
             with self.lock:
                 self.run_id = "starting"  # between turns: new words wait for the next run and steer it
+        watchdog.cancel()
         with self.lock:
             rids, stopped = self.rids, self.stopped
             self.run_id, self.rids = None, []
         self.last_turn = time.monotonic()
         self._finish_log(task, t0, report, stopped, before, falls0)
+        threading.Thread(target=self._commit_learned, args=(task,), daemon=True).start()
         for r in rids:
             self.emit("done", id=r)
         if not stopped:
@@ -315,6 +320,25 @@ class Front:
             self.emit("info", id=rid, text=str(e))
             self.say("I can't reach my brain right now.", rid)
         return out
+
+    def _time_up(self, task: dict) -> None:
+        """The task cap (TASK_CAP_S) passed in the middle of a turn: stop it like "stop", but say why."""
+        if self.task is not task:
+            return
+        log.warning("task cap %.0f s reached: stopping", TASK_CAP_S)
+        task["timed_out"] = True
+        self.stop_all()
+        self.say("I'm out of time for this one.")
+
+    def _commit_learned(self, task: dict) -> None:
+        """Skills Tony refined during the task (skill_manage) are committed on the branch (tonypi-self)."""
+        try:
+            from tonypi.hermes.self_mcp import commit_learned
+
+            if head := commit_learned(task["text"]):
+                self.emit("info", text=f"learned and committed: {head}")
+        except Exception as e:  # git or files: the task itself is over and logged
+            log.warning("learning commit: %s", e)
 
     def _authored(self) -> set[str]:
         """User motions and skills in tonyd (to log what a task created)."""

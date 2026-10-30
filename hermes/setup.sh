@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install Hermes Agent and the "tonypi" profile (robot MCP, SOUL, robot skills, providers). Idempotent.
 #
-#   hermes/setup.sh [--brain codex|anthropic|local] [--model NAME] [--mcp-url URL] [--extra-mcp URL]
+#   hermes/setup.sh [--brain codex|anthropic|local] [--model NAME] [--mcp-url URL] [--extra-mcp URL] [--reset-skills]
 #   --extra-mcp: a second tonypi-mcp (e.g. this branch's, for scan/video before it is deployed); only those tools
 #
 #   codex      ChatGPT subscription (default model gpt-6.1-terra; this account: gpt-6.1-sol/terra, gpt-6-luna, gpt-5.6-*). Log in once:  tonypi auth add openai-codex --type oauth --no-browser
@@ -11,13 +11,14 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BRAIN=codex MODEL="" MCP_URL="http://127.0.0.1:8765/mcp" EXTRA_MCP=""
+BRAIN=codex MODEL="" MCP_URL="http://127.0.0.1:8765/mcp" EXTRA_MCP="" RESET_SKILLS=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --brain) BRAIN="$2"; shift 2 ;;
         --model) MODEL="$2"; shift 2 ;;
         --mcp-url) MCP_URL="$2"; shift 2 ;;
         --extra-mcp) EXTRA_MCP="$2"; shift 2 ;;
+        --reset-skills) RESET_SKILLS=1; shift ;;
         *) echo "unknown option $1" >&2; exit 2 ;;
     esac
 done
@@ -38,12 +39,12 @@ fi
 
 # 3. Config, persona, providers
 install -m 600 "$REPO/hermes/SOUL.md" "$PROFILE/SOUL.md"
-# robot skills: the repo copy replaces Hermes' copy of the same skill (skills Hermes wrote itself are kept). Not an
-# external_dirs entry: Hermes' background review edited those files in place.
 # first facts for Hermes memory, only into an empty memory (what Hermes learns later is kept)
 [ -s "$PROFILE/memories/MEMORY.md" ] || { mkdir -p "$PROFILE/memories"; cp "$REPO/hermes/memory-seed.md" "$PROFILE/memories/MEMORY.md"; }
+# robot skills: installed where the profile doesn't have them yet. Skills Tony refined himself (skill_manage) stay;
+# they reach the repo through tonypi-self / the front end's after-task commit. --reset-skills: repo copy wins.
 mkdir -p "$PROFILE/skills"
-cp -r "$REPO/hermes/skills/." "$PROFILE/skills/"
+if [ "$RESET_SKILLS" = 1 ]; then cp -r "$REPO/hermes/skills/." "$PROFILE/skills/"; else cp -rn "$REPO/hermes/skills/." "$PROFILE/skills/"; fi
 python3 - "$REPO" "$PROFILE/config.yaml" "$BRAIN" "$MODEL" "$MCP_URL" "$EXTRA_MCP" <<'PY'
 import sys, yaml
 repo, out, brain, model, mcp_url, extra = sys.argv[1:]

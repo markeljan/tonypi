@@ -55,8 +55,22 @@ def _log(kind: str, **kw) -> None:
         f.write(json.dumps({"t": round(time.time(), 1), "kind": kind, **kw}) + "\n")
 
 
+def _install_file(path: str) -> list[str]:
+    """One repo file → the Hermes profile (SOUL or a skill file): applies on the next turn."""
+    if path == "hermes/SOUL.md":
+        shutil.copy(REPO / path, PROFILE / "SOUL.md")
+        return ["SOUL.md"]
+    if path.startswith("hermes/skills/"):
+        dst = PROFILE / "skills" / Path(path).relative_to("hermes/skills")
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(REPO / path, dst)
+        return [dst.relative_to(PROFILE).as_posix()]
+    return []
+
+
 def _install_persona_and_skills() -> list[str]:
-    """Repo SOUL + robot skills → Hermes profile (what setup.sh does): applies on the next turn."""
+    """Repo SOUL + robot skills → Hermes profile, after pulling Tony's own skill edits into the repo (none lost)."""
+    _sync_skills_back()
     shutil.copy(REPO / "hermes/SOUL.md", PROFILE / "SOUL.md")
     done = ["SOUL.md"]
     for d in (REPO / "hermes/skills").iterdir():
@@ -80,6 +94,22 @@ def _sync_skills_back() -> list[str]:
                     shutil.copy(f, dst)
                     changed.append(dst.relative_to(REPO).as_posix())
     return changed
+
+
+def commit_learned(context: str) -> str | None:
+    """Skills Tony changed in his profile (skill_manage) → repo → a commit of just those files. Returns the commit."""
+    changed = _sync_skills_back()
+    if not changed:
+        return None
+    subprocess.run(["git", "add", "--", *changed], cwd=REPO, check=True, capture_output=True)
+    names = sorted({Path(c).parent.name for c in changed})
+    r = subprocess.run(["git", "commit", "-q", "-m", f"Tony learned: {', '.join(names)}\n\nAfter: {context[:200]}\n\n"
+                        "Self-update by Tony (Hermes harness).", "--", *changed], cwd=REPO, capture_output=True, text=True)
+    if r.returncode:
+        return None
+    head = subprocess.run(["git", "log", "--oneline", "-1"], cwd=REPO, capture_output=True, text=True).stdout.strip()
+    _log("learned", files=changed, head=head)
+    return head
 
 
 @mcp.tool()
@@ -126,7 +156,7 @@ def self_write(path: str, content: str, why: str) -> dict:
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(content)
     _log("write", path=path, why=why, old_len=len(old), new_len=len(content))
-    applied = _install_persona_and_skills() if path.startswith(("hermes/SOUL.md", "hermes/skills/")) else []
+    applied = _install_file(path)
     return {"written": path, "bytes": len(content), "applied_now": applied}
 
 

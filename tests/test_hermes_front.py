@@ -225,3 +225,14 @@ def test_status_over_the_socket_names_the_harness(tmp_path):
     s.sendall(b'{"text": "/status"}\n')
     ev = json.loads(s.makefile().readline())
     assert ev["type"] == "status" and ev["harness"] == "hermes" and ev["busy"] is False
+
+
+def test_task_cap_stops_a_long_turn(monkeypatch):
+    monkeypatch.setattr(front_mod, "TIER", "deep")
+    monkeypatch.setattr(front_mod, "TASK_CAP_S", 0.3)
+    h = FakeHermes()
+    f, said, events = make(h)
+    f.submit("walk to the door")
+    assert wait(lambda: h.stopped == ["run1"])  # the watchdog stopped the run in the middle of the turn
+    assert wait(lambda: f.run_id is None)
+    assert wait(lambda: any("out of time" in s for s in said)) and f.tonyd.stops >= 1
