@@ -25,6 +25,14 @@ brain dir ~/.local/share/tonypi/brain (memory, goals, journal, learning) ← `to
   speaks; it hands every request to L (Codex `clientManagedHandoffs:false`, bemTags). The service bridges requests
   GPT-Live answered itself or Codex missed: fragments are merged (2 s of no new speech), 1-2 word fragments dropped,
   duplicates logged once.
+- Wake word and sleep (2026-10-30): the GPT-Live session runs only while someone talks to Tony. The app-server,
+  L, tasks and autonomy keep running; only the realtime session on L stops (`thread/realtime/stop`) and starts
+  again (~4.5 s). It sleeps after `TONYPI_VOICE_IDLE_S` (30) s without user speech, an L turn, a running task, a
+  pending bridge or Tony talking (autonomy doesn't keep it awake). While asleep a sherpa-onnx keyword spotter
+  (`WakeSpotter`: "Tony", "hey/hi/ok Tony", plus "stop/freeze/halt", which stop tonyd at once) listens; a wake
+  holds the mic from 2 s before the keyword and replays it into the new session (silences skipped), so "hey Tony,
+  wave" arrives whole. A typed/phone request wakes it before L's turn; a dropped session reconnects if L is still
+  busy; speech while asleep (`say`, `tony_speak_now`, task results) uses Piper. `status` shows `session`, `idle_s`.
 - Stop: "stop / halt / freeze" stops tonyd with a latch before any model hears it, interrupts L, cancels body tasks
   and ends an autonomy session. Motion stays refused until the owner speaks again.
 - Phone mic requests are labelled; one Tony's own mic also heard is dropped. Only Tony's own mic clears the latch.

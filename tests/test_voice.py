@@ -5,6 +5,7 @@ import os
 import re
 import time
 
+import numpy as np
 import pytest
 
 from tonypi.voice import live, service
@@ -408,3 +409,182 @@ def test_a_move_request_clears_the_body_pause(mk):
 def test_parse_result_tolerates_wrapping():
     assert live.parse_result('noise {"status": "done"} tail') == {"status": "done"}
     assert live.parse_result("plain text") is None
+
+
+# ---- wake word / idle sleep of the GPT-Live session ------------------------------------------------------------
+
+def _chunk(level: int) -> bytes:
+    return (np.full(service.MIC_CHUNK, level, np.int16)).tobytes()
+
+
+def test_held_mic_is_replayed_after_the_session_starts_skipping_long_silence():
+    async def run():
+        a = service.Audio()
+        for _ in range(3):
+            a.ring.append(_chunk(5000))  # "hey Tony" just before the spotter fired
+        a.start_hold()
+        a.mic_q.put_nowait(bytes(640))  # what the starting session got meanwhile: silence
+        for level in [0] * 30 + [7000] * 2:
+            a.hold.append(_chunk(level))
+        a.release_hold()
+        assert a.mic_q.empty()
+        out = [np.frombuffer(await a.next_chunk(), np.int16)[0] for _ in range(3 + 10 + 2)]
+        assert out == [5000] * 3 + [0] * 10 + [7000] * 2  # 20 of the 30 silent chunks skipped
+        a.mic_q.put_nowait(_chunk(42))
+        assert np.frombuffer(await a.next_chunk(), np.int16)[0] == 42 and a.hold is None  # back to the live mic
+    asyncio.run(run())
+
+
+def test_replay_skips_a_noisy_floor_too():
+    async def run():
+        a = service.Audio()
+        a.start_hold()
+        for level in [800] * 40 + [9000] * 3 + [800] * 40:  # max-gain mic: the "silence" is 800
+            a.hold.append(_chunk(level))
+        a.release_hold()
+        a.mic_q.put_nowait(_chunk(1))  # the live mic after the hold
+        out = []
+        while not out or out[-1] != 1:
+            out.append(np.frombuffer(await a.next_chunk(), np.int16)[0])
+        assert out == [800] * 10 + [9000] * 3 + [800] * 10 + [1]
+    asyncio.run(run())
+
+
+class FakeVoiceLive:
+    def __init__(self, hub):
+        self.hub, self.starts, self.stops, self.is_busy, self.on = hub, 0, 0, False, False
+        self.voice_closed = asyncio.Event()
+        self.t = time.monotonic()
+        self.activity = []
+
+    async def start_voice(self):
+        self.starts += 1
+        self.on, self.t = True, time.monotonic()
+        self.voice_closed.clear()
+
+    async def stop_voice(self):
+        self.stops += 1
+        self.on = False
+        self.voice_closed.set()
+
+    @property
+    def voice_on(self):
+        return self.on
+
+    def busy(self):
+        return self.is_busy
+
+    def last_activity(self):
+        return self.t
+
+    def _user_activity(self):
+        self.activity.append(time.monotonic())
+
+
+def test_voice_sleeps_when_idle_and_the_wake_word_brings_it_back(monkeypatch):
+    monkeypatch.setattr(service, "VOICE_IDLE_S", 0.3)
+    stopped = []
+    import tonypi.tonyd.client as tc
+
+    monkeypatch.setattr(tc.TonydClient, "__init__", lambda self, *a, **k: None)
+    monkeypatch.setattr(tc.TonydClient, "close", lambda self: None)
+
+    async def run():
+        hub = service.Hub(live_enabled=False)
+        hub.mode, hub.spotter = "gpt-live", type("S", (), {"reset": lambda self: None})()
+        hub._stop_body = stopped.append
+        hub.live = fake = FakeVoiceLive(hub)
+        assert await hub.wake("service start", hold=False) and hub.voice == "on"
+        keeper = asyncio.create_task(hub.keep_voice())
+        fake.is_busy = True  # a brain turn or a background task: stays awake
+        await asyncio.sleep(1.5)
+        assert hub.voice == "on" and fake.stops == 0
+        fake.is_busy = False
+        await asyncio.sleep(1.2)
+        assert hub.voice == "off" and fake.stops == 1
+        hub.on_keyword("HEY_TONY")
+        await asyncio.sleep(0.05)
+        assert hub.voice == "on" and fake.starts == 2 and fake.activity  # an autonomy session was told
+        assert hub.audio.hold is None or hub.audio.hold_released
+        await hub.sleep_voice("test")
+        monkeypatch.setattr(tc.TonydClient, "state", lambda self: {"busy": moving})
+        moving = False
+        hub.on_keyword("STOP")  # nothing moves (a TV said it?): only wakes the voice
+        await asyncio.sleep(0.1)
+        assert stopped == [] and hub.voice == "on"
+        await hub.sleep_voice("test")
+        moving = True
+        hub.on_keyword("STOP")  # a move runs: stopped at once (no model), and the voice wakes
+        await asyncio.sleep(0.1)
+        assert stopped == ["stop"] and hub.voice == "on"
+        fake.voice_closed.set()  # dropped while working: reconnects
+        fake.is_busy = True
+        await asyncio.sleep(1.2)
+        assert fake.starts == 5 and hub.voice == "on"
+        keeper.cancel()
+    asyncio.run(run())
+
+
+def test_brain_is_busy_while_it_works_and_speaks_with_piper_while_asleep(mk):
+    brain = mk()
+    del brain.speak  # the real one
+    said = []
+
+    async def say_local(text):
+        said.append(text)
+    brain.hub.say_local, brain.hub.voice = say_local, "off"
+
+    async def go():
+        assert not brain.busy()
+        brain.l_turn = "t1"
+        assert brain.busy()
+        brain.l_turn = None
+        brain.workers["x"] = {"status": "running"}
+        assert brain.busy()
+        brain.workers["x"]["status"] = "completed"
+        assert not brain.busy()
+        assert brain.speak("Task done.") is True
+        await asyncio.sleep(0.01)
+        assert said == ["Task done."]
+    asyncio.run(go())
+
+
+def test_typed_requests_wake_the_voice_first(mk):
+    brain = mk()
+    woke = []
+
+    async def wake(why, hold=True):
+        woke.append((why, hold, len(brain.calls)))
+        return True
+    brain.hub.wake = wake
+    brain._move_asked = lambda text: None
+    asyncio.run(brain.send_text("what are you doing", "typed"))
+    assert woke == [("typed request", False, 0)] and methods(brain) == ["turn/start"]
+
+
+def test_the_speaker_is_reopened_when_aplay_dies(monkeypatch):
+    async def run():
+        a = service.Audio()
+        dead = type("P", (), {"returncode": 1, "stdin": type("W", (), {"is_closing": lambda self: True})()})()
+        written = []
+        alive = type("P", (), {"returncode": None, "stdin": type("W", (), {
+            "is_closing": lambda self: False, "write": lambda self, b: written.append(len(b))})()})()
+        a.play = dead
+
+        async def reopen():
+            a.play = alive
+        a._open_play = reopen
+        monkeypatch.setattr(service.asyncio, "sleep", _fast_sleep)
+        task = asyncio.create_task(a._mix())
+        for _ in range(50):
+            await _real_sleep(0)
+        task.cancel()
+        assert a.play is alive and written
+    asyncio.run(run())
+
+
+_real_sleep = asyncio.sleep
+
+
+async def _fast_sleep(s):
+    await _real_sleep(0)

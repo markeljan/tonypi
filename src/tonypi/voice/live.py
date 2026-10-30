@@ -388,6 +388,9 @@ class LiveBrain(Live):
                         "else that changes, always hand off to the brain to check.")
         except Exception:
             pass
+        if getattr(self, "wake_reason", "").startswith("wake word"):
+            note.append("The user just woke you by saying your name; their words follow. If they said only your "
+                        "name, answer with one short word such as \"Yes?\"; otherwise hand their request to the brain.")
         reason = self._load_state().get("restart_reason")
         if reason:
             note.append(f"The voice just restarted ({reason}). Greet the user in a few words, e.g. \"I'm back.\"")
@@ -437,6 +440,8 @@ class LiveBrain(Live):
             self._move_asked(text)  # phone speech doesn't clear the stop latch, nor the body pause
         self._user_activity()
         self.convo.add("user", text, source=source)
+        if hasattr(self.hub, "wake"):  # L's answer is spoken by the voice session: have one
+            await self.hub.wake(f"{source} request", hold=False)
         inp = [{"type": "text", "text": text}]
         label = SOURCE_LABELS.get(source, f"Source: {source} in the app (not spoken)")
         ctx = {"source": {"kind": "application", "value": label}}
@@ -489,6 +494,26 @@ class LiveBrain(Live):
                 await self._cancel(task_id)
         await self._inject(self.tid, f"User said stop at {time.strftime('%H:%M:%S')}: the voice service stopped "
                            "tonyd (stop latch on) and interrupted running body work. Don't move until asked.")
+
+    def busy(self) -> bool:
+        """The voice stays awake while L works, a background task runs (its result is spoken) or a spoken request
+        may still be bridged. An autonomy session doesn't count: that is Tony's own work."""
+        return (self.l_turn is not None or bool(self._frags) or self.restart_after_turn is not None
+                or any(w["status"] == "running" for w in self.workers.values()))
+
+    def last_activity(self) -> float:
+        return max(super().last_activity(), self.last_user_speech_t, self.last_input_t, self.l_turn_started,
+                   self.l_last_item, self.last_delegation_t)
+
+    def speak(self, text: str) -> bool:
+        """Spoken by GPT-Live while the session is up; while it sleeps, by Piper on the speaker."""
+        if super().speak(text):
+            return True
+        say_local = getattr(self.hub, "say_local", None)
+        if say_local is None or getattr(self.hub, "voice", "on") == "starting":
+            return False
+        asyncio.get_running_loop().create_task(say_local(text))
+        return True
 
     def _user_activity(self) -> None:
         """The owner spoke or typed: an autonomy session gives him the robot and the brain back."""

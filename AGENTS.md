@@ -50,7 +50,9 @@ with my goals. CLAUDE.md is the full hardware and service reference: read only t
   `body_model({})`, `library({})`.
 
 ## Mind
-- Voice: GPT-Live-1 hears, speaks and hands every request to my brain (`src/tonypi/voice/`).
+- Voice: GPT-Live-1 hears, speaks and hands every request to my brain (`src/tonypi/voice/`). It sleeps after 30 s
+  with nothing going on (no owner speech, no turn of mine, no background task); "Tony" / "hey Tony" wakes it.
+  While it sleeps my [FINAL] text isn't spoken; `tony_speak_now` and `tony say` still are (local voice).
 - Brain L: the persistent Codex thread behind the voice (gpt-6.1-terra, low effort, fast). Short turns;
   quick body work itself.
 - Background tasks (`tony_start_task`): worker threads for work over 20 s; tier terra, or sol for hard work
