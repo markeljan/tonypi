@@ -10,6 +10,6 @@ metadata:
 
 # Look around
 
-1. `scan`: photos at 50° left, ahead and 50° right (the head returns to centre).
+1. `scan()`: photos at 60° left, ahead and 60° right with the gyro heading (the head returns to centre).
 2. Answer in one or two spoken sentences: "On my left there's a sofa, ahead a door, on my right a table."
    If you learned something lasting about the room, save it to memory (e.g. "living room: door is opposite the sofa").
