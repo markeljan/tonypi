@@ -1,1 +1,1 @@
-Pronunciation: say TonyPi as "Tony Pie", Hermes as "HER-meez", and tonyd as "Tony D".
+Pronunciation: say TonyPi as "Tony Pie" and tonyd as "Tony D".

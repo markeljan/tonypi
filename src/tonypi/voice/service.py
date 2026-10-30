@@ -1,21 +1,18 @@
-"""tonypi-voice: Tony's ears and mouth for whichever harness (brain) is attached.
+"""tonypi-voice: Tony's ears, mouth and (in live mode, the default) mind.
 
-Owns the USB mic + speaker. Two modes, same socket interface:
+Owns the USB mic + speaker. Two modes:
 - gpt-live: GPT-Live-1 (`gpt-live-1-codex`) through `codex app-server` realtime v3 over WebRTC (aiortc), on the
-  ChatGPT login (docs/GPT_LIVE.md). GPT-Live has no tools: every user request arrives as a *delegation*, which goes
-  to the attached brain as a `heard` event; the brain's `reply` text is appended to that delegation and spoken.
-- local: "hey Tony" wake word + streaming ASR (tonypi.agent.speech.Listener) and Piper TTS, when GPT-Live is down.
+  ChatGPT login (docs/GPT_LIVE.md). In live mode (TONYPI_VOICE_MODE=live, the default) GPT-Live's own Codex thread is
+  Tony's brain, with background tasks and autonomy sessions (live.py, docs/BRAIN.md).
+- local: "hey Tony" wake word + streaming ASR (tonypi.agent.speech.Listener) and Piper TTS, while GPT-Live is down:
+  it handles only stop and "switch to local" (the offline LFM3 agent, tonypi-agent).
 
-Socket /run/tonypi/voice.sock, JSON lines:
-  -> {"op":"attach","name":"pi"}                    become the active brain (last attach wins; the old one is told)
-  <- {"event":"heard","id":N,"text":"..."}          a request from the user
-  -> {"op":"reply","id":N,"text":"...","final":b}   speak a result (final) or a progress note
-  -> {"op":"say","text":"..."}                      speak unprompted
-  -> {"op":"ask","text":"...","timeout_s":30}       ask the user out loud; reply {"answer": text | null}
-  <- {"event":"barge_in"}                           the user talked over Tony
-  <- {"event":"transcript","text":"..."}            what GPT-Live heard (informational)
-  -> {"op":"status"}
-Never moves the robot: "stop" is just a heard request; the brain stops tonyd itself.
+Socket /run/tonypi/voice.sock, JSON lines ({"op", "rid"?, ...} -> {"ok", "rid", ...}):
+  {"op":"say","text":"..."}                          speak unprompted
+  {"op":"text","text":"...","source":"typed"}        a typed request for the brain (live mode; phone bridge: phone_mic)
+  {"op":"status"} / {"op":"tasks"} / {"op":"ping"}
+  {"op":"inject","wav":"/path.wav"}                  tests: play a WAV into the mic as if the user said it
+"Stop" never depends on a model: the transcript reflex stops tonyd itself (with a latch in live mode).
 """
 
 from __future__ import annotations
@@ -35,7 +32,7 @@ from pathlib import Path
 
 import numpy as np
 
-from tonypi.switch import LABEL, parse_switch, request_switch
+from tonypi import switch
 from tonypi.voice import SOCK
 
 log = logging.getLogger("tonypi.voice")
@@ -44,13 +41,17 @@ ALSA_DEV = os.environ.get("TONYPI_ALSA", "plughw:0,0")
 MIC_RATE, OUT_RATE = 16000, 48000
 MIC_CHUNK = 320  # 20 ms at 16 kHz
 OUT_CHUNK = 960  # 20 ms at 48 kHz
+# Half duplex: the mic stays muted this long after Tony stops talking. The speaker (aplay 200 ms buffer) and mic
+# (arecord) buffers delay sound, so at 0.25 s the tail of a short "Yep" reached GPT-Live as user speech and it
+# answered itself in a loop ("Listening", "Yep", ... 2026-10-30).
+ECHO_TAIL_S = 0.9
 CODEX = os.environ.get("TONYPI_CODEX", "/home/pi/.local/bin/codex")
 CODEX_HOME = os.environ.get("TONYPI_VOICE_CODEX_HOME", "/home/pi/.config/tonypi/codex-voice")
 VOICE = os.environ.get("TONYPI_VOICE_NAME", "cove")
 RETRY_LIVE_S = 120
-# relay: GPT-Live hands requests to the attached harness (pi, Hermes, own). live: GPT-Live's own Codex agent is the
-# brain, with full access (live.py). Chosen per slot via /run/tonypi/voice.env (tools/e2e.sh live).
-VOICE_MODE = os.environ.get("TONYPI_VOICE_MODE", "relay")
+# live: GPT-Live's own Codex agent is the brain, with full access (live.py). Anything else runs GPT-Live as a voice
+# only, without a brain (tests, debugging).
+VOICE_MODE = os.environ.get("TONYPI_VOICE_MODE", "live")
 # No echo cancellation on the USB speaker/mic: by default the mic sends silence while Tony talks (half duplex), so
 # GPT-Live doesn't hear (and transcribe, or act on) Tony's own voice. 1 = full duplex (barge-in while Tony talks).
 DUPLEX = os.environ.get("TONYPI_VOICE_DUPLEX", "0") == "1"
@@ -58,8 +59,9 @@ APPEND_MAX = 450
 # "stop" never depends on a model: GPT-Live sometimes treats a bare "Stop." as "stop talking" and delegates nothing
 STOP_WORDS = re.compile(r"^\W*(?:hey\s+)?(?:tony\W+)?(stop|halt|freeze|stop it|stop moving)\b", re.I)  # Codex chunks context appends at 500 bytes
 
-# Keep the delegation wording: it delegated reliably in live tests (2026-10-29). Two rewrites that
-# asked GPT-Live to judge whether speech was meant for Tony made it delegate nothing (it heard 'Tony' as 'Ciao').
+# GPT-Live's fallback prompt (live.py loads prompts/live_voice.md). Keep the delegation wording: it delegated reliably
+# in live tests (2026-10-29). Two rewrites that asked GPT-Live to judge whether speech was meant for Tony made it
+# delegate nothing (it heard 'Tony' as 'Ciao').
 LIVE_PROMPT = (
     "You are the voice of Tony, a small humanoid robot. Another system, the robot's brain, does all the thinking and "
     "acting. For EVERY thing the user says (requests, questions, corrections like 'actually turn around', 'stop', and "
@@ -127,7 +129,7 @@ class Audio:
             self.mic_chunks += 1
             if self.inject:
                 buf, self.inject[:] = bytes(self.inject[:len(buf)]).ljust(len(buf), b"\0"), self.inject[len(buf):]
-            elif time.monotonic() < self.mute_mic_until or (not DUPLEX and time.monotonic() < self.voice_until + 0.25):
+            elif time.monotonic() < self.mute_mic_until or (not DUPLEX and time.monotonic() < self.voice_until + ECHO_TAIL_S):
                 buf = bytes(len(buf))
             for f in self.mic_listeners:
                 f(buf)
@@ -340,7 +342,6 @@ class Live:
                 self.hub.on_transcript((ev.get("item") or {}).get("text", ""))
             elif typ == "output_audio_buffer.cleared":
                 audio.remote = np.zeros(0, np.int16)
-                self.hub.emit_attached({"event": "barge_in"})
             elif typ == "error":
                 log.warning("live error: %s", json.dumps(ev)[:300])
             elif typ == "session.started":
@@ -388,6 +389,16 @@ class Live:
             self.proc.terminate()
 
 
+SWITCH_LABEL = {"local": "the local agent", "live": "live mode"}
+
+
+def parse_switch(text: str) -> str | None:
+    """Target of "switch to local" / "switch to live", else None (tonypi.switch matches loosely: ASR mangles both)."""
+    target = switch.parse_switch(text)
+    target = {"off": "local"}.get(target, target)
+    return target if target in SWITCH_LABEL else None
+
+
 class Hub:
     def __init__(self, live_enabled: bool = True) -> None:
         self.audio = Audio()
@@ -395,13 +406,6 @@ class Hub:
         self.live: Live | None = None
         self.live_enabled = live_enabled
         self.mode = "starting"
-        self.attached: tuple[str, asyncio.StreamWriter] | None = None
-        self.requests: dict[int, str | None] = {}  # heard id -> GPT-Live delegation item id (None in local mode)
-        self.ids = itertools.count(1)
-        self.ask_fut: asyncio.Future | None = None
-        self.ask_parts: list[str] = []
-        self.ask_timer: asyncio.TimerHandle | None = None
-        self.ask_listen_from = 0.0  # ignore the transcript of Tony's own question
         self.utt_parts: list[str] = []
         self.utt_timer: asyncio.TimerHandle | None = None
         self.last_switch_t = -1e9
@@ -409,35 +413,18 @@ class Hub:
         self.listener = None
         self.loop: asyncio.AbstractEventLoop | None = None
 
-    # ---- events to the brain ---------------------------------------------------------------------------------
-
-    def emit_attached(self, ev: dict) -> None:
-        if self.attached:
-            try:
-                self.attached[1].write((json.dumps(ev) + "\n").encode())
-            except Exception:
-                self.attached = None
+    # ---- reflexes ------------------------------------------------------------------------------------------
 
     def on_transcript(self, text: str) -> None:
-        """What GPT-Live heard. An answer to an `ask` is often not delegated (it isn't a request), so a pending ask
-        collects the transcript and resolves after a 1.2 s pause."""
-        self.emit_attached({"event": "transcript", "text": text})
+        """What GPT-Live heard, piece by piece: the stop reflex, and the whole utterance once it pauses (switch
+        commands may never become a delegation: GPT-Live may find a misheard brain name meaningless)."""
         if STOP_WORDS.match("".join(self.utt_parts) + text):
             self._stop_body("".join(self.utt_parts) + text)
-        # a switch command may never become a delegation (GPT-Live finds "which Khermes" meaningless): check the
-        # whole utterance once it pauses
         self.utt_parts.append(text)
         if self.utt_timer:
             self.utt_timer.cancel()
         self.utt_timer = asyncio.get_running_loop().call_later(1.0, self._utterance_done)
         log.info("transcript %r", text)
-        if (not text or self.ask_fut is None or self.ask_fut.done()
-                or time.monotonic() < max(self.ask_listen_from, self.audio.voice_until + 0.3)):  # not Tony's own question
-            return
-        self.ask_parts.append(text)
-        if self.ask_timer:
-            self.ask_timer.cancel()
-        self.ask_timer = asyncio.get_running_loop().call_later(1.2, self._resolve_ask_from_transcript)
 
     def _stop_body(self, text: str) -> None:
         if time.monotonic() - self.last_stop_t < 3:
@@ -455,16 +442,15 @@ class Hub:
         threading.Thread(target=stop, daemon=True).start()
         if VOICE_MODE == "live" and self.live is not None and hasattr(self.live, "interrupt_all"):
             asyncio.create_task(self.live.interrupt_all(body_only=True))
-        self.emit_attached({"event": "heard", "id": next(self.ids), "text": "stop", "mode": self.mode,
-                            "stopped_body": True})
 
     def _utterance_done(self) -> None:
         text, self.utt_parts = "".join(self.utt_parts), []
         if (target := parse_switch(text)) is not None:
             self._switch(target, None)
         elif VOICE_MODE == "live" and text.strip() and not STOP_WORDS.match(text):
-            if hasattr(self.live, "utterance_done") and len(text.split()) >= 2:
+            if hasattr(self.live, "utterance_done"):
                 self.live.utterance_done(" ".join(text.split()))
+
             def unlatch() -> None:  # the user spoke again after a stop: moving is allowed again
                 try:
                     from tonypi.tonyd.client import TonydClient
@@ -487,37 +473,23 @@ class Hub:
         if time.monotonic() - self.last_switch_t < 15:  # transcript and delegation of the same words
             return
         self.last_switch_t = time.monotonic()
+        if target == "live":  # this service is live mode
+            self._speak_or_append(item_id, "I'm already in live mode.")
+            return
         log.info("switching brain to %s", target)
-        self._speak_or_append(item_id, f"Switching to {LABEL[target]}.")
-        asyncio.get_running_loop().call_later(3.0, request_switch, target)  # let it say so first
-
-    def _resolve_ask_from_transcript(self) -> None:
-        if self.ask_fut is not None and not self.ask_fut.done() and self.ask_parts:
-            self.ask_fut.set_result(re.sub(r"\s+([.,!?])", r"\1", " ".join("".join(self.ask_parts).split())))
+        self._speak_or_append(item_id, f"Switching to {SWITCH_LABEL[target]}.")
+        asyncio.get_running_loop().call_later(3.0, switch.request_switch, target)  # let it say so first
 
     def on_request(self, text: str, item_id: str | None) -> None:
-        """A user utterance: answers a pending ask, else goes to the attached brain."""
+        """A request without the live brain (local fallback ASR, or GPT-Live in a non-live mode): only the reflexes."""
         log.info("heard (%s): %r", self.mode, text)
-        if (target := parse_switch(text)) is not None:  # "switch to pi": handled here, whatever brain is attached
-            if time.monotonic() - self.last_switch_t >= 15:
-                self._switch(target, item_id)
-            elif item_id and self.live:
-                self.live.append(item_id, "(switching)", speak=False)
-            return
-        if self.ask_fut is not None and not self.ask_fut.done():
-            self.ask_fut.set_result(text)
-            if item_id and self.live:
-                self.live.append(item_id, "(Tony's brain got your answer.)", speak=False)
-            return
-        if self.attached is None:
-            self._speak_or_append(item_id, "My brain isn't connected right now.")
-            return
-        rid = next(self.ids)
-        self.requests[rid] = item_id
-        # GPT-Live delegates everything it hears; a long monologue is more likely room talk than a robot command
-        likely_room_talk = len(text.split()) > 35
-        self.emit_attached({"event": "heard", "id": rid, "text": text, "mode": self.mode,
-                            "likely_room_talk": likely_room_talk})
+        if (target := parse_switch(text)) is not None:
+            self._switch(target, item_id)
+        elif STOP_WORDS.match(text):
+            self._stop_body(text)
+        else:
+            self._speak_or_append(item_id, "My live brain is offline right now. Say: switch to local, for my "
+                                           "local brain.")
 
     # ---- speaking ---------------------------------------------------------------------------------------------
 
@@ -574,15 +546,22 @@ class Hub:
             from tonypi.voice.live import LiveBrain
         while self.live_enabled:
             self.live = LiveBrain(self) if VOICE_MODE == "live" else Live(self)
+            helpers: list[asyncio.Task] = []
             try:
                 await self.live.start()
                 self.mode = "gpt-live"
                 if hasattr(self.live, "watchdog"):
-                    asyncio.create_task(self.live.watchdog())
+                    helpers.append(asyncio.create_task(self.live.watchdog()))
+                if hasattr(self.live, "start_autonomy") and (t := self.live.start_autonomy()) is not None:
+                    helpers.append(t)
                 await self.live.closed.wait()
                 log.warning("GPT-Live session closed; restarting")
             except Exception as e:
                 log.warning("GPT-Live unavailable (%s): local voice for now, retry in %d s", e, RETRY_LIVE_S)
+            for t in helpers:
+                t.cancel()
+            if hasattr(self.live, "shutdown"):
+                await self.live.shutdown()
             await self.live.close()
             self.live, self.mode = None, "local"
             await asyncio.sleep(RETRY_LIVE_S)
@@ -591,45 +570,9 @@ class Hub:
 
     async def handle(self, msg: dict, writer: asyncio.StreamWriter) -> dict:
         op = msg.get("op")
-        if op == "attach":
-            old = self.attached
-            if old and old[1] is not writer:
-                try:
-                    old[1].write(b'{"event":"detached"}\n')
-                except Exception:
-                    pass
-            self.attached = (str(msg.get("name", "?")), writer)
-            log.info("brain attached: %s", self.attached[0])
-            return {"attached": self.attached[0], "mode": self.mode}
-        if op == "reply":
-            rid = msg.get("id")
-            item_id = self.requests.get(rid) if rid is not None else None
-            text = str(msg.get("text") or "").strip()
-            if text:
-                self._speak_or_append(item_id, text)
-            if msg.get("final", True) and rid in self.requests:
-                self.requests.pop(rid, None)
-                if self.listener is not None and self.mode == "local":
-                    self.listener.followup()
-            return {"spoken": bool(text)}
         if op == "say":
             self._speak_or_append(None, str(msg.get("text") or ""))
             return {"spoken": True}
-        if op == "ask":
-            self.ask_fut = asyncio.get_running_loop().create_future()
-            self.ask_parts, self.ask_listen_from = [], time.monotonic() + 1.0
-            self._speak_or_append(None, str(msg.get("text") or ""))
-            if self.listener is not None and self.mode == "local":
-                await asyncio.sleep(0.2)
-                while self.audio.speaking_local:
-                    await asyncio.sleep(0.1)
-                self.listener.followup()
-            try:
-                answer = await asyncio.wait_for(asyncio.shield(self.ask_fut), float(msg.get("timeout_s", 30)))
-            except asyncio.TimeoutError:
-                answer = None
-            self.ask_fut = None
-            return {"answer": answer}
         if op == "inject":  # tests: play a WAV into the mic stream as if the user said it
             import wave
 
@@ -644,11 +587,15 @@ class Hub:
             if VOICE_MODE != "live" or self.live is None or not hasattr(self.live, "send_text"):
                 raise ValueError("typed requests need live mode with the brain running")
             return await self.live.send_text(str(msg.get("text", "")), str(msg.get("source", "typed")))
-        if op == "tasks" and hasattr(self.live, "workers"):
-            return {"tasks": {k: {kk: vv for kk, vv in w.items() if kk != "started"} for k, w in self.live.workers.items()}}
+        if op == "tasks":
+            workers = getattr(self.live, "workers", {})
+            return {"tasks": {k: {kk: vv for kk, vv in w.items() if kk not in ("started", "brief")}
+                              for k, w in workers.items()}}
         if op == "status":
-            return {"mode": self.mode, "voice_mode": VOICE_MODE, "attached": self.attached[0] if self.attached else None,
-                    "voice": VOICE if self.mode == "gpt-live" else "piper", "open_requests": len(self.requests),
+            auto = getattr(self.live, "autonomy", None)
+            return {"mode": self.mode, "voice_mode": VOICE_MODE,
+                    "voice": VOICE if self.mode == "gpt-live" else "piper",
+                    "autonomy": auto.status() if auto is not None else None,
                     "spoken_s": {k: round(v, 1) for k, v in self.audio.spoken_s.items()},
                     "mic_s": round(self.audio.mic_chunks * MIC_CHUNK / MIC_RATE, 1),
                     "sent_to_live_s": round(self.audio.sent_chunks * MIC_CHUNK / MIC_RATE, 1)}
@@ -657,28 +604,23 @@ class Hub:
         raise ValueError(f"unknown op {op!r}")
 
     async def client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-        try:
-            async for line in reader:
+        async for line in reader:
+            try:
+                msg = json.loads(line)
+            except ValueError:
+                continue
+            rid = msg.get("rid")
+
+            async def answer(m=msg, rid=rid):
                 try:
-                    msg = json.loads(line)
-                except ValueError:
-                    continue
-                rid = msg.get("rid")
+                    out = {"ok": True, **(await self.handle(m, writer))}
+                except Exception as e:
+                    out = {"ok": False, "error": str(e)}
+                if rid is not None:
+                    out["rid"] = rid
+                writer.write((json.dumps(out) + "\n").encode())
 
-                async def answer(m=msg, rid=rid):
-                    try:
-                        out = {"ok": True, **(await self.handle(m, writer))}
-                    except Exception as e:
-                        out = {"ok": False, "error": str(e)}
-                    if rid is not None:
-                        out["rid"] = rid
-                    writer.write((json.dumps(out) + "\n").encode())
-
-                asyncio.create_task(answer())  # an `ask` must not block the brain's other requests
-        finally:
-            if self.attached and self.attached[1] is writer:
-                log.info("brain detached: %s", self.attached[0])
-                self.attached = None
+            asyncio.create_task(answer())  # a slow `text` (phone echo check) must not block other requests
 
     async def serve(self, path: str = SOCK) -> None:
         Path(path).unlink(missing_ok=True)

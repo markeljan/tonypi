@@ -15,6 +15,7 @@ tonypi-chat = "tonypi.agent.chat:main"
 tonyd = "tonypi.tonyd.server:main"
 tonypi-mcp = "tonypi.mcp_server:main"
 tonypi-voice = "tonypi.voice.service:main"
+tony = "tonypi.brain.cli:main"
 
 [project.optional-dependencies]
 vision = ["opencv-python-headless>=4.10"]
