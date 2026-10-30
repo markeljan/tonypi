@@ -117,6 +117,21 @@ def test_idle_relaxes_torque(robot, monkeypatch):
     assert d.body.relaxed >= 1 and not d.torque_maybe_on
 
 
+def test_watchdog_check_waits_for_the_idle_delay(robot, monkeypatch):
+    """The periodic 'torque left on' check must not unload right as a skill ends (Tony fell mid-sway)."""
+    monkeypatch.setattr(server, "IDLE_RELAX_S", 0.8)
+    monkeypatch.setattr(server, "WATCH_S", 0.0)  # check on every loop, so it would hit the end of the skill
+    d, c = robot
+    d.body.status = lambda: {"torque_on": 16, "temps": {1: 40}, "hottest": (1, "left ankle", 40), "battery_mv": 11500}
+    time.sleep(3.2)  # the first periodic check comes 3 s after start
+    before = d.body.relaxed
+    c.run("wave")
+    time.sleep(0.4)  # well inside the idle delay
+    assert d.body.relaxed == before
+    time.sleep(0.8)
+    assert d.body.relaxed > before
+
+
 def test_head_is_clamped(robot):
     d, c = robot
     assert c.head(100, -100) == {"pan": 60.0, "tilt": -40.0}

@@ -198,7 +198,9 @@ class Tonyd:
                             self.torque_maybe_on = False
                     finally:
                         self.lock.release()
-            if now < next_check or not idle:
+            # the 20 s check unloads torque left on by others, never earlier than the idle delay above: unloading
+            # right as a step ends drops Tony mid-sway (2026-10-29: fell on its back after turn_left)
+            if now < next_check or not idle or now - self.last_skill_end < IDLE_RELAX_S:
                 continue
             next_check = now + WATCH_S
             if not self.lock.acquire(blocking=False):
