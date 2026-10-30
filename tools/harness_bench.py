@@ -185,40 +185,65 @@ def run_task(c: Conn, tonyd: TonydClient, name: str, timeout: float) -> dict:
 
 
 def yaw_deg(before: bytes, after: bytes) -> tuple[float | None, float]:
-    """How far the view turned (degrees, + = left turn: the scene moves right) from two snapshots, by phase
-    correlation of the grey images; None when they hardly overlap (response < 0.05)."""
+    """How far the view turned (degrees, + = left turn: the scene moves right) from two snapshots: ORB features
+    matched and a RANSAC similarity fit; the horizontal shift is the yaw. None below 15 inliers. Second value: the
+    inlier count. (Phase correlation was tried first: on real turns it locked onto rug patterns and flipped sign.)"""
     import math
 
     import cv2
     import numpy as np
-    a, b = (cv2.imdecode(np.frombuffer(x, np.uint8), cv2.IMREAD_GRAYSCALE).astype(np.float32) for x in (before, after))
-    (dx, _), response = cv2.phaseCorrelate(a, b, cv2.createHanningWindow(a.shape[::-1], cv2.CV_32F))
-    return (round(math.degrees(math.atan(dx / FX)), 1) if response >= 0.05 else None), round(response, 3)
+    a, b = (cv2.imdecode(np.frombuffer(x, np.uint8), cv2.IMREAD_GRAYSCALE) for x in (before, after))
+    orb = cv2.ORB_create(1500)
+    ka, da = orb.detectAndCompute(a, None)
+    kb, db = orb.detectAndCompute(b, None)
+    if da is None or db is None:
+        return None, 0
+    matches = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True).match(da, db)
+    if len(matches) < 15:
+        return None, len(matches)
+    pa = np.float32([ka[m.queryIdx].pt for m in matches])
+    pb = np.float32([kb[m.trainIdx].pt for m in matches])
+    M, inl = cv2.estimateAffinePartial2D(pa, pb, method=cv2.RANSAC, ransacReprojThreshold=4)
+    n = int(inl.sum()) if inl is not None else 0
+    if M is None or n < 15:
+        return None, n
+    # the shift of the image centre under the fitted transform (rotation about the optical axis = body roll)
+    cx, cy = a.shape[1] / 2, a.shape[0] / 2
+    dx = M[0, 0] * cx + M[0, 1] * cy + M[0, 2] - cx
+    return round(math.degrees(math.atan(dx / FX)), 1), n
 
 
-def snap(tonyd: TonydClient) -> bytes:
+SNAP_DIR = Path(os.environ.get("TONYPI_BENCH_SNAPS", "/home/pi/.local/state/tonypi/bench-snaps"))
+
+
+def snap(tonyd: TonydClient, name: str = "") -> bytes:
     time.sleep(0.6)  # a still frame
-    return Path(tonyd.snapshot()["path"]).read_bytes()
+    jpeg = Path(tonyd.snapshot()["path"]).read_bytes()
+    if name:  # kept, so the yaw numbers can be checked by eye
+        SNAP_DIR.mkdir(parents=True, exist_ok=True)
+        (SNAP_DIR / f"{name}.jpg").write_bytes(jpeg)
+    return jpeg
 
 
 def turn_trials(tonyd: TonydClient, skill: str) -> list[dict]:
     """T9 measurement: 3 x count 1 + 1 x count 3, each from a settled stand with the head centred: max tilt, yaw."""
     out = []
-    tonyd.head(0, 0)
-    for n in T9_TRIALS:
+    tonyd.head(0, 15)  # a bit up: furniture and walls to match, not the rug right in front of the feet
+    stamp = time.strftime("%H%M%S")
+    for i, n in enumerate(T9_TRIALS):
         fell = False
         if tonyd.state()["lying"]:
             tonyd.run("get_up")
         tonyd.run("settle")
-        a = snap(tonyd)
+        a = snap(tonyd, f"{stamp}-{skill}-{i}-before")
         job = tonyd.run(skill, n)
         if tonyd.state()["lying"]:
             fell = True
             tonyd.run("get_up")
         tonyd.run("settle")
-        yaw, resp = yaw_deg(a, snap(tonyd))
+        yaw, inliers = yaw_deg(a, snap(tonyd, f"{stamp}-{skill}-{i}-after"))
         out.append({"skill": skill, "count": n, "state": job["state"], "max_tilt_deg": job.get("max_tilt_deg"),
-                    "yaw_deg": yaw, "match": resp, "fell": fell, "said": job.get("said")})
+                    "yaw_deg": yaw, "inliers": inliers, "fell": fell, "said": job.get("said")})
         print(json.dumps(out[-1]), flush=True)
     return out
 
@@ -226,9 +251,12 @@ def turn_trials(tonyd: TonydClient, skill: str) -> list[dict]:
 def summary(trials: list[dict]) -> dict:
     ones = [t for t in trials if t["count"] == 1]
     yaws = [t["yaw_deg"] for t in ones if t["yaw_deg"] is not None]
+    tilts = [t["max_tilt_deg"] for t in ones if t["max_tilt_deg"] is not None]
     return {"max_tilt_count1": [t["max_tilt_deg"] for t in ones],
+            "mean_tilt_count1": round(sum(tilts) / len(tilts), 1) if tilts else None,
             "max_tilt_count3": [t["max_tilt_deg"] for t in trials if t["count"] == 3],
             "deg_per_step": round(sum(yaws) / len(yaws), 1) if yaws else None,
+            "deg_count3": [t["yaw_deg"] for t in trials if t["count"] == 3],
             "falls": sum(t["fell"] for t in trials)}
 
 
