@@ -219,23 +219,31 @@ class Audio:
 
     async def _mix(self) -> None:
         t = time.monotonic()
+        play_failed = False
         while True:
             a, self.remote = self.remote[:OUT_CHUNK], self.remote[OUT_CHUNK:]
             b, self.local = self.local[:OUT_CHUNK], self.local[OUT_CHUNK:]
             out = np.zeros(OUT_CHUNK, np.int32)
             out[:len(a)] += a
             out[:len(b)] += b
-            if self.play.returncode is not None or self.play.stdin.is_closing():
+            if play_failed or self.play.returncode is not None or self.play.stdin.is_closing():
                 # the speaker went away (USB hiccup, 2026-10-30: Tony was mute for an hour): reopen it
                 log.warning("speaker stopped (aplay exit %s); reopening in 1 s", self.play.returncode)
                 await asyncio.sleep(1.0)
                 try:
                     await self._open_play()
+                    play_failed = False
                 except OSError as e:
+                    play_failed = True
                     log.warning("speaker reopen failed: %s", e)
                 t = time.monotonic()
                 continue
-            self.play.stdin.write(np.clip(out, -32768, 32767).astype(np.int16).tobytes())
+            try:
+                self.play.stdin.write(np.clip(out, -32768, 32767).astype(np.int16).tobytes())
+            except OSError as e:
+                log.warning("speaker write failed: %s", e)
+                play_failed = True
+                continue
             t += OUT_CHUNK / OUT_RATE
             await asyncio.sleep(max(0.0, t - time.monotonic()))
 

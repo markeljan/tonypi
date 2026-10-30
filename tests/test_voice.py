@@ -583,6 +583,40 @@ def test_the_speaker_is_reopened_when_aplay_dies(monkeypatch):
     asyncio.run(run())
 
 
+def test_speaker_reopens_if_pipe_fails_during_write(monkeypatch):
+    async def run():
+        a = service.Audio()
+        written = []
+
+        class BrokenWriter:
+            def is_closing(self):
+                return False
+
+            def write(self, data):
+                raise BrokenPipeError("speaker disconnected")
+
+        class WorkingWriter:
+            def is_closing(self):
+                return False
+
+            def write(self, data):
+                written.append(len(data))
+
+        a.play = type("P", (), {"returncode": None, "stdin": BrokenWriter()})()
+        async def reopen():
+            a.play = type("P", (), {"returncode": None, "stdin": WorkingWriter()})()
+        a._open_play = reopen
+        monkeypatch.setattr(service.asyncio, "sleep", _fast_sleep)
+        task = asyncio.create_task(a._mix())
+        for _ in range(50):
+            await _real_sleep(0)
+        assert not task.done()
+        assert written
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+    asyncio.run(run())
+
+
 _real_sleep = asyncio.sleep
 
 
