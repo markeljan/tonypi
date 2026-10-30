@@ -24,6 +24,7 @@ from tonypi.agent import vision
 from tonypi.agent.body_link import BodyLink
 from tonypi.agent.brain import STOP_RE, Brain, debug_command
 from tonypi.agent.speech import Listener, Speaker
+from tonypi.switch import LABEL, parse_switch, request_switch
 
 log = logging.getLogger("tonypi.agent")
 SOCK = os.environ.get("TONYPI_SOCK", "/run/tonypi/agent.sock")
@@ -98,6 +99,12 @@ class Agent:
             self.emit("done", id=rid)
             return rid
         # anything new interrupts what's running; "stop" does nothing else
+        if (target := parse_switch(text)) is not None:  # "switch to pi": hand Tony to another harness
+            self.emit("info", id=rid, text=f"switching to {target}")
+            self.speaker.say(f"Switching to {LABEL[target]}.")
+            request_switch(target)
+            self.emit("done", id=rid)
+            return rid
         if robot_reserved():  # another harness / test owns the robot: don't cancel or move anything of theirs
             self.emit("info", id=rid, text=f"ignored: the robot is reserved ({ROBOT_LOCK} is held)")
             self.emit("done", id=rid)

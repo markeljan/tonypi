@@ -35,6 +35,7 @@ from pathlib import Path
 
 import numpy as np
 
+from tonypi.switch import LABEL, parse_switch, request_switch
 from tonypi.voice import SOCK
 
 log = logging.getLogger("tonypi.voice")
@@ -50,7 +51,9 @@ RETRY_LIVE_S = 120
 # No echo cancellation on the USB speaker/mic: by default the mic sends silence while Tony talks (half duplex), so
 # GPT-Live doesn't hear (and transcribe, or act on) Tony's own voice. 1 = full duplex (barge-in while Tony talks).
 DUPLEX = os.environ.get("TONYPI_VOICE_DUPLEX", "0") == "1"
-APPEND_MAX = 450  # Codex chunks context appends at 500 bytes
+APPEND_MAX = 450
+# "stop" never depends on a model: GPT-Live sometimes treats a bare "Stop." as "stop talking" and delegates nothing
+STOP_WORDS = re.compile(r"^\W*(?:hey\s+)?(?:tony\W+)?(stop|halt|freeze|stop it|stop moving)\b", re.I)  # Codex chunks context appends at 500 bytes
 
 # Keep this exact wording: it is the one that delegated reliably in live tests (2026-10-29). Two rewrites that
 # asked GPT-Live to judge whether speech was meant for Tony made it delegate nothing (it heard 'Tony' as 'Ciao').
@@ -349,6 +352,10 @@ class Hub:
         self.ask_parts: list[str] = []
         self.ask_timer: asyncio.TimerHandle | None = None
         self.ask_listen_from = 0.0  # ignore the transcript of Tony's own question
+        self.utt_parts: list[str] = []
+        self.utt_timer: asyncio.TimerHandle | None = None
+        self.last_switch_t = -1e9
+        self.last_stop_t = -1e9
         self.listener = None
         self.loop: asyncio.AbstractEventLoop | None = None
 
@@ -365,6 +372,14 @@ class Hub:
         """What GPT-Live heard. An answer to an `ask` is often not delegated (it isn't a request), so a pending ask
         collects the transcript and resolves after a 1.2 s pause."""
         self.emit_attached({"event": "transcript", "text": text})
+        if STOP_WORDS.match("".join(self.utt_parts) + text):
+            self._stop_body("".join(self.utt_parts) + text)
+        # a switch command may never become a delegation (GPT-Live finds "which Khermes" meaningless): check the
+        # whole utterance once it pauses
+        self.utt_parts.append(text)
+        if self.utt_timer:
+            self.utt_timer.cancel()
+        self.utt_timer = asyncio.get_running_loop().call_later(1.0, self._utterance_done)
         log.info("transcript %r", text)
         if (not text or self.ask_fut is None or self.ask_fut.done()
                 or time.monotonic() < max(self.ask_listen_from, self.audio.voice_until + 0.3)):  # not Tony's own question
@@ -374,6 +389,36 @@ class Hub:
             self.ask_timer.cancel()
         self.ask_timer = asyncio.get_running_loop().call_later(1.2, self._resolve_ask_from_transcript)
 
+    def _stop_body(self, text: str) -> None:
+        if time.monotonic() - self.last_stop_t < 3:
+            return
+        self.last_stop_t = time.monotonic()
+        log.warning("stop heard (%r): stopping tonyd directly", text)
+
+        def stop() -> None:
+            try:
+                from tonypi.tonyd.client import TonydClient
+
+                TonydClient().stop()
+            except Exception as e:
+                log.error("tonyd stop failed: %s", e)
+        threading.Thread(target=stop, daemon=True).start()
+        self.emit_attached({"event": "heard", "id": next(self.ids), "text": "stop", "mode": self.mode,
+                            "stopped_body": True})
+
+    def _utterance_done(self) -> None:
+        text, self.utt_parts = "".join(self.utt_parts), []
+        if (target := parse_switch(text)) is not None:
+            self._switch(target, None)
+
+    def _switch(self, target: str, item_id: str | None) -> None:
+        if time.monotonic() - self.last_switch_t < 15:  # transcript and delegation of the same words
+            return
+        self.last_switch_t = time.monotonic()
+        log.info("switching brain to %s", target)
+        self._speak_or_append(item_id, f"Switching to {LABEL[target]}.")
+        asyncio.get_running_loop().call_later(3.0, request_switch, target)  # let it say so first
+
     def _resolve_ask_from_transcript(self) -> None:
         if self.ask_fut is not None and not self.ask_fut.done() and self.ask_parts:
             self.ask_fut.set_result(re.sub(r"\s+([.,!?])", r"\1", " ".join("".join(self.ask_parts).split())))
@@ -381,6 +426,12 @@ class Hub:
     def on_request(self, text: str, item_id: str | None) -> None:
         """A user utterance: answers a pending ask, else goes to the attached brain."""
         log.info("heard (%s): %r", self.mode, text)
+        if (target := parse_switch(text)) is not None:  # "switch to pi": handled here, whatever brain is attached
+            if time.monotonic() - self.last_switch_t >= 15:
+                self._switch(target, item_id)
+            elif item_id and self.live:
+                self.live.append(item_id, "(switching)", speak=False)
+            return
         if self.ask_fut is not None and not self.ask_fut.done():
             self.ask_fut.set_result(text)
             if item_id and self.live:

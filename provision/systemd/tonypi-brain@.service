@@ -1,0 +1,13 @@
+[Unit]
+Description=TonyPi brain: the %i harness (bake-off; tools/e2e.sh %i; switch with tools/switch.sh or "switch to ...")
+After=tonypi-tonyd.service tonypi-mcp.service network-online.target
+
+[Service]
+User=pi
+Environment=PYTHONUNBUFFERED=1 XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+WorkingDirectory=/home/pi/tonypi
+ExecStart=/home/pi/tonypi/tools/e2e.sh %i
+# the harness scripts hand the mic/speaker back to tonypi-agent when they exit
+TimeoutStopSec=30
+KillMode=mixed
+Restart=no

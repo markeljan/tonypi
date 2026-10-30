@@ -1,0 +1,7 @@
+[Unit]
+Description=TonyPi: switch the brain to %i (tools/switch.sh)
+
+[Service]
+Type=oneshot
+User=pi
+ExecStart=/home/pi/tonypi/tools/switch.sh %i

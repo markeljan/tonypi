@@ -45,3 +45,38 @@ def test_ask_resolves_from_the_transcript_after_a_pause(monkeypatch):
             await asyncio.sleep(0.05)
         return await task
     assert asyncio.run(run()) == {"answer": "Try going around it on the left."}
+
+
+def test_switch_command_is_handled_by_the_voice_service(monkeypatch):
+    switched = []
+    monkeypatch.setattr(service, "request_switch", switched.append)
+
+    async def run():
+        hub = service.Hub(live_enabled=False)
+        hub.live = type("L", (), {"append": lambda *a, **k: True, "speak": lambda self, text: True})()
+        w = _Writer()
+        await hub.handle({"op": "attach", "name": "own"}, w)
+        hub.on_request("Ciao, switch to the pie", "item-9")
+        await asyncio.sleep(3.2)
+        return w.lines
+    lines = asyncio.run(run())
+    assert switched == ["pi"] and not any(l.get("event") == "heard" for l in lines)  # never reaches the brain
+
+
+def test_bare_stop_stops_the_body_without_any_model(monkeypatch):
+    stopped = []
+    import tonypi.tonyd.client as tc
+
+    monkeypatch.setattr(tc.TonydClient, "__init__", lambda self, *a, **k: None)
+    monkeypatch.setattr(tc.TonydClient, "stop", lambda self: stopped.append(1))
+
+    async def run():
+        hub = service.Hub(live_enabled=False)
+        w = _Writer()
+        await hub.handle({"op": "attach", "name": "pi"}, w)
+        hub.on_transcript(" Stop")
+        hub.on_transcript(".")
+        await asyncio.sleep(0.3)
+        return w.lines
+    lines = asyncio.run(run())
+    assert stopped == [1] and any(l.get("text") == "stop" and l.get("stopped_body") for l in lines)
