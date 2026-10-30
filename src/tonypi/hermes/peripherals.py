@@ -86,7 +86,7 @@ class SocketPeripheral(Peripheral):
                     conn.sendall((json.dumps({"type": "accepted", "op": "say"}) + "\n").encode())
                 elif text == "/status":
                     st = self.front.status()
-                    self.front.emit("status", **st, busy=self.front.busy, harness="hermes")
+                    self.front.emit("status", **{**st, "busy": self.front.busy, "harness": "hermes"})
                 else:
                     rid = self.front.submit(text, "terminal")
                     conn.sendall((json.dumps({"type": "accepted", "id": rid}) + "\n").encode())

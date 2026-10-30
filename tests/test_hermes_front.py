@@ -205,3 +205,23 @@ def test_tether_reset_at_task_start(monkeypatch):
     assert wait(lambda: h.started)
     assert ("tether", {"reset": True}) in f.tonyd.calls
     h.finish()
+
+
+def test_status_over_the_socket_names_the_harness(tmp_path):
+    import socket as so
+
+    from tonypi.hermes.peripherals import SocketPeripheral
+
+    class T(FakeTonyd):
+        def state(self, fresh=False):
+            return {"battery_mv": 12000, "busy": False}  # tonyd's own "busy" must not clash
+
+    f = Front(FakeHermes(), tonyd=T())
+    path = str(tmp_path / "a.sock")
+    SocketPeripheral(f, path).start()
+    s = so.socket(so.AF_UNIX)
+    s.settimeout(3)
+    s.connect(path)
+    s.sendall(b'{"text": "/status"}\n')
+    ev = json.loads(s.makefile().readline())
+    assert ev["type"] == "status" and ev["harness"] == "hermes" and ev["busy"] is False
