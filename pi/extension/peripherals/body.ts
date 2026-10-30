@@ -110,8 +110,10 @@ export function describe(label: string, j: tonyd.Job, why: string | null, secs: 
 export default async function body(pi: ExtensionAPI) {
   let skills: Record<string, string>;
   try {
-    skills = await Promise.race([tonyd.skills(), sleep(1500).then(() => { throw new Error("timeout"); })]);
-    if (!skills || typeof skills !== "object") throw new Error("no skills list");
+    const d = await Promise.race([tonyd.skillDetails(), sleep(1500).then(() => { throw new Error("timeout"); })]);
+    if (!d || typeof d !== "object") throw new Error("no skills list");
+    skills = Object.fromEntries(Object.entries(d).filter(([n, v]: [string, any]) => v.source !== "user" || mine(n))
+      .map(([n, v]: [string, any]) => [n, v.description ?? ""]));
   } catch {
     skills = loadSkills();
   }
