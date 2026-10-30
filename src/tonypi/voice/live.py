@@ -51,7 +51,7 @@ BRIDGE_AFTER_L_TURN_S = 3.0  # ... but not if an L turn started this recently (i
 DEDUPE_S = 20.0  # the same line (role + words) isn't logged twice within this window
 # Robot MCP tools that move the body: hidden from autonomy sessions when the body gates fail.
 BODY_TOOLS = ["say", "run_skill", "play_frames", "set_pose", "set_torque", "trial", "compare", "body_sweep",
-              "servo_calibrate", "calibration", "look", "scan", "video"]
+              "servo_calibrate", "calibration", "look", "scan", "video", "simulation_execute"]
 # After a stop, autonomy keeps the body still for a while unless the owner asks for a move (Autonomy.on_stop): an
 # utterance that names a move and has no negation / stillness word and isn't a question about the past.
 MOVE_WORDS = re.compile(r"\b(walk|wave|turn (?:to the )?(?:left|right)|turn around|step|move|stand up|get up|sit"

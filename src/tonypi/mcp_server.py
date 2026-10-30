@@ -368,6 +368,54 @@ def library() -> dict:
 
 
 @mcp.tool()
+def simulation_status() -> dict:
+    """Pinned PAB47/TonyPi installation, MuJoCo readiness and simulation-to-hardware limitations. Read only."""
+    from tonypi.simulation.service import status
+
+    return status()
+
+
+@mcp.tool()
+def simulation_catalog() -> dict:
+    """Discover all upstream .d6a actions and Tony's current motions/skills, with simulation support reasons.
+    Identifiers are upstream:NAME, motion:NAME, skill:NAME. Never moves the robot."""
+    from tonypi.simulation.catalog import catalog, repository
+
+    return catalog(repository(), tonyd)
+
+
+@mcp.tool()
+def simulate_motion(motion: str = "", frames: list[dict] | None = None, count: int = 1, start: str = "home",
+                    initial_raw: dict | None = None, objective: str = "stability", settle_s: float = 1.0,
+                    render: bool = True) -> dict:
+    """Run headless MuJoCo, NEVER hardware. Select a catalog motion OR motion-space frames (servos1..16).
+    start=home|prone|supine; optional initial_raw gives all 16 measured raw pulses for an upright home start.
+    objective=stability|recover. Returns measured model-only success, tilt, displacement, clipping, report id
+    and an optional PNG (start/middle/end). Success cannot authorize body work or prove real-world safety.
+    Scripted skills/live IK generation are unsupported. Count1..5, <=120 motion seconds, <=90 wall seconds."""
+    from tonypi.simulation.service import simulate
+
+    try:
+        return simulate(tonyd, motion, frames, count, start, initial_raw, objective, settle_s, render)
+    except (OSError, ValueError, RuntimeError) as e:
+        raise ToolError(str(e)) from e
+
+
+@mcp.tool()
+def simulation_execute(report_id: str) -> dict:
+    """PHYSICAL BODY WORK: only with current owner authorization, never after STOP or for simulation-only tasks.
+    Separately run one 30-degree-guarded Lab trial for an unclipped successful simulation report; locks/preflight,
+    stop/cancellation, recovery, stable finish and ledger use existing interfaces. Never clears a stop latch.
+    Requires unchanged frames/calibration, upright initial pose within20 raw counts, battery>=10.9V, temp<70C.
+    All bridge trials are refused while tethered; native skills retain their name and count.
+    Model success is only a screening step; inspect physical results and repeat trials before promotion."""
+    from tonypi.simulation.service import execute
+
+    with _learning():
+        return execute(tonyd, report_id)
+
+
+@mcp.tool()
 def say(text: str) -> dict:
     """Speak out loud through Tony's speaker (interrupts nothing; returns as soon as speaking starts)."""
     errors = []
