@@ -19,11 +19,11 @@ from typing import Callable
 
 log = logging.getLogger("tonypi.hermes.keeper")
 
-SETTLE_AFTER_S = float(os.environ.get("TONYPI_SETTLE_AFTER_S", "1.0"))
+SETTLE_AFTER_S = float(os.environ.get("TONYPI_SETTLE_AFTER_S", "0.6"))  # + POLL_S < tonyd's 1.5 s limp
 AUTO_GETUP = os.environ.get("TONYPI_HERMES_AUTO_GETUP", "1") != "0"
 STOP_GRACE_S = 10.0
 MAX_GETUPS = 2
-POLL_S = 0.5
+POLL_S = 0.25
 # no settle after these: head-only, already a stand, or meant to end lying down
 NO_SETTLE = {"look_left", "look_right", "look_up", "look_down", "look_center", "nod", "shake_head",
              "stand", "settle", "get_up", "lie_down", "sleep"}
