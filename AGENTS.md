@@ -18,6 +18,9 @@ with my goals. CLAUDE.md is the full hardware and service reference: read only t
 
 ## Senses
 - Head camera: `snapshot`, `scan(pans, tilt_deg)`, `video(seconds, frames)`, `look(pan, tilt)`.
+  `video_context(frames=24, seconds=12, end_ago_s=0)` returns one timestamped mosaic from continuous rolling
+  history (2 fps, 320x240, up to 60 s / 120 frames / 8 MiB in MCP memory). Select 1-24 frames and a past time
+  window; fewer frames during startup/gaps. No archive or automatic model upload; timestamps are approximate.
 - IMU and joints: `get_state` (tilt, lying, battery, temperatures, stop latch), `get_joints`.
 - iPhone (MCP `phone`, optional; it never moves me). Modes: mounted (on me) or companion (on a stand watching me; my
   main way to learn movement). Its 27 tools:

@@ -1,7 +1,7 @@
 """tonypi-mcp: the robot as an MCP server (Streamable HTTP), for Tony's Codex brain, Claude Code, or any MCP client.
 
-A thin layer over tonyd's socket (body, camera) and the agent's socket (speech). It holds no robot state and
-never touches the hardware, so it can restart freely. Default: http://127.0.0.1:8765/mcp
+A layer over tonyd's socket (body, camera) and the agent's socket (speech). It retains bounded camera history
+but never touches the hardware, so it can restart freely. Default: http://127.0.0.1:8765/mcp
 """
 
 from __future__ import annotations
@@ -10,19 +10,35 @@ import json
 import logging
 import os
 import socket
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.mcpserver.utilities.types import Image
 
 from tonypi.tonyd.client import TonydClient, TonydError
+from tonypi.video_context import FrameHistory
 
 AGENT_SOCK = os.environ.get("TONYPI_SOCK", "/run/tonypi/agent.sock")
 VOICE_SOCK = os.environ.get("TONYPI_VOICE_SOCK", "/run/tonypi/voice.sock")
 
+context_camera = TonydClient()
+frame_history = FrameHistory(lambda: context_camera.call("snapshot", timeout=2))
+
+
+@asynccontextmanager
+async def _lifespan(server):
+    frame_history.start()
+    try:
+        yield {}
+    finally:
+        frame_history.stop()
+        context_camera.close()
+
+
 mcp = MCPServer(
     "tonypi",
+    lifespan=_lifespan,
     instructions=(
         "You control Tony, a 35 cm Hiwonder TonyPi humanoid robot (16 leg/arm servos, 2-axis head with a camera, "
         "speaker). run_skill runs a named skill; one body job runs at a time and a new one preempts the last. "
@@ -162,6 +178,21 @@ def video(seconds: float = 2.0, frames: int = 4) -> list:
     with _robot():
         r = tonyd.call("burst", timeout=float(seconds) + 15, frames=frames, seconds=seconds)
     return _images(r["frames"], lambda f: f"t = {f['t_s']:.1f} s")
+
+
+@mcp.tool()
+def video_context(frames: int = 24, seconds: float = 12.0, end_ago_s: float = 0.0) -> list:
+    """Past head-camera views in ONE timestamped mosaic, oldest first (row-major). Always buffered locally
+    while MCP runs: 2 fps, 320x240, last 60 seconds, max 120 frames/8 MiB; no archive or automatic model uploads.
+    Select 1-24 evenly spaced frames from a window of `seconds` ending `end_ago_s` before now (sum <=60).
+    One frame returns the latest in that window. Startup/gaps may return fewer or none; metadata reports ages,
+    estimated capture UTC and head angles. Timestamps include encoding/socket uncertainty. This is sampled
+    visual context, not continuous model vision or a fast tracking controller. Does not move head/body."""
+    try:
+        status, jpeg = frame_history.mosaic(frames, seconds, end_ago_s)
+    except (ValueError, OSError) as exc:
+        raise ToolError(str(exc)) from exc
+    return [json.dumps(status)] + ([Image(data=jpeg, format="jpeg")] if jpeg is not None else [])
 
 
 @mcp.tool()
