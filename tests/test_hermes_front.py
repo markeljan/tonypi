@@ -72,6 +72,7 @@ def state_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(front_mod, "STATE", tmp_path)
     monkeypatch.setattr(front_mod, "TASK_LOG", tmp_path / "tasks.jsonl")
     monkeypatch.setattr(front_mod, "TIER", "fast")
+    monkeypatch.setattr(Front, "_commit_learned", lambda self, task: None)  # never touch the real repo/profile
     return tmp_path
 
 
