@@ -62,8 +62,10 @@ def main() -> None:
         return "logged in" in out, out.splitlines()[-1] if out else "?"
 
     def robot_tools():
-        have = asyncio.run(mcp_tools(url="http://127.0.0.1:8765/mcp"))
-        return NEEDED <= have, f"{len(have)} tools; missing {sorted(NEEDED - have)}" if NEEDED - have else f"{len(have)} tools"
+        have = asyncio.run(mcp_tools(command=["/home/pi/tonypi/.venv/bin/python", "-m", "tonypi.hermes.robot_mcp"],
+                                     env={**os.environ, "PYTHONPATH": str(REPO / "src")}))
+        return NEEDED <= have, (f"{len(have)} tools; missing {sorted(NEEDED - have)}" if NEEDED - have
+                                else f"{len(have)} tools (fairness filter: defaults + *_hermes)")
 
     def self_tools():
         have = asyncio.run(mcp_tools(command=["/home/pi/tonypi/.venv/bin/python", "-m", "tonypi.hermes.self_mcp"],
@@ -136,7 +138,7 @@ def main() -> None:
         return ok, f"{time.monotonic() - t0:.1f} s, tools {tools}, said {out!r}"
 
     checks = [check("Hermes gateway (API :8642)", gateway), check("ChatGPT/Codex login", codex),
-              check("Robot tools (tonypi-mcp :8765)", robot_tools), check("Self-update tools (tonypi-self)", self_tools),
+              check("Robot tools (tonypi.hermes.robot_mcp)", robot_tools), check("Self-update tools (tonypi-self)", self_tools),
               check("Body: upright, camera, battery, tether", body), check("Front end socket", front), check("Voice (tonypi-voice, GPT-Live-1)", voice),
               check("Task log + keeper", keeper_and_log), check("Harness tests", tests),
               check("Code frozen (committed)", frozen)]

@@ -423,14 +423,19 @@ def main() -> None:
 
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--no-voice", action="store_true", help="terminal socket only (no mic, no speaker)")
+    ap.add_argument("--voice-service", action="store_true",
+                    help="attach to tonypi-voice (GPT-Live-1) as the active brain; only in our own robot slot "
+                         "(hermes/start.sh passes it): the last attach wins")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    service = peripherals.voice_service_up()  # tonypi-voice owns the mic and speaker (GPT-Live-1)
+    service = args.voice_service and not args.no_voice  # tonypi-voice owns the mic and speaker (GPT-Live-1)
+    if service and not peripherals.voice_service_up():
+        log.warning("--voice-service: %s not answering yet; will keep trying", peripherals.VOICE_SOCK)
     speaker = None if args.no_voice or service else peripherals.make_speaker()
     front = Front(HermesRuns(), speak=speaker.say if speaker else None, stop_speaking=speaker.stop if speaker else None)
     front.keeper = BodyKeeper(front.tonyd, front.say, on_fall=front.body_note)
     front.keeper.start()
-    for p in peripherals.enabled(front, speaker, voice_service=service and not args.no_voice):
+    for p in peripherals.enabled(front, speaker, voice_service=service):
         p.start()
     if not front.hermes.health():
         log.warning("Hermes API server not reachable at %s (start: tonypi gateway run)", front.hermes.url)

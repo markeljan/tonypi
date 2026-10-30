@@ -49,7 +49,9 @@ python3 - "$REPO" "$PROFILE/config.yaml" "$BRAIN" "$MODEL" "$MCP_URL" "$EXTRA_MC
 import sys, yaml
 repo, out, brain, model, mcp_url, extra = sys.argv[1:]
 cfg = yaml.safe_load(open(f"{repo}/hermes/config.yaml").read().replace("__REPO__", repo))
-cfg["mcp_servers"]["tonypi"]["url"] = mcp_url
+if mcp_url != "http://127.0.0.1:8765/mcp":  # --mcp-url: a plain HTTP tonypi-mcp instead of the filtered stdio one
+    cfg["mcp_servers"]["tonypi"] = {k: v for k, v in cfg["mcp_servers"]["tonypi"].items()
+                                    if k not in ("command", "args", "env")} | {"url": mcp_url}
 if extra:
     cfg["mcp_servers"]["tonypi-extra"] = {**cfg["mcp_servers"]["tonypi"], "url": extra,
                                           "tools": {"include": ["scan", "video"], "resources": False, "prompts": False}}

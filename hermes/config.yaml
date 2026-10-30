@@ -41,8 +41,12 @@ platform_toolsets:
   telegram: [mcp-tonypi, mcp-tonypi-self, memory, skills]
 
 mcp_servers:
-  tonypi:   # the robot: skills, head, camera, state, speech, and motion authoring (joints, keyframes, calibration)
-    url: http://127.0.0.1:8765/mcp
+  tonypi:   # the robot: skills, head, camera, state, speech, motion authoring. The shared tonypi-mcp tools run in-process
+    # via tonypi.hermes.robot_mcp with the bake-off fairness filter (defaults + *_hermes only; saves only *_hermes)
+    command: /home/pi/tonypi/.venv/bin/python
+    args: [-m, tonypi.hermes.robot_mcp]
+    env:
+      PYTHONPATH: __REPO__/src
     timeout: 200          # run_skill(wait=True) can take a while (dance ~60 s)
     connect_timeout: 10
     tools:
