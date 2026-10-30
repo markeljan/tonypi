@@ -54,3 +54,15 @@ the same three tasks from the same starting point; the owner times them and judg
 - [ ] Motion authoring loop: draft → test with guard → measure tilt/yaw → fix → save → use
 - [ ] Self-update: "learn/improve X" edits its own skills/prompts/code, reloads, commits
 - [ ] Logging for timing; one start command; dry run of one task per category
+
+## Run sheet (owner)
+One harness at a time; each command runs in the foreground, Ctrl-C ends the slot and hands the robot back.
+```
+tools/e2e.sh own       # our own harness (Codex app-server brain)
+tools/e2e.sh hermes    # Hermes Agent
+tools/e2e.sh pi        # pi agent
+```
+Each one first centres the head, stands Tony up, turns the tether off, and prints battery / camera; then starts
+the voice service (GPT-Live-1) and the harness. Place Tony at the start mark facing the wall, wait for his greeting
+(or ~10 s), then give the three tasks by voice (speak after Tony finishes a sentence: the mic is muted while he talks)
+or typed (the command is printed). Each harness logs every task (timing, tool calls, method) for the comparison.
