@@ -88,7 +88,9 @@ before `tools/bench.py`** or anything else that opens the board.
   `skills.json` = name → motion sequence with `"*step"` repeated by count, `calibration.json` = per-servo `trim` +
   soft `limits`). Ops `joints, play {frames, hold_s}, pose {positions, ms, hold_s}, torque {ids, on}, motions,
   motion_get/save/delete, skill_save/delete, calibration, servo_calibration, servo_calibrate {id, offset, limits,
-  save, reason}` (EEPROM; every call logged to `servo-calibration-log.jsonl`). Jobs take an opt-in `guard_tilt_deg`. Every job reports `max_tilt_deg` (judge a new gait by it).
+  save, reason}` (EEPROM; every call logged to `servo-calibration-log.jsonl`). Jobs take an opt-in `guard_tilt_deg`. Every job reports `max_tilt_deg` and `yaw_deg` (gyro X integral, + = left; matched camera shift within ~1° on
+  2026-10-29: default turn_left ≈ 6–13°/step and turn_right ≈ 0–3°/step on the living-room rug), plus `rot_deg` [x, y, z];
+  state has `heading_deg` (drifts slowly: use differences).
 - MCP: `tonypi-mcp.service` → `http://127.0.0.1:8765/mcp` (Streamable HTTP, no auth, localhost only by default). Tools:
   `list_skills, run_skill, stop, get_state, look, snapshot (image), say`. `.mcp.json` in the repo points Claude Code at it.
 

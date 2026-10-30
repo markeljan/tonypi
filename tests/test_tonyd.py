@@ -324,3 +324,23 @@ def test_tether_caps_walking_steps(robot):
     c.run("walk_forward", 5)
     c.run("walk_forward", 5)
     assert c.state()["tether"] == {"on": False, "max_steps": 10, "walked": 0}
+
+
+def test_gyro_heading_learns_bias_while_still_and_integrates_turns():
+    from types import SimpleNamespace as NS
+
+    from tonypi.tonyd.body import Body
+
+    b = Body.__new__(Body)
+    b.player = NS(playing=None)
+    b.heading_deg, b.rot_deg, b._bias, b._imu_t = 0.0, [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], None
+    t = 0.0
+    for _ in range(500):  # still at a bias of +1 deg/s on X
+        t += 0.01
+        b._on_imu(NS(t=t, gyro=(1.0, 0.0, 0.0)))
+    assert abs(b._bias[0] - 1.0) < 0.05 and b.heading_deg == 0.0
+    b.player.playing = "turn_left"
+    for _ in range(100):  # 1 s at -9 deg/s above bias = 9 deg to the left
+        t += 0.01
+        b._on_imu(NS(t=t, gyro=(-8.0, 0.0, 0.0)))
+    assert abs(b.heading_deg - 9.0) < 0.5  # + = left
