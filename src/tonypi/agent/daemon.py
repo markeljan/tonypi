@@ -9,6 +9,7 @@ connected terminal. {"op": "say", "text": ...} on the socket just speaks (used b
 from __future__ import annotations
 
 import argparse
+import fcntl
 import itertools
 import json
 import logging
@@ -26,6 +27,24 @@ from tonypi.agent.speech import Listener, Speaker
 
 log = logging.getLogger("tonypi.agent")
 SOCK = os.environ.get("TONYPI_SOCK", "/run/tonypi/agent.sock")
+
+
+ROBOT_LOCK = "/run/lock/tonypi-robot.lock"
+
+
+def robot_reserved() -> bool:
+    """Someone (a harness test, a script) holds the shared robot lock: this agent must not move or speak over it.
+    The agent itself never holds the lock, so a held lock is always someone else's."""
+    try:
+        with open(ROBOT_LOCK, "a") as f:
+            try:
+                fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return True
+            fcntl.flock(f, fcntl.LOCK_UN)
+    except OSError:
+        return False
+    return False
 
 
 class Agent:
@@ -79,6 +98,10 @@ class Agent:
             self.emit("done", id=rid)
             return rid
         # anything new interrupts what's running; "stop" does nothing else
+        if robot_reserved():  # another harness / test owns the robot: don't cancel or move anything of theirs
+            self.emit("info", id=rid, text=f"ignored: the robot is reserved ({ROBOT_LOCK} is held)")
+            self.emit("done", id=rid)
+            return rid
         self.body.cancel()
         self.speaker.stop()
         if STOP_RE.match(text):

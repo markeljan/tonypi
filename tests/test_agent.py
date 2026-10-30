@@ -240,3 +240,16 @@ def test_execute_runs_moves_one_at_a_time_in_order():
     a._execute(1, "wave then bow")
     assert [x for x in log if not x.startswith("say")] == ["wave", "bow", "nod", "settle"]
     assert "say:hello" in log
+
+
+def test_agent_ignores_commands_while_the_robot_lock_is_held(tmp_path, monkeypatch):
+    import fcntl
+    from tonypi.agent import daemon
+
+    lock = tmp_path / "robot.lock"
+    monkeypatch.setattr(daemon, "ROBOT_LOCK", str(lock))
+    assert not daemon.robot_reserved()
+    with open(lock, "a") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        assert daemon.robot_reserved()
+    assert not daemon.robot_reserved()
