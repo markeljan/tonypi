@@ -13,7 +13,7 @@ b() {
   if [ "$avail" -lt 1200 ]; then echo "=== $name SKIPPED: only ${avail} MB available" | tee -a $OUT/bench-$MODE.txt; return; fi
   echo "=== $name $(date +%T) avail=${avail}MB pi_rss=$(rss '-x pi')MB front_rss=$(rss '-f [t]onypi.pi_front.daemon')MB" | tee -a $OUT/bench-$MODE.txt
   ( sleep 8; echo "    during: pi_rss=$(rss '-x pi')MB front_rss=$(rss '-f [t]onypi.pi_front.daemon')MB load=$(cut -d' ' -f1 /proc/loadavg)" >> $OUT/bench-$MODE.txt ) &
-  $PY tools/pi_bench.py --timeout 300 "$@" 2>&1 | tee -a $OUT/bench-$MODE.txt
+  $PY tools/pi_bench.py --timeout ${TIMEOUT:-300} "$@" 2>&1 | tee -a $OUT/bench-$MODE.txt
   sleep 3
 }
 case $MODE in
@@ -31,6 +31,7 @@ case $MODE in
     trap 'pkill -f "[t]onypi.pi_front.daemon"; sudo systemctl start tonypi-agent' EXIT
     pkill -f "[t]onypi.pi_front.daemon"; sleep 1
     $PY -m tonypi.pi_front.daemon > $OUT/front-voice.log 2>&1 & sleep 25   # models load (KWS, ASR, Piper)
+    export TIMEOUT=90
     b V-T1 --voice "wave"
     b V-T5 --voice "how's your battery and how hot are you?"
     b V-T2 --voice "what do you see?"

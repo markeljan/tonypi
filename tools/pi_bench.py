@@ -21,6 +21,17 @@ import time
 SOCK = os.environ.get("TONYPI_PI_SOCK", "/run/tonypi/pi.sock")
 
 
+VOLUME = float(os.environ.get("TONYPI_BENCH_VOLUME", "0.15"))  # the mic is right next to the speaker: full volume clips
+
+
+def quiet_say(speaker, text: str) -> None:
+    import numpy as np
+
+    pcm = b"".join(c.audio_int16_bytes for c in speaker.voice.synthesize(text))
+    pcm = (np.frombuffer(pcm, dtype=np.int16) * VOLUME).astype(np.int16).tobytes()
+    speaker._play([pcm], speaker.rate)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("script", nargs="+")
@@ -31,6 +42,7 @@ def main() -> None:
     if args.voice:
         from tonypi.agent.speech import Speaker
         speaker = Speaker()
+        speaker.say = lambda text: quiet_say(speaker, text)
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     s.connect(SOCK)
     t0 = time.monotonic()
