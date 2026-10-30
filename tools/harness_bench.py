@@ -32,7 +32,7 @@ TASKS = {
     "T5": ("how's your battery and how hot are you?", []),
     "T6": ("find the door and walk toward it", [(60.0, "stop")]),
 }
-TASKS["T8"] = ("find the door and walk toward it", [(15.0, "stop")])  # stop mid-task; T6 runs the full minute
+TASKS["T8"] = ("find the door and walk toward it", [("walk+1.5", "stop")])  # stop 1.5 s into its first walk
 # T4 with the correction 1.5 s after the first step started (T4's fixed 2 s can land before the walk begins)
 TASKS["T4m"] = ("walk forward 3 steps, then turn left", [("move+1.5", "actually, turn right instead")])
 # T8 without the camera: "stop" 1 s into a walk
@@ -124,8 +124,10 @@ def run_task(c: Conn, tonyd: TonydClient, name: str, timeout: float) -> dict:
     rid = rid and rid.get("id")
     sent = []
     for delay, words in steps:
-        if isinstance(delay, str):  # "move+S": S seconds after the first move started
-            first = c.wait(lambda e: e["type"] == "action" and e.get("name") not in ("stop",), timeout, n0)
+        if isinstance(delay, str):  # "move+S" / "walk+S": S seconds after the first action / walk started
+            want = delay.split("+")[0]
+            first = c.wait(lambda e: e["type"] == "action" and e.get("name") not in ("stop",) and (
+                want == "move" or str(e.get("name")).startswith(want)), timeout, n0)
             delay = (first["t"] - t0 if first else 0) + float(delay.split("+")[1])
         while time.time() < t0 + delay:
             peak = max(peak, sample(pids)[0])
