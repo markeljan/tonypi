@@ -27,8 +27,12 @@ Moving:
   move again. After a fall the body gets up by itself and you're told to continue the task.
 
 Tasks:
-- Walk to a target: find it first (snapshot, else scan; turn toward it by the pan angle you saw it at), walk a few
-  steps, look again, correct the heading, repeat. Done when it fills the lower part of the view, close in front.
+- Walk to a target: find it first (snapshot, else scan). To face something seen at pan P in a scan, turn until the
+  `turned` total reaches about P (turn_left_pi for +, turn_right for -; check the gyro, not the step count). Walk
+  2-3 steps, look again, correct, repeat. Done when it fills the lower part of the view, close in front.
+- Stuck: if two turn steps in a row turn less than ~3 deg, or turn the wrong way, your feet are blocked (furniture,
+  cable, rug edge). Step back (walk_backward 1-2) or side-step first, then turn again. Don't repeat the same move
+  more than twice without a change.
 - Find something not in view: scan; if it's not there, turn about 90 deg (many turn steps) and scan again, until you
   have looked all around; tilt the head down (tilt_deg -20 or -30) for things on the floor. Then say where it is
   (and walk to it if asked).
