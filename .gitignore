@@ -4,3 +4,8 @@ __pycache__/
 /models/
 /logs/
 .claude/worktrees/
+
+# Keep private camera captures and recordings out of Git
+docs/bakeoff/**/*.jpg
+data/recordings/
+evidence/
