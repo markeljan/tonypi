@@ -90,7 +90,9 @@ before `tools/bench.py`** or anything else that opens the board.
   whatever pose it ended (going limp mid-step can tip Tony over: end in a stable pose, run `settle`, or `hold_s`), 20 s watchdog
   (re-unloads torque left on, warns on overheating / low battery as `warn` events, which the agent speaks).
 - `head` takes degrees (pan + = left, ±60; tilt + = up, −40..25). `snapshot` writes `/run/tonypi/snap-NNNNNN.jpg` from the
-  latest frame (~30 ms; the camera thread keeps capturing at 15 fps).
+  latest frame (the camera thread keeps capturing at 15 fps), with capture-time head/UTC metadata.
+  Head commands remain available during camera requests; moving-head frames are labelled (history skips them).
+  A stop latch survives a service restart; startup does not move the head. See `docs/CAMERA_HEAD.md`.
   Camera unplugged / back → `warn` event (`kind: "camera"`), which the agent says ("Camera disconnected." /
   "Camera reconnected."; after the current command if busy; at startup if the camera is missing).
 - **Tether** (charging cable): the board reports only voltage, so it's a setting (`tether.json` in the user dir, default
@@ -103,8 +105,8 @@ before `tools/bench.py`** or anything else that opens the board.
   save, reason}` (EEPROM; every call logged to `servo-calibration-log.jsonl`). Jobs take an opt-in `guard_tilt_deg`. Every job reports `max_tilt_deg` and `yaw_deg` (gyro X integral, + = left; matched camera shift within ~1° on
   2026-10-29: default turn_left ≈ 6–13°/step and turn_right ≈ 0–3°/step on the living-room rug), plus `rot_deg` [x, y, z];
   state has `heading_deg` (drifts slowly: use differences).
-- Looking around: tonyd `scan {pans, tilt_deg}` (one photo per head angle, each taken after the head settled, head
-  returns; ~2.8 s for 3) and `burst {frames, seconds}` (a short "video"); MCP `scan` / `video` return labelled images.
+- Looking around: tonyd `scan {pans, tilt_deg}` (one photo per head angle, each sampled after the head settled, head
+  returns unless cancelled; ~3.5 s for 3 at defaults) and `burst {frames, seconds}` (a short "video"); MCP `scan` / `video` return labelled images.
 - Every finished job is appended to `~/.local/share/tonypi/jobs.jsonl` (wall-clock times, tilt, yaw, temps, battery);
   op `job {id}` reads one (last 200 in memory); `trace: true` writes an IMU trace to `~/.local/share/tonypi/traces/`.
 - MCP: `tonypi-mcp.service` → `http://127.0.0.1:8765/mcp` (Streamable HTTP, localhost by default).

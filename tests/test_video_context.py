@@ -170,3 +170,19 @@ def test_mcp_tool_returns_one_image_and_lifecycle(history, monkeypatch):
 
     asyncio.run(lifecycle())
     assert events == ["start", "stop", "close"]
+
+
+def test_history_skips_turns_and_preserves_daemon_time_and_pose(history):
+    h, clock, shot = history
+    shot.update(head_moving=True, captured_monotonic_s=99.5, captured_epoch_s=1234567890.5,
+                head_pose_known=True, timestamp_basis='UVC dequeue UTC')
+    assert not h.capture() and not h._frames
+    shot['head_moving'] = False
+    assert h.capture()
+    shot['head_deg']['pan'] = 50  # the captured pose must be an independent copy
+    chosen, status = h.select(1, 2)
+    assert chosen[0].monotonic_s == 99.5
+    assert chosen[0].epoch_s == 1234567890.5
+    assert status['frames'][0]['head_deg']['pan'] == 10
+    assert status['frames'][0]['head_pose_known']
+    assert status['frames'][0]['timestamp_basis'] == 'UVC dequeue UTC'

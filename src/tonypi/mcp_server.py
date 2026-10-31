@@ -136,7 +136,9 @@ def perceive(mode: Literal["snapshot", "context"] = "snapshot") -> list:
         return video_context(frames=6, seconds=6)
     if mode != "snapshot":
         raise ToolError("mode must be snapshot or context")
-    return [snapshot()]
+    with _robot():
+        shot = tonyd.snapshot()
+        return _images([shot], lambda s: json.dumps({k: v for k, v in s.items() if k != "path"}))
 
 
 @contextmanager
@@ -222,7 +224,8 @@ def get_state() -> dict:
 @_tool()
 def look(pan_deg: float = 0.0, tilt_deg: float = 0.0) -> dict:
     """Point the head (and camera). pan_deg: + left / - right, -60..60. tilt_deg: + up / - down, -40..25.
-    0, 0 is straight ahead."""
+    0, 0 is straight ahead. Lightweight and allowed during capture; returns before settling.
+    Subsequent perceive labels moving-head frames. Stop latch still refuses movement."""
     if (not math.isfinite(pan_deg) or not math.isfinite(tilt_deg)
             or not -60 <= pan_deg <= 60 or not -40 <= tilt_deg <= 25):
         raise ToolError("head angles: pan -60..60, tilt -40..25, finite degrees")
@@ -231,12 +234,9 @@ def look(pan_deg: float = 0.0, tilt_deg: float = 0.0) -> dict:
 
 
 @_tool()
-def snapshot() -> Image:
+def snapshot() -> list:
     """What Tony sees right now: a 640x480 JPEG from the head camera (from the camera's latest frame)."""
-    with _robot():
-        path = tonyd.snapshot()["path"]
-        with open(path, "rb") as f:
-            return Image(data=f.read(), format="jpeg")
+    return perceive("snapshot")
 
 
 def _images(shots: list[dict], label) -> list:
@@ -256,7 +256,7 @@ def scan(pans: list[float] | None = None, tilt_deg: float | None = None) -> list
     with _robot():
         r = tonyd.call("scan", timeout=30, pans=pans or [60, 0, -60], tilt_deg=tilt_deg)
     return [f"heading {r['heading_deg']} deg"] + _images(
-        r["views"], lambda v: f"head pan {v['pan_deg']:+.0f} deg, tilt {v['tilt_deg']:+.0f} deg")
+        r["views"], lambda v: json.dumps({k: v for k, v in v.items() if k != "path"}))
 
 
 @_tool()
@@ -265,7 +265,7 @@ def video(seconds: float = 2.0, frames: int = 4) -> list:
     To watch a move, start it with run_skill(..., wait=False) or play_frames first, then call this."""
     with _robot():
         r = tonyd.call("burst", timeout=float(seconds) + 15, frames=frames, seconds=seconds)
-    return _images(r["frames"], lambda f: f"t = {f['t_s']:.1f} s")
+    return _images(r["frames"], lambda f: json.dumps({k: v for k, v in f.items() if k != "path"}))
 
 
 @_tool()
@@ -274,7 +274,8 @@ def video_context(frames: int = 24, seconds: float = 12.0, end_ago_s: float = 0.
     while MCP runs: 2 fps, 320x240, last 60 seconds, max 120 frames/8 MiB; no archive or automatic model uploads.
     Select 1-24 evenly spaced frames from a window of `seconds` ending `end_ago_s` before now (sum <=60).
     One frame returns the latest in that window. Startup/gaps may return fewer or none; metadata reports ages,
-    estimated capture UTC and head angles. Timestamps include encoding/socket uncertainty. This is sampled
+    capture UTC (UVC dequeue, not exposure) and commanded head angles. Mid-turn frames are skipped.
+    Unknown startup head poses are labelled; capture metadata excludes encoding/socket latency. This is sampled
     visual context, not continuous model vision or a fast tracking controller. Does not move head/body."""
     try:
         status, jpeg = frame_history.mosaic(frames, seconds, end_ago_s)

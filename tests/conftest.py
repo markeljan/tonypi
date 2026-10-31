@@ -8,7 +8,9 @@ def _private_robot_lock(tmp_path, monkeypatch):
     from tonypi.agent import daemon
     from tonypi.learn import runner
     from tonypi.voice import autonomy
+    from tonypi.tonyd import server
 
+    monkeypatch.setattr(server, "STOP_LATCH", tmp_path / "stop-latched")
     lock = str(tmp_path / "robot.lock")
     monkeypatch.setattr(daemon, "ROBOT_LOCK", lock)
     monkeypatch.setattr(runner, "ROBOT_LOCK", lock)

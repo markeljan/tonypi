@@ -45,6 +45,7 @@ from tonypi.tonyd.studio import parse_frames
 
 log = logging.getLogger("tonypi.tonyd")
 SNAP_DIR = Path(os.environ.get("TONYD_SNAP_DIR", "/run/tonypi"))
+STOP_LATCH = Path("/run/tonypi/stop-latched")  # runtime dir survives service restarts
 # Tethered to the charger (the board only reports voltage, so this is a setting, not detected): walking steps
 # since the tether was set or reset are capped so the cable isn't dragged. Turns and in-place moves don't count.
 TETHER_DEFAULT = {"on": True, "max_steps": 10}
@@ -125,16 +126,27 @@ class Tonyd:
         self.torque_maybe_on = True
         self.hold_s = 0.0  # the last job asked to hold its pose this long
         self.walked = 0  # walking steps since the tether was set / reset
-        self.stop_latched = False
+        self.stop_latched = STOP_LATCH.exists()
         self.last_warn = 0.0
         self.cached: dict = {}
         self.cached_t = 0.0
         self.head_deg = {"pan": 0.0, "tilt": 0.0}
+        self.head_lock = threading.Lock()  # metadata/send only; never camera, body jobs or settling
+        self.head_revision = 0
+        self.head_settled_at = 0.0
+        self.head_pose_known = False  # startup does not move the head to establish a pose
+        self.body.head_command = self._head_pulses
+        self.scan_lock = threading.Lock()
+        self.scan_cancel = threading.Event()
+        self.camera_slots = threading.BoundedSemaphore(2)  # no unbounded request/thread queue
         self._snap_ids = itertools.count(1)
+        self.snapshot_lock = threading.Lock()
+        self.snapshot_paths: collections.deque[Path] = collections.deque(sorted(SNAP_DIR.glob("snap-*.jpg")))
         self.recent: collections.deque[dict] = collections.deque(maxlen=KEEP_JOBS)  # finished job records
         self.ids = itertools.count(self._last_logged_id() + 1)  # ids stay unique in the log across restarts
         if camera is not None:
             camera.on_change = self._camera_changed
+            camera.head_state = self.head_state
 
     # ---- events ---------------------------------------------------------------------------------------------
 
@@ -227,10 +239,19 @@ class Tonyd:
         again), so no brain carries on moving after a spoken stop."""
         with self.command_lock:
             self.generation += 1
-            self._drop_queued()
-            self.body.cancel()
+            self.scan_cancel.set()
             if latch:
                 self.stop_latched = True
+            self.body.cancel()
+            self._drop_queued()
+            if latch:
+                STOP_LATCH.parent.mkdir(parents=True, exist_ok=True)
+                STOP_LATCH.touch()
+
+    def unlatch(self) -> None:
+        with self.command_lock:
+            STOP_LATCH.unlink(missing_ok=True)
+            self.stop_latched = False
 
     def _drop_queued(self) -> None:
         try:
@@ -421,6 +442,7 @@ class Tonyd:
             "hottest": self.cached.get("hottest"),
             "sensors_age_s": round(time.monotonic() - self.cached_t, 1) if self.cached_t else None,
             "head_deg": dict(self.head_deg),
+            "head": self.head_state(),
             "camera": self.camera.status() if self.camera else {"ok": False, "device": None},
             "tether": self.tether(),
             "stop_latched": self.stop_latched,
@@ -483,43 +505,122 @@ class Tonyd:
 
     # ---- head, camera ---------------------------------------------------------------------------------------
 
-    def head(self, pan_deg: float = 0.0, tilt_deg: float = 0.0, ms: int = 400) -> dict:
+    def _head_pulses(self, ms: int, pulses: dict[int, int]) -> None:
+        self.head(ms=ms, _pulses=pulses)
+
+    def head_state(self) -> dict:
+        with self.head_lock:
+            return {"head_deg": dict(self.head_deg) if self.head_pose_known else {},
+                    "head_pose_known": self.head_pose_known, "head_revision": self.head_revision,
+                    "head_moving": time.monotonic() < self.head_settled_at,
+                    "head_settled_at": self.head_settled_at}
+
+    def head(self, pan_deg: float = 0.0, tilt_deg: float = 0.0, ms: int = 400,
+             *, scan_revision: int | None = None, _pulses: dict[int, int] | None = None) -> dict:
+        if not all(math.isfinite(float(v)) for v in (pan_deg, tilt_deg, ms)):
+            raise ValueError("head angles/duration must be finite")
         pan = max(PAN_LIMIT[0], min(PAN_LIMIT[1], float(pan_deg)))
         tilt = max(TILT_LIMIT[0], min(TILT_LIMIT[1], float(tilt_deg)))
-        self.body.board.head(max(100, min(3000, int(ms))), {
-            PAN: round(HEAD_CENTRE[PAN] + pan * US_PER_DEG),
-            TILT: round(HEAD_CENTRE[TILT] + tilt * US_PER_DEG),
-        })
-        self.head_deg = {"pan": pan, "tilt": tilt}
-        return dict(self.head_deg)
+        duration = max(100, min(3000, int(ms)))
+        # Linearize against stop without waiting for capture, a body job, or head settling.
+        with self.command_lock, self.head_lock:
+            if self.stop_latched:
+                raise ValueError("stop latch: head motion refused")
+            if scan_revision is not None:
+                if self.scan_cancel.is_set() or scan_revision != self.head_revision:
+                    raise ValueError("scan cancelled by stop or newer head command")
+            else:
+                self.scan_cancel.set()
+            if _pulses is not None:
+                if self.body.cancelled.is_set():
+                    raise ValueError("head gesture cancelled")
+                # Legacy gestures send only their requested channel. Never force an unknown
+                # or concurrently changed other axis to an old target.
+                pan = ((_pulses[PAN] - HEAD_CENTRE[PAN]) / US_PER_DEG
+                       if PAN in _pulses else self.head_deg["pan"])
+                tilt = ((_pulses[TILT] - HEAD_CENTRE[TILT]) / US_PER_DEG
+                        if TILT in _pulses else self.head_deg["tilt"])
+                pan = max(PAN_LIMIT[0], min(PAN_LIMIT[1], pan))
+                tilt = max(TILT_LIMIT[0], min(TILT_LIMIT[1], tilt))
+            pulses = {PAN: round(HEAD_CENTRE[PAN] + pan * US_PER_DEG),
+                      TILT: round(HEAD_CENTRE[TILT] + tilt * US_PER_DEG)}
+            self.body.board.head(duration, {ch: p for ch, p in pulses.items()
+                                            if _pulses is None or ch in _pulses})
+            self.head_deg = {"pan": pan, "tilt": tilt}
+            self.head_revision += 1
+            self.head_pose_known = self.head_pose_known or _pulses is None or {PAN, TILT} <= _pulses.keys()
+            self.head_settled_at = time.monotonic() + duration / 1000 + 0.1
+            return dict(self.head_deg)
 
     def snapshot(self, newer_than: float | None = None) -> dict:
         if self.camera is None:
             raise RuntimeError("camera disabled")
         n = next(self._snap_ids)
         path = SNAP_DIR / f"snap-{n:06d}.jpg"
-        age = self.camera.snapshot(path, newer_than=newer_than)
-        if age is None:
-            raise RuntimeError("no camera frame (is the camera plugged in?)")
-        old = SNAP_DIR / f"snap-{n - KEEP_SNAPSHOTS:06d}.jpg"
-        old.unlink(missing_ok=True)
-        return {"path": str(path), "frame_age_s": round(age, 3), "width": self.camera.width,
-                "height": self.camera.height, "head_deg": dict(self.head_deg)}
+        metadata = self.camera.snapshot(path, newer_than=newer_than)
+        if metadata is None:
+            raise RuntimeError("no fresh camera frame (camera disconnected or not yet settled)")
+        # Keep completion order: concurrent JPEG encoders can finish out of sequence.
+        with self.snapshot_lock:
+            try:
+                self.snapshot_paths.remove(path)
+            except ValueError:
+                pass
+            self.snapshot_paths.append(path)
+            while len(self.snapshot_paths) > KEEP_SNAPSHOTS:
+                self.snapshot_paths.popleft().unlink(missing_ok=True)
+        return {"path": str(path), "width": self.camera.width, "height": self.camera.height, **metadata}
 
-    def scan(self, pans=(60, 0, -60), tilt_deg: float | None = None, settle_s: float = 0.5) -> dict:
-        """Look around with the head only: one photo per pan angle (+ = left), then the head goes back."""
-        back = dict(self.head_deg)
+    def scan(self, pans=(60, 0, -60), tilt_deg: float | None = None, settle_s: float = 0.5,
+             *, accepted: tuple[int, int] | None = None) -> dict:
+        """Move, wait only for head settling, then sample. A newer head/stop cancels without restoring."""
+        if not self.scan_lock.acquire(blocking=False):
+            raise ValueError("scan already running")
+        try:
+            return self._scan(pans, tilt_deg, settle_s, accepted)
+        finally:
+            self.scan_lock.release()
+
+    def _scan(self, pans, tilt_deg, settle_s, accepted) -> dict:
+        if self.camera is None:
+            raise RuntimeError("camera disabled")
+        with self.command_lock:
+            if accepted is not None and accepted != (self.generation, self.head_revision):
+                raise ValueError("scan cancelled before start by stop or newer command")
+            self.scan_cancel.clear()
+            initial = self.head_state()
+            back = dict(self.head_deg)
+        revision = initial["head_revision"]
         tilt = back["tilt"] if tilt_deg is None else float(tilt_deg)
+        positions = [float(pan) for pan in list(pans)[:7]]
+        settle = float(settle_s)
+        if not all(math.isfinite(value) for value in [*positions, tilt, settle]):
+            raise ValueError("scan angles/settle must be finite")
         views = []
         try:
-            for pan in list(pans)[:7]:
-                self.head(pan, tilt, ms=350)
-                moved = time.monotonic() + 0.35 + max(0.1, min(2.0, float(settle_s)))
-                time.sleep(moved - time.monotonic())
-                views.append({**self.snapshot(newer_than=moved), "pan_deg": self.head_deg["pan"],
-                              "tilt_deg": self.head_deg["tilt"]})
+            for pan in positions:
+                self.head(pan, tilt, ms=350, scan_revision=revision)
+                revision += 1
+                settled = self.head_state()["head_settled_at"]
+                # Include UVC buffering/read uncertainty in the fixed settling interval. Never
+                # wait for a future exposure: a stalled camera fails the freshness filter at once.
+                deadline = settled + max(0.1, min(2.0, settle)) + 3 / self.camera.fps
+                if self.scan_cancel.wait(max(0, deadline - time.monotonic())):
+                    raise ValueError("scan cancelled by stop or newer head command")
+                shot = self.snapshot(newer_than=settled)
+                if (shot.get("head_moving") or not shot.get("head_pose_known")
+                        or shot.get("head_revision") != revision
+                        or self.head_state()["head_revision"] != revision):
+                    raise ValueError("no settled frame for scan position")
+                views.append({**shot, "pan_deg": shot["head_deg"]["pan"],
+                              "tilt_deg": shot["head_deg"]["tilt"]})
         finally:
-            self.head(back["pan"], back["tilt"], ms=350)
+            # Do not resume or overwrite a newer head command after stop/cancellation.
+            if initial["head_pose_known"]:
+                try:
+                    self.head(back["pan"], back["tilt"], ms=350, scan_revision=revision)
+                except ValueError:
+                    pass
         b = self.body
         return {"views": views, "heading_deg": None if getattr(b, "heading_deg", None) is None else round(b.heading_deg, 1)}
 
@@ -537,7 +638,7 @@ class Tonyd:
 
     # ---- socket server --------------------------------------------------------------------------------------
 
-    def handle(self, msg: dict, reply) -> None:
+    def handle(self, msg: dict, reply, *, scan_token: tuple[int, int] | None = None) -> None:
         """Runs one request; `reply(dict)` sends the answer (from another thread for run+wait)."""
         op = msg.get("op")
         if op == "ping":
@@ -574,7 +675,7 @@ class Tonyd:
             self.stop(bool(msg.get("latch")))
             reply({"stopped": True, "latched": self.stop_latched})
         elif op == "unlatch":
-            self.stop_latched = False
+            self.unlatch()
             reply({"latched": False})
         elif op == "state":
             reply({"state": self.state(bool(msg.get("fresh")))})
@@ -583,7 +684,8 @@ class Tonyd:
         elif op == "snapshot":
             reply(self.snapshot())
         elif op == "scan":
-            reply(self.scan(msg.get("pans") or (60, 0, -60), msg.get("tilt_deg"), msg.get("settle_s", 0.5)))
+            reply(self.scan(msg.get("pans") or (60, 0, -60), msg.get("tilt_deg"), msg.get("settle_s", 0.5),
+                            accepted=scan_token))
         elif op == "burst":
             reply(self.burst(msg.get("frames", 4), msg.get("seconds", 2.0)))
         elif op == "relax":
@@ -662,22 +764,41 @@ class Tonyd:
             except OSError:
                 pass
 
+        def dispatch(msg: dict, camera_request: bool = False, scan_token=None) -> None:
+            rid = msg.get("rid")
+            try:
+                self.handle(msg, lambda r: send({"rid": rid, "ok": True, **r}), scan_token=scan_token)
+            except Exception as e:
+                send({"rid": rid, "ok": False, "error": str(e)})
+            finally:
+                if camera_request:
+                    self.camera_slots.release()
+
         try:
             for line in conn.makefile("r", encoding="utf-8"):
                 if not line.strip():
                     continue
                 try:
                     msg = json.loads(line)
+                    if not isinstance(msg, dict):
+                        raise ValueError("request must be an object")
                     rid = msg.get("rid")
                     if msg.get("op") == "subscribe":
                         with self.subs_lock:
                             self.subs[conn] = wlock
                         send({"rid": rid, "ok": True, "subscribed": True})
                         continue
-                    self.handle(msg, lambda r, rid=rid: send({"rid": rid, "ok": True, **r}))
-                except Exception as e:
-                    send({"rid": msg.get("rid") if isinstance(msg, dict) else None, "ok": False,
-                          "error": f"{e}" if isinstance(e, (ValueError, RuntimeError)) else f"{type(e).__name__}: {e}"})
+                    if msg.get("op") in ("snapshot", "scan", "burst"):
+                        if not self.camera_slots.acquire(blocking=False):
+                            send({"rid": rid, "ok": False, "error": "camera request capacity reached; retry later"})
+                            continue
+                        with self.command_lock:
+                            token = (self.generation, self.head_revision)
+                        threading.Thread(target=dispatch, args=(msg, True, token), daemon=True).start()
+                    else:
+                        dispatch(msg)
+                except (ValueError, TypeError) as e:
+                    send({"ok": False, "error": str(e)})
         except OSError:
             pass
         finally:
@@ -713,7 +834,6 @@ def main() -> None:
     d = Tonyd(Body(), camera).start()  # wires camera.on_change before the camera thread runs
     if camera:
         camera.start()
-    d.head(0, 0)
     try:
         d.serve()
     finally:

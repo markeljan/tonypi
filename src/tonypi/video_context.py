@@ -20,6 +20,8 @@ class Frame:
     epoch_s: float
     jpeg: bytes
     head_deg: dict
+    head_pose_known: bool
+    timestamp_basis: str
 
 
 class FrameHistory:
@@ -64,7 +66,13 @@ class FrameHistory:
         # Reject stalled cameras instead of filling the history with old duplicates.
         if not math.isfinite(age) or age < 0 or age > 0.75:
             raise ValueError("camera frame is stale")
-        captured = received - age
+        # Mid-turn views may be blurred; retain settled views with the exact daemon tags.
+        if shot.get("head_moving", False):
+            return False
+        captured = float(shot.get("captured_monotonic_s", received - age))
+        captured_epoch = float(shot.get("captured_epoch_s", epoch - age))
+        if not math.isfinite(captured) or not math.isfinite(captured_epoch):
+            raise ValueError("invalid capture timestamp")
         with self._lock:
             if self._frames and captured - self._frames[-1].monotonic_s < 0.5 / self.fps:
                 return False
@@ -80,7 +88,9 @@ class FrameHistory:
         ok, jpeg = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, 70])
         if not ok:
             raise ValueError("camera JPEG encoding failed")
-        frame = Frame(captured, epoch - age, jpeg.tobytes(), dict(shot.get("head_deg", {})))
+        frame = Frame(captured, captured_epoch, jpeg.tobytes(), dict(shot.get("head_deg", {})),
+                      bool(shot.get("head_pose_known", False)),
+                      shot.get("timestamp_basis", "estimated capture UTC from frame age"))
         with self._lock:
             self._frames.append(frame)
             self._bytes += len(frame.jpeg)
@@ -125,10 +135,11 @@ class FrameHistory:
         else:
             chosen = []
         status.update({"requested_frames": frames, "returned_frames": count, "window_seconds": seconds,
-                       "end_ago_s": end_ago_s, "timestamp_basis": "estimated capture UTC from tonyd frame age; "
-                       "includes snapshot encoding and socket latency", "order": "oldest first, row-major",
+                       "end_ago_s": end_ago_s, "timestamp_basis": "per-frame tonyd capture UTC (UVC dequeue, not sensor exposure); "
+                       "legacy servers estimated from frame age; moving-head frames skipped", "order": "oldest first, row-major",
                        "frames": [{"index": i + 1, "utc": self.utc(f.epoch_s),
-                                   "age_s": round(now - f.monotonic_s, 3), "head_deg": f.head_deg}
+                                   "age_s": round(now - f.monotonic_s, 3), "head_deg": f.head_deg,
+                                   "head_pose_known": f.head_pose_known, "timestamp_basis": f.timestamp_basis}
                                   for i, f in enumerate(chosen)]})
         return chosen, status
 

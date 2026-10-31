@@ -88,11 +88,14 @@ def robot():
     sock = Path(tempfile.mkdtemp()) / "tonyd.sock"
     d = Tonyd(_Body()).start()
     threading.Thread(target=d.serve, args=(str(sock),), daemon=True).start()
+    client = TonydClient(str(sock))
     for _ in range(100):
-        if sock.exists():
+        try:
+            client.call("ping", timeout=0.2)
             break
-        time.sleep(0.01)
-    return d, TonydClient(str(sock))
+        except TonydError:
+            time.sleep(0.01)
+    return d, client
 
 
 def test_skills_match_the_llm_actions():
@@ -356,7 +359,7 @@ def test_gyro_heading_learns_bias_while_still_and_integrates_turns():
 
 def test_scan_and_burst_with_a_fake_camera(monkeypatch, tmp_path):
     class Cam:
-        width, height = 640, 480
+        width, height, fps = 640, 480, 15
 
         def __init__(self):
             self.on_change, self.calls = None, []
@@ -364,16 +367,17 @@ def test_scan_and_burst_with_a_fake_camera(monkeypatch, tmp_path):
         def snapshot(self, path, newer_than=None):
             self.calls.append(newer_than)
             path.write_bytes(b"jpeg")
-            return 0.01
+            return {"frame_age_s": 0.01, **self.head_state()}
 
         def status(self):
             return {"ok": True}
 
     monkeypatch.setattr(server, "SNAP_DIR", tmp_path)
     d = Tonyd(_Body(), Cam())
+    d.head(0, 0)
     r = d.scan(pans=[60, 0, -60], settle_s=0.1)
     assert [v["pan_deg"] for v in r["views"]] == [60, 0, -60] and d.head_deg["pan"] == 0
-    assert all(t is not None for t in d.camera.calls)  # every view waits for a frame taken after the head moved
+    assert all(t is not None for t in d.camera.calls)  # freshness is a filter after the fixed head-settle wait
     b = d.burst(frames=3, seconds=0.4)
     assert len(b["frames"]) == 3 and b["frames"][-1]["t_s"] >= 0.35
 

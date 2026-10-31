@@ -29,6 +29,8 @@ class Camera:
         self.device: str | None = None
         self._frame = None
         self._t = 0.0
+        self._metadata: dict = {}
+        self.head_state: Callable[[], dict] = lambda: {}
         self._lock = threading.Lock()
         self._running = False
         self._missing_logged = False
@@ -89,7 +91,13 @@ class Camera:
                 log.info("camera open: %s", self.device)
                 self._set_connected(True)
                 self._missing_logged, failures = False, 0
+            # Never hold a camera/control lock over an exposure or device read. OpenCV supplies
+            # dequeue time, not sensor exposure time; conservatively include two frame periods.
+            before = self.head_state()
+            started = time.monotonic()
             ok, frame = cap.read()
+            captured, epoch = time.monotonic(), time.time()
+            after = self.head_state()
             if not ok:
                 failures += 1
                 if failures > 10:
@@ -101,8 +109,19 @@ class Camera:
                 time.sleep(0.1)
                 continue
             failures = 0
+            moving = (before.get("head_moving", False) or after.get("head_moving", False)
+                      or before.get("head_revision") != after.get("head_revision")
+                      or started - 2 / self.fps < after.get("head_settled_at", 0))
+            metadata = {"captured_monotonic_s": captured, "captured_epoch_s": epoch,
+                        "capture_started_monotonic_s": started, "head_moving": moving,
+                        "head_deg": dict(after.get("head_deg", {})),
+                        "head_pose_known": after.get("head_pose_known", False),
+                        "head_pose_basis": "commanded target; not encoder feedback",
+                        "head_revision": after.get("head_revision"),
+                        "timestamp_basis": "UVC dequeue UTC; exposure precedes dequeue",
+                        "capture_uncertainty_s": round(captured - started + 2 / self.fps, 4)}
             with self._lock:
-                self._frame, self._t = frame, time.monotonic()
+                self._frame, self._t, self._metadata = frame, captured, metadata
             self.frames += 1
         if cap is not None:
             cap.release()
@@ -114,30 +133,30 @@ class Camera:
                 return None
             return self._frame, self._t
 
-    def jpeg(self, quality: int = 85, max_age: float = 2.0, newer_than: float | None = None) -> tuple[bytes, float] | None:
-        """newer_than: wait (up to 1.5 s) for a frame captured after that monotonic time, e.g. after a head move."""
+    def jpeg(self, quality: int = 85, max_age: float = 2.0,
+             newer_than: float | None = None) -> tuple[bytes, dict] | None:
+        """Encode a reference to the latest published frame; freshness is a filter, never a wait."""
         import cv2
 
-        deadline = time.monotonic() + 1.5
-        while newer_than is not None and self._t <= newer_than and time.monotonic() < deadline:
-            time.sleep(0.02)
-        got = self.latest(max_age)
-        if got is None:
-            return None
-        frame, t = got
+        with self._lock:
+            if (self._frame is None or time.monotonic() - self._t > max_age
+                    or (newer_than is not None and self._t <= newer_than)):
+                return None
+            frame, metadata = self._frame, dict(self._metadata)
+        # The capture loop replaces frames rather than mutating them. Encoding cannot block capture/head.
         ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, quality])
-        return (buf.tobytes(), t) if ok else None
+        return (buf.tobytes(), metadata) if ok else None
 
-    def snapshot(self, path: Path, quality: int = 85, newer_than: float | None = None) -> float | None:
-        """Writes the latest frame as JPEG (atomically). Returns the frame's age in seconds, or None."""
+    def snapshot(self, path: Path, quality: int = 85, newer_than: float | None = None) -> dict | None:
+        """Write the latest frame atomically with metadata belonging to that exact frame."""
         got = self.jpeg(quality, newer_than=newer_than)
         if got is None:
             return None
-        data, t = got
+        data, metadata = got
         tmp = path.with_suffix(".tmp")
         tmp.write_bytes(data)
         tmp.replace(path)
-        return time.monotonic() - t
+        return {**metadata, "frame_age_s": time.monotonic() - metadata["captured_monotonic_s"]}
 
     def status(self) -> dict:
         with self._lock:

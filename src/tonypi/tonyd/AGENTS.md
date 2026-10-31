@@ -15,6 +15,10 @@ the learning runner and the phone bridge reach the body through its socket `/run
   At most one recovery, never after cancellation/latch/heat/low battery, never outside an active requested job.
   Missing verified recovery or ambiguous orientation fails closed. Raw learning jobs retain opt-in `guard_tilt_deg`
   and learning-runner recovery. Stop preempts both paths; no recovery clears cancellation or the latch.
+- Camera requests never hold command/body locks across capture or JPEG encoding. Head is a lightweight command;
+  stop/newer head cancels scans, including workers that start late. Preserve capture-time pose/timestamps and
+  mark moving/unknown poses. `/run/tonypi/stop-latched` preserves the latch across service restarts.
+  See `docs/CAMERA_HEAD.md` and the `camera-head-check` skill.
 - Never open the board or camera from another process. `tools/bench.py` needs `sudo systemctl stop tonypi-tonyd` first.
 
 ## Files
