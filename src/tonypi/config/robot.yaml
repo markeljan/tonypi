@@ -1,0 +1,51 @@
+# TonyPi hardware description. Single source of truth for IDs, names and limits.
+# Positions are bus-servo counts: 0..1000, 500 = mechanical centre, ~0.24 deg/count (verify per servo).
+# Joint names come from the owner's robot-web-ui mapping (tested by hand on this robot).
+
+controller:
+  device: /dev/ttyAMA0      # RP1 UART0, GPIO14/15 (dtparam=uart0=on)
+  baudrate: 1000000
+
+bus_servos:
+  # id: {name, side, group, deviation (EEPROM offset recorded 2026-03-31; lives in the servo)}
+  1:  {name: left_ankle_roll,      side: left,  group: leg, deviation: -16}
+  2:  {name: left_ankle_pitch,     side: left,  group: leg, deviation: 0}
+  3:  {name: left_knee,            side: left,  group: leg, deviation: 6}
+  4:  {name: left_hip_pitch,       side: left,  group: leg, deviation: -13}
+  5:  {name: left_hip_roll,        side: left,  group: leg, deviation: -9}
+  6:  {name: left_elbow,           side: left,  group: arm, deviation: -10}
+  7:  {name: left_shoulder_roll,   side: left,  group: arm, deviation: -14}
+  8:  {name: left_shoulder_pitch,  side: left,  group: arm, deviation: -41}
+  9:  {name: right_ankle_roll,     side: right, group: leg, deviation: 6}
+  10: {name: right_ankle_pitch,    side: right, group: leg, deviation: -8}
+  11: {name: right_knee,           side: right, group: leg, deviation: -11}
+  12: {name: right_hip_pitch,      side: right, group: leg, deviation: -1}
+  13: {name: right_hip_roll,       side: right, group: leg, deviation: -7}
+  14: {name: right_elbow,          side: right, group: arm, deviation: 0}
+  15: {name: right_shoulder_roll,  side: right, group: arm, deviation: 0}
+  16: {name: right_shoulder_pitch, side: right, group: arm, deviation: 0}
+  # 17/18 exist only on the gripper ("Pro") variant; locally imported motions may contain these channels.
+  17: {name: right_gripper, side: right, group: hand, deviation: 0, optional: true}
+  18: {name: left_gripper,  side: left,  group: hand, deviation: 0, optional: true}
+
+pwm_servos:
+  # Pulse width in microseconds, 500..2500.
+  1: {name: head_tilt, center: 1500, look_down: 1081, min: 500, max: 2500}
+  2: {name: head_pan,  center: 1466, min: 500, max: 2500}
+
+imu:
+  chip: MPU6050 (on the STM32 board, streamed as FUNC 7 '<6f' ax ay az gx gy gz)
+  # Board is mounted vertically on the robot's back. Upright: gravity along board Y.
+  # Old fall logic: pitch = atan2(ax, az); |pitch| > 160 -> lying on back, < 10 -> face down.
+
+camera:
+  device: /dev/video0       # icSpring UVC 32e6:9005, YUYV 640x480 only, <=30 fps
+  width: 640
+  height: 480
+  intrinsics: data/camera_calibration.npz   # fx 424.6 fy 425.6 cx 302.6 cy 276.3
+
+audio:
+  card: "USB PnP Audio Device"   # JMTek 0c76:161f, speaker + mic
+
+voice_module:
+  device: /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0   # WonderEcho Pro (CH340), 115200, optional
