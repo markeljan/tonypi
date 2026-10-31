@@ -16,7 +16,7 @@ last KEEP_JOBS stay in memory, so results survive the caller (learning runs, a b
 `trace: true` also write the IMU at ~50 Hz to TRACE_DIR/<id>.jsonl.
 One body job runs at a time and the newest preempts. What stays here whatever a brain does: stop, servo temperature
 (body.py), torque off whenever idle, and low-battery / overheating / camera lost-or-back warnings. Falls are the
-brain's job: tonyd reports tilt and `lying`, and only stops a job for tilting if it asks (`guard_tilt_deg`).
+learning runner's job for raw jobs; everyday jobs use bounded daemon-owned recovery.
 """
 
 from __future__ import annotations
@@ -99,19 +99,23 @@ class Job:
     trace: str | None = None  # path of the IMU trace when asked for (trace: true)
     frames: list | None = field(default=None, repr=False)  # a brain's own keyframes ("_play")
     finished: threading.Event = field(default_factory=threading.Event, repr=False)
+    generation: int = field(default=0, repr=False)
+    everyday: bool = False  # immutable curated skill with daemon-owned bounded recovery
     want_trace: bool = field(default=False, repr=False)
 
     def public(self) -> dict:
         return {f.name: getattr(self, f.name) for f in fields(self) if f.name not in _INTERNAL}
 
 
-_INTERNAL = ("finished", "frames", "want_trace")
+_INTERNAL = ("finished", "frames", "want_trace", "generation")
 
 
 class Tonyd:
     def __init__(self, body=None, camera=None) -> None:
         self.body = body if body is not None else Body()
         self.camera = camera
+        self.command_lock = threading.Lock()
+        self.generation = 0
         self.lock = threading.Lock()  # held while a skill runs, and by the watchdog's bus reads
         self.queue: queue.Queue[Job] = queue.Queue(maxsize=1)
         self.current: Job | None = None
@@ -170,41 +174,63 @@ class Tonyd:
         return {**t, "walked": self.walked}
 
     def submit(self, skill: str, count: int = 1, frames=None, hold_s: float = 0.0,
-               guard_tilt_deg: float | None = None, label: str | None = None, trace: bool = False) -> Job:
+               guard_tilt_deg: float | None = None, label: str | None = None, trace: bool = False, everyday: bool = False) -> Job:
+        if everyday:
+            from tonypi.motion.catalog import resolve_skill
+
+            if type(count) is not int or not 1 <= count <= MAX_COUNT:
+                raise ValueError("count must be an integer from 1 to 5")
+            if frames is not None:
+                raise ValueError("custom frames require learning mode")
+            if skill != "get_up":
+                resolve_skill(skill, calibration=self.body.studio.calibration(), count=count,
+                              user_dir=self.body.studio.user_dir)
         params = None
         if frames is not None:
             frames, skill = [{"ms": f.ms, "pos": f.pos} for f in parse_frames(frames)], "_play"
             canon = json.dumps([[f["ms"], sorted(f["pos"].items())] for f in frames], separators=(",", ":"))
             params = {"frames": len(frames), "ms": sum(f["ms"] for f in frames),
                       "hash": hashlib.sha1(canon.encode()).hexdigest()[:10]}
-        elif skill not in (known := self.skills()):
+        elif not everyday and skill not in (known := self.skills()):
             raise ValueError(f"unknown skill {skill!r}; known: {', '.join(known)}")
         if self.stop_latched:
             raise ValueError("stopped by the user (stop latch): don't move again until they ask for a move")
         steps = max(1, min(MAX_COUNT, int(count)))
         tether = self.tether()
+        if everyday and tether["on"]:
+            from tonypi.motion.catalog import is_promoted
+
+            if is_promoted(skill, self.body.studio.user_dir):
+                raise ValueError("promoted custom skills require tether off; displacement accounting is unknown")
+        # Reserve one possible repeated step for bounded fall recovery as well as the requested steps.
+        step_cost = steps + int(everyday) if is_walking(skill) else 0
         if tether["on"] and is_walking(skill):
-            if self.walked + steps > tether["max_steps"]:
+            if self.walked + step_cost > tether["max_steps"]:
                 raise ValueError(f"tethered to the charger: {self.walked} of {tether['max_steps']} walking steps used. "
                                  "Turn and walk back, then tether reset; or tether off once unplugged")
-            self.walked += steps
+            self.walked += step_cost
         job = Job(next(self.ids), skill, max(1, min(MAX_COUNT, int(count))),
                   hold_s=max(0.0, min(120.0, float(hold_s or 0))), frames=frames,
                   guard_tilt_deg=None if guard_tilt_deg is None else max(5.0, min(120.0, float(guard_tilt_deg))),
-                  label=None if label is None else str(label)[:80], params=params, want_trace=bool(trace))
-        self.body.cancel()  # the newest command preempts whatever is running
-        self._drop_queued()
-        self.queue.put(job)
+                  label=None if label is None else str(label)[:80], params=params, want_trace=bool(trace), everyday=everyday)
+        with self.command_lock:
+            self.generation += 1
+            job.generation = self.generation
+            self.body.cancel()  # the newest command preempts whatever is running
+            self._drop_queued()
+            self.queue.put(job)
         self.emit("job", **job.public())
         return job
 
     def stop(self, latch: bool = False) -> None:
         """latch: the user said stop; refuse new motion until unlatch (the voice service unlatches when they speak
         again), so no brain carries on moving after a spoken stop."""
-        self._drop_queued()
-        self.body.cancel()
-        if latch:
-            self.stop_latched = True
+        with self.command_lock:
+            self.generation += 1
+            self._drop_queued()
+            self.body.cancel()
+            if latch:
+                self.stop_latched = True
 
     def _drop_queued(self) -> None:
         try:
@@ -292,8 +318,12 @@ class Tonyd:
         while True:
             job = self.queue.get()
             with self.lock:
-                self.current = job
-                self.body.cancelled.clear()
+                with self.command_lock:
+                    if job.generation != self.generation or self.stop_latched:
+                        self._finish(job, "cancelled")
+                        continue
+                    self.current = job
+                    self.body.cancelled.clear()
                 job.state, job.started, job.t_start = "running", time.monotonic(), round(time.time(), 3)
                 job.hottest_before = self._hottest(self.cached)  # no bus reads before a move: the last reading
                 heading0 = getattr(self.body, "heading_deg", None)
@@ -307,7 +337,17 @@ class Tonyd:
                 log.info("skill %s x%d (job %d)", job.skill, job.count, job.id)
                 state, error = "failed", None
                 try:
-                    if job.skill == "settle":
+                    from tonypi.simulation.catalog import digest
+
+                    cal = self.body.studio.calibration()
+                    normalized = {k: {str(s): v for s, v in cal.get(k, {}).items()} for k in ("trim", "limits")}
+                    job.params = {**(job.params or {}), "calibration_digest": digest(normalized),
+                                  "start_tilt_deg": self.body.tilt_deg(), "start_lying": bool(self.body.lying())}
+                    if self.stop_latched:
+                        raise ValueError("stop latch is on")
+                    if job.everyday:
+                        ok = self.body.run_everyday(job.skill, job.count, job.said.append)
+                    elif job.skill == "settle":
                         self.body.settle()
                         ok = True
                     elif job.frames is not None:
@@ -315,6 +355,9 @@ class Tonyd:
                     else:
                         ok = self.body.run(job.skill, job.count, job.said.append, job.guard_tilt_deg)
                     state = "done" if ok else ("cancelled" if self.body.cancelled.is_set() else "failed")
+                    if job.everyday:
+                        job.params.update(recoveries=getattr(self.body, "everyday_recoveries", 0),
+                                          completed_segments=getattr(self.body, "everyday_completed", 0))
                     job.max_tilt_deg = getattr(self.body, "max_tilt", None)  # before _finish: waiters reply then
                     job.max_tilt_raw_deg = getattr(self.body, "max_tilt_raw", None)
                     if heading0 is not None:
@@ -323,6 +366,8 @@ class Tonyd:
                 except Exception as e:
                     log.exception("skill %s failed", job.skill)
                     error = f"{type(e).__name__}: {e}"
+                    if self.body.cancelled.is_set() or self.stop_latched:
+                        state = "cancelled"
                 try:
                     self._after_job(job, tracer, tracing)
                 except Exception:
@@ -501,13 +546,18 @@ class Tonyd:
             details = self.skills()
             reply({"skills": {k: v.get("description", "") for k, v in details.items()}, "details": details,
                    "max_count": MAX_COUNT})
-        elif op in ("run", "play", "pose"):
+        elif op == "catalog":
+            from tonypi.motion.catalog import skill_catalog
+
+            reply({"skills": skill_catalog(user_dir=self.body.studio.user_dir,
+                                           calibration=self.body.studio.calibration())})
+        elif op in ("run", "play", "pose", "execute"):
             if op == "pose":
                 msg = {**msg, "frames": [{"ms": msg.get("ms", 500), "pos": msg.get("positions") or {}}]}
             job = self.submit(str(msg.get("skill", "")), msg.get("count", 1),
-                              frames=msg.get("frames") if op != "run" else None, hold_s=msg.get("hold_s", 0),
+                              frames=msg.get("frames") if op in ("play", "pose") else None, hold_s=msg.get("hold_s", 0),
                               guard_tilt_deg=msg.get("guard_tilt_deg"), label=msg.get("label"),
-                              trace=bool(msg.get("trace")) and op != "pose")
+                              trace=bool(msg.get("trace")) and op != "pose", everyday=op == "execute")
             if not msg.get("wait"):
                 reply({"job": job.public()})
                 return
@@ -596,9 +646,10 @@ class Tonyd:
                 f.write(json.dumps(entry) + "\n")
             return {"servo": sid, **got}
         if op == "calibration":
-            if msg.get("trim") is not None or msg.get("limits") is not None:
-                st.set_calibration(msg.get("trim"), msg.get("limits"))
-            return {"calibration": self.body.reload_calibration()}
+            with self.lock:
+                if msg.get("trim") is not None or msg.get("limits") is not None:
+                    st.set_calibration(msg.get("trim"), msg.get("limits"))
+                return {"calibration": self.body.reload_calibration()}
         raise ValueError(f"unknown op {op!r}")
 
     def _client(self, conn: socket.socket) -> None:

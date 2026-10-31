@@ -52,7 +52,7 @@ BRIDGE_ADDRESSED_S = 60.0  # ... and only if it names Tony or follows a wake / e
 DEDUPE_S = 20.0  # the same line (role + words) isn't logged twice within this window
 DUPLICATE_DELEGATION_S = 10.0  # the same words delegated again this soon after one Codex took: not bridged
 # Robot MCP tools that move the body: hidden from autonomy sessions when the body gates fail.
-BODY_TOOLS = ["say", "run_skill", "play_frames", "set_pose", "set_torque", "trial", "compare", "body_sweep",
+BODY_TOOLS = ["move", "posture", "get_up", "gesture", "say", "run_skill", "play_frames", "set_pose", "set_torque", "trial", "compare", "body_sweep",
               "servo_calibrate", "calibration", "look", "scan", "video", "simulation_execute"]
 # After a stop, autonomy keeps the body still for a while unless the owner asks for a move (Autonomy.on_stop): an
 # utterance that names a move and has no negation / stillness word and isn't a question about the past.
