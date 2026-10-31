@@ -30,7 +30,9 @@ all of them, and some same-named actions differ. The importer does **not** inven
 frames to force a hash match, or mark new recordings verified. Missing actions produce explicit import errors;
 changed hashes are refused by everyday playback. Run the read-only model/calibration audit described in
 [MOTION_SOURCES.md](MOTION_SOURCES.md) for changed files, then review its resulting manifest before adoption.
-Until then those actions remain unavailable. Model verification never means physical acceptance.
+Until then those actions remain unavailable. The current audit expects the full set of catalog sequence
+sources; a partial official download cannot complete it until the missing sources are also supplied from
+your own image. Model verification never means physical acceptance.
 
 The curated compositions in `data/motion_catalog.json` contain names/hashes/results only, not frame copies.
 They resolve the immutable imported source data, ignoring unpromoted overrides. User-authored skills remain in

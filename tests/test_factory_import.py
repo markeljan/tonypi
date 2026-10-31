@@ -53,3 +53,13 @@ def test_missing_and_changed_sources_fail_closed(tmp_path):
     (source / "synthetic.json").write_text(json.dumps({"frames": frames}))
     with pytest.raises(ValueError, match="existing local action differs"):
         importer.import_actions(source, dest, manifest)
+
+
+def test_import_rejects_unignored_repository_destination(tmp_path, monkeypatch):
+    source, dest, manifest, frames = setup(tmp_path)
+    (source / "synthetic.json").write_text(json.dumps({"frames": frames}))
+    monkeypatch.setattr(importer, "REPO_ROOT", tmp_path)
+    with pytest.raises(ValueError, match="repository destinations"):
+        importer.import_actions(source, dest, manifest)
+    report = importer.import_actions(source, tmp_path / "factory-motions", manifest)
+    assert report["validated_hash_matches"] == ["synthetic"]

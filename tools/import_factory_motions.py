@@ -12,7 +12,8 @@ import sqlite3
 import tempfile
 
 DEFAULT_DEST = Path(os.environ.get("TONYPI_FACTORY_MOTIONS_DIR", Path.home() / ".local/share/tonypi/factory-motions"))
-MANIFEST = Path(__file__).resolve().parents[1] / "data/motion_catalog.json"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+MANIFEST = REPO_ROOT / "data/motion_catalog.json"
 
 
 def digest(frames: list[dict]) -> str:
@@ -48,6 +49,9 @@ def import_actions(source: Path, dest: Path, manifest_path: Path = MANIFEST) -> 
     source, dest = source.resolve(), dest.resolve()
     if source == dest or not source.is_dir():
         raise ValueError("source must be a separate existing directory of your own .d6a or legacy JSON actions")
+    if dest.is_relative_to(REPO_ROOT) and not any(dest.is_relative_to(allowed) for allowed in
+            (REPO_ROOT / "factory-motions", REPO_ROOT / "data/motions")):
+        raise ValueError("repository destinations must be ignored factory-motions/ or data/motions/")
     expected = json.loads(manifest_path.read_text())["motions"]
     candidates = {}
     for path in sorted(source.rglob("*")):
