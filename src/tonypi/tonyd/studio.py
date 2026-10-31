@@ -1,7 +1,7 @@
 """The editable motion library: brains write their own moves, skills and calibration here.
 
 Three layers, all plain JSON so any brain (or a person) can read, diff and edit them:
-- motions: keyframes `{"frames": [{"ms": 400, "pos": {"1": 500, ...}}]}`. The 83 factory motions in `data/motions`
+- motions: keyframes `{"frames": [{"ms": 400, "pos": {"1": 500, ...}}]}`. The owner-imported factory motions in `~/.local/share/tonypi/factory-motions`
   are the defaults/examples; a user motion with the same name overrides one (delete it to get the default back).
 - skills: a named sequence of motions, `"*name"` repeats with `count` (e.g. walk = start, *step, end). User skills add
   new ones or override the default sequences in body.py (walk_forward, turn_left, ...).
@@ -84,7 +84,7 @@ class Studio:
     def load_motion(self, name: str) -> Motion:
         p = self._motion_path(name)
         if p is None:
-            raise StudioError(f"no motion {name!r}")
+            raise StudioError(f"no motion {name!r}; import owner-supplied factory actions with tools/import_factory_motions.py (docs/FACTORY_MOTIONS.md)")
         raw = json.loads(p.read_text())
         return Motion(name, [Frame(f["ms"], {int(k): v for k, v in f["pos"].items()}) for f in raw["frames"]])
 
@@ -100,7 +100,7 @@ class Studio:
     def get_motion(self, name: str) -> dict:
         p = self._motion_path(_name(name, "motion"))
         if p is None:
-            raise StudioError(f"no motion {name!r}")
+            raise StudioError(f"no motion {name!r}; import owner-supplied factory actions with tools/import_factory_motions.py (docs/FACTORY_MOTIONS.md)")
         raw = json.loads(p.read_text())
         return {"name": name, "source": "user" if p.parent == self.motions_dir else "default",
                 "description": raw.get("description", ""), "frames": raw["frames"]}

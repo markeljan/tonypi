@@ -145,6 +145,15 @@ log "python env"
 as_user bash -c "cd '$REPO' && uv sync --all-extras" || log "  uv sync failed (fix and re-run)"
 
 # ---------------------------------------------------------------------------
+# Explicit owner source only: never download/redistribute factory recordings for the user.
+if [[ -n ${TONYPI_FACTORY_SOURCE:-} ]]; then
+  as_user python3 "$REPO/tools/import_factory_motions.py" "$TONYPI_FACTORY_SOURCE" || \
+    log "  factory import incomplete; review docs/FACTORY_MOTIONS.md before motion use"
+else
+  log "Factory motions: import your own SD/image/official actions per docs/FACTORY_MOTIONS.md"
+fi
+
+# ---------------------------------------------------------------------------
 log "systemd units"
 for unit in "$REPO"/provision/systemd/*.service; do
   [[ -e $unit ]] || continue

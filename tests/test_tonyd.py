@@ -1,4 +1,5 @@
 import tempfile
+import json
 import threading
 import time
 from pathlib import Path
@@ -34,7 +35,10 @@ class _Body:
 
         self.board, self.cancelled, self.asleep = _Board(), threading.Event(), False
         self.ran, self.relaxed, self.seconds = [], 0, seconds
-        self.studio = Studio(Path(tempfile.mkdtemp()), default_skills=DEFAULT_SKILLS)
+        defaults = Path(tempfile.mkdtemp())
+        (defaults / "wave.json").write_text(json.dumps({"name": "wave", "frames": [
+            {"ms": 100, "pos": {"1": 510, "17": 500}}]}))
+        self.studio = Studio(Path(tempfile.mkdtemp()), defaults=defaults, default_skills=DEFAULT_SKILLS)
         self.max_tilt, self.torqued = 3.0, []
 
     def play_frames(self, frames, say, guard_tilt=None):

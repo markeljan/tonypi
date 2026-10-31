@@ -11,9 +11,10 @@ is not evidence of requested travel, gesture quality, recovery reliability or ph
 contains 116 SQLite `.d6a` files under `ActionGroups/`. The source checkout was obtained read-only for this audit
 at `/tmp/tonypi-motion-audit/Hiwonder-TonyPi` on the Mac. Its recursive tree contains no LICENSE or COPYING;
 GitHub reports `license: null`. Consequently manufacturer motion rights are recorded as `NOASSERTION`, not MIT.
-The existing 83 image-derived JSON files are retained; this change does not add newly downloaded manufacturer
-motion data or claim a redistribution license. Permission to redistribute these manufacturer assets remains
-unresolved. Do not silently inherit a mirror's software license for manufacturer-origin recordings.
+The 83 image-derived JSON recordings and all identified frame-derived experiments have been removed from
+Git history. Only names, hashes, model results and composition references remain. Import your own original
+image/SD actions or official download using [FACTORY_MOTIONS.md](FACTORY_MOTIONS.md). Local import grants no
+redistribution rights. The existing Pi library was migrated with all 83 validated frame hashes unchanged.
 
 [Hiwonder's official PC software/action programming documentation](https://wiki.hiwonder.com/projects/TonyPi/en/latest/docs/9.upper_computer_action_editing_course.html)
 explains positions 0–1000, keyframe duration 20–9999 ms, stored action groups, composition, repeat and stop.
@@ -24,8 +25,7 @@ also documents `.d6a` group integration. Documentation was read, linked and summ
 Sixty existing JSON body-channel sequences exactly match this official checkout. Five differ: `stand_slow`,
 `turn_left`, `turn_right`, `bow`, `go_forward`. Eighteen have no matching filename in the current official tree
 (including nine dances, power-gait variants and `both_arms_up`/`wings_up`). The manifest records each comparison;
-absence from the current tree does not establish the original image's provenance. The owner-adjusted standing
-right shoulder value remains 200. Channels 17/18 belong to absent grippers and are explicitly omitted from
+absence from the current tree does not establish the original image's provenance. The owner-adjusted standing posture is preserved only in the local imported actions. Channels 17/18 belong to absent grippers and are explicitly omitted from
 body playback/model checks. No channel 19 or arbitrary additional channel is accepted.
 
 ## Simulator and other skills
@@ -49,7 +49,7 @@ motor skill or additional motion asset was promoted from it.
 Read-only tonyd calibration returned empty software trim/limits, meaning effective default limits 0–1000.
 After an idle-state check, read-only `servo_calibration` returned all 16 EEPROM limits 0–1000 and offsets matching
 `robot.yaml`. The EEPROM snapshot is in the manifest. EEPROM offsets already live inside each servo; they are
-not added again as software trim. All 83 retained assets passed hardware format and calibrated pulse-limit
+not added again as software trim. All 83 locally imported assets passed hardware format and calibrated pulse-limit
 checks. All 83 were run in the simulator, using prone/supine starts for the two recovery assets. Only 39 passed
 both the generic posture check and zero actuator clipping. Failed assets remain available for explicit learning
 and investigation; they are excluded from everyday execution, rather than labelled verified.

@@ -9,3 +9,9 @@ __pycache__/
 docs/bakeoff/**/*.jpg
 data/recordings/
 evidence/
+
+# Owner-supplied factory recordings and derivatives never belong in Git.
+/data/motions/*.json
+/factory-motions/
+**/*.d6a
+/data/learned_own/

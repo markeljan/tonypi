@@ -6,9 +6,9 @@ import hashlib
 import json
 from pathlib import Path
 
-from .library import DATA_DIR, Frame, Motion
+from .library import DATA_DIR, REPO_DATA_DIR, Frame, Motion, read_factory
 
-MANIFEST = DATA_DIR.parent / "motion_catalog.json"
+MANIFEST = REPO_DATA_DIR / "motion_catalog.json"
 
 
 def manifest(path: Path = MANIFEST) -> dict:
@@ -91,7 +91,7 @@ def resolve_skill(name: str, calibration: dict | None = None, defaults: Path = D
         motion_name = entry.lstrip("*")
         if user_dir is not None and (user_dir / "motions" / f"{motion_name}.json").exists():
             raise ValueError("unpromoted user motion overrides a curated motion")
-        raw = json.loads((defaults / f"{motion_name}.json").read_text())
+        raw = read_factory(motion_name, defaults)
         if frame_digest(raw["frames"]) != data["motions"][motion_name]["frames_sha256"]:
             raise ValueError("curated motion changed; validate it before promotion")
         frames = check_frames(raw["frames"], calibration)

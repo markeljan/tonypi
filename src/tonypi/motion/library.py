@@ -3,12 +3,23 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
 
-DATA_DIR = Path(__file__).resolve().parents[3] / "data" / "motions"
+REPO_DATA_DIR = Path(__file__).resolve().parents[3] / "data"
+DATA_DIR = Path(os.environ.get("TONYPI_FACTORY_MOTIONS_DIR", Path.home() / ".local/share/tonypi/factory-motions"))
+
+
+def read_factory(name: str, directory: Path = DATA_DIR) -> dict:
+    try:
+        return json.loads((directory / f"{name}.json").read_text())
+    except FileNotFoundError as exc:
+        raise ValueError(f"factory motion {name!r} missing in {directory}; "
+                         "import your own actions with tools/import_factory_motions.py "
+                         "(see docs/FACTORY_MOTIONS.md)") from exc
 
 
 @dataclass
@@ -28,7 +39,7 @@ class Motion:
 
 
 def load(name: str, directory: Path = DATA_DIR) -> Motion:
-    raw = json.loads((directory / f"{name}.json").read_text())
+    raw = read_factory(name, directory)
     return Motion(raw["name"], [Frame(f["ms"], {int(k): v for k, v in f["pos"].items()}) for f in raw["frames"]])
 
 

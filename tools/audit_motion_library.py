@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from tonypi.motion.catalog import check_frames, frame_digest
-from tonypi.motion.library import DATA_DIR
+from tonypi.motion.library import DATA_DIR, REPO_DATA_DIR
 from tonypi.simulation import catalog, service
 from tonypi.tonyd.client import TonydClient
 
@@ -30,7 +30,7 @@ def compact(report):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--source-repo", type=Path, help="read-only official Hiwonder/TonyPi checkout")
-    p.add_argument("--output", type=Path, default=DATA_DIR.parent / "motion_catalog.json")
+    p.add_argument("--output", type=Path, default=REPO_DATA_DIR / "motion_catalog.json")
     p.add_argument("--motion-reports", type=Path, help="reuse existing reports from this exact audit")
     args = p.parse_args()
     if args.source_repo and catalog.revision(args.source_repo) != "dc452eaac9991516600860f706f4b889f3305d1d":
@@ -66,7 +66,7 @@ def main():
                                       objective="recover" if start != "home" else "stability", render=False)
         original = args.source_repo / "ActionGroups" / f"{name}.d6a" if args.source_repo else None
         source = {"url": "https://github.com/Hiwonder/TonyPi", "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
-                  "license": "NOASSERTION", "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred."}
+                  "license": "NOASSERTION", "license_note": "No LICENSE or COPYING in official repository tree; owner-supplied local manufacturer assets; never redistributed by this project."}
         if original and original.exists():
             upstream, ignored = catalog.d6a(original)
             source.update(path=f"ActionGroups/{name}.d6a", frames_match_official=frames == upstream,

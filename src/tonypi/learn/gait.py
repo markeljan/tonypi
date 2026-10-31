@@ -21,9 +21,15 @@ MIN_MS, MAX_MS = 20, 10_000
 
 @cache
 def stand_pose() -> dict[int, int]:
-    """The stand pose from config/robot.yaml (servo -> position)."""
-    cfg = yaml.safe_load(ROBOT_YAML.read_text())
-    return {int(k): int(v["stand"]) for k, v in cfg["bus_servos"].items() if int(k) in SERVOS}
+    """Reference posture from the owner's local action, never embedded vendor frames."""
+    from tonypi.motion.library import load
+
+    pose = {}
+    for frame in load("stand").frames:
+        pose.update({k: v for k, v in frame.pos.items() if k in SERVOS})
+    if set(pose) != set(SERVOS):
+        raise ValueError("imported stand motion must specify all 16 body servos")
+    return pose
 
 
 @cache
