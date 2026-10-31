@@ -10,15 +10,16 @@ hardware/service reference for Claude Code and for Tony when he needs a detail.
 
 ## Hard rules
 - **One process owns `/dev/ttyAMA0`: `tonyd`** (`tonypi.hal.board.Board` opens it exclusively; a second open fails with EBUSY). Everything else goes through tonyd's socket or the MCP server. tonyd also owns the camera.
-- **Brains author movement** (owner's direction, 2026-10-29): any brain may read joints, play its own keyframes, hold
-  poses, save motions and skills (overriding walk/turn/step/...), and calibrate (trim, soft limits; the servos' own
-  EEPROM offsets/limits too, but only to fix a bad calibration: `servo_calibrate` needs a reason), all through tonyd
-  (`tonyd/studio.py`, MCP tools). The factory motions are defaults and examples. tonyd keeps the reflexes no brain can
-  bypass: stop, temperature, torque off when idle.
-- `stop` never depends on an LLM. **Falls are the harness's job** (owner's direction, 2026-10-29): tonyd never stops a
-  move for tilting, stands Tony up or settles him by itself; it reports `tilt_deg`/`lying` and `max_tilt_deg` per job,
-  and a brain can opt in to a tilt stop per job (`guard_tilt_deg`). The brain runs `get_up` / `settle` itself; the
-  learning runner gets up after a fall in a trial.
+- **Library motions first** (owner's direction, 2026-10-31): everyday agents choose validated named motions and
+  composites through `move`, `posture`, `get_up`, `gesture`, `look`, `perceive`, `say`, `stop`, `status`, `run_skill`.
+  No joint-angle invention or silent fallback to shell/socket authoring. Missing capability is reported; the owner
+  explicitly requests learning/practice/calibration before opening the separate `TONYPI_MCP_PROFILE=learning` server.
+- Fine control stays behind tonyd's reflexes. New candidates require calibrated servo-limit checks, simulation and
+  exact-content library verification before everyday promotion. Model evidence and supervised hardware evidence
+  remain separate. Source provenance does not establish real-world reliability.
+- `stop` never depends on an LLM. Fall detection → recovery → resume belongs in tonyd; an LLM must not implement
+  an alternate low-level recovery loop. If that runtime capability is unavailable, report it rather than claim it.
+  Stop, battery and thermal refusals always win; a stopped robot never gets up until the owner asks for movement.
 - **Safety posture** (owner's direction, 2026-10-30): Tony lives on the floor. Falling is allowed and expected while
   learning ("it is built to fall on its own and won't be damaged"); recovery is `get_up`, then continue. Trials use
   `guard_tilt_deg` (gaits 40, balance/new poses 30). Never ask the owner about setup, clearance, observers or fixtures:
@@ -57,7 +58,7 @@ hardware/service reference for Claude Code and for Tony when he needs a detail.
 - I2C-1 bus is empty (no sonar/ToF fitted). Pi GPIO25/23 are board keys, GPIO16/26 LEDs.
 - Power: EEPROM `PSU_MAX_CURRENT=5000`, `usb_max_current_enable=1` (robot board power).
 
-## Joint map (`src/tonypi/config/robot.yaml`)
+## Joint map (learning reference; `src/tonypi/config/robot.yaml`)
 L/R: 1/9 ankle roll · 2/10 ankle pitch · 3/11 knee · 4/12 hip pitch · 5/13 hip roll · 6/14 elbow · 7/15 shoulder roll · 8/16 shoulder pitch.
 Positions 0–1000, 500 = centre, ≈0.24°/count. Stand pose in robot.yaml. Right shoulder roll (servo 15) is 200 in every stand pose (owner-tuned; `stand`/`stand_slow`
 were 160 from the factory files until 2026-10-29, which pulled the right arm out after every turn/walk).
@@ -66,7 +67,8 @@ were 160 from the factory files until 2026-10-29, which pulled the right arm out
 `data/motions/*.json` — 83 keyframe motions converted from the factory `.d6a` files (`{"frames":[{"ms":..,"pos":{"1":..}}]}`).
 Key ones: `stand`, `stand_slow`, `stand_up_front`, `stand_up_back`, `go_forward_start` → `go_forward` (loop) → `go_forward_end`,
 `back_start/back/back_end`, `turn_left/right(_small_step)`, `left_move/right_move*`, `left_shot/right_shot` (kicks), `wave`, `bow`, `squat`, `sit_ups`, `lie_down`, dances.
-Played by `tonypi.motion.library.Player` (one batched frame per keyframe, interruptible).
+Played by `tonypi.motion.library.Player` (one batched frame per keyframe, interruptible). Availability in this raw
+archive is not everyday permission: `status` and the curated verification catalog govern everyday actions.
 
 ## Architecture (target)
 ```
@@ -94,7 +96,7 @@ before `tools/bench.py`** or anything else that opens the board.
 - **Tether** (charging cable): the board reports only voltage, so it's a setting (`tether.json` in the user dir, default
   on, `max_steps` 10): walking skills (walk_*, step_left/right, any skill named *walk*) share a step budget since set/reset;
   turns don't count. `tether {on, max_steps, reset}` op / MCP tool. Turn it off when Tony runs on battery.
-- Writing moves (`studio.py`): user layer in `~/.local/share/tonypi/` (`motions/*.json` override `data/motions` by name,
+- Learning-profile internals, not an everyday tool path: writing moves (`studio.py`): user layer in `~/.local/share/tonypi/` (`motions/*.json` override `data/motions` by name,
   `skills.json` = name → motion sequence with `"*step"` repeated by count, `calibration.json` = per-servo `trim` +
   soft `limits`). Ops `joints, play {frames, hold_s}, pose {positions, ms, hold_s}, torque {ids, on}, motions,
   motion_get/save/delete, skill_save/delete, calibration, servo_calibration, servo_calibrate {id, offset, limits,
@@ -105,11 +107,11 @@ before `tools/bench.py`** or anything else that opens the board.
   returns; ~2.8 s for 3) and `burst {frames, seconds}` (a short "video"); MCP `scan` / `video` return labelled images.
 - Every finished job is appended to `~/.local/share/tonypi/jobs.jsonl` (wall-clock times, tilt, yaw, temps, battery);
   op `job {id}` reads one (last 200 in memory); `trace: true` writes an IMU trace to `~/.local/share/tonypi/traces/`.
-- MCP: `tonypi-mcp.service` → `http://127.0.0.1:8765/mcp` (Streamable HTTP, no auth, localhost only by default). Tools:
-  body (`list_skills, run_skill, wait_motion, get_job, stop, get_state, look`), camera (`snapshot, scan, video`),
-  authoring (`get_joints, play_frames, set_pose, set_torque, *_motion, *_skill, calibration, servo_calibrat*,
-  tether`), learning (`trial, compare, body_sweep, ledger, body_model, library`; `src/tonypi/learn/`,
-  docs/BODY_LEARNING.md), `say`. `.mcp.json` in the repo points Claude Code at it.
+- MCP: `tonypi-mcp.service` → `http://127.0.0.1:8765/mcp` (Streamable HTTP, localhost by default).
+  Everyday surface: `move, posture, get_up, gesture, look, perceive, say, stop, status, run_skill`.
+  The explicit learning profile (`TONYPI_MCP_PROFILE=learning`) retains joint/frame/torque tools, calibration,
+  measured trials and simulation. Never connect that profile to the everyday brain by default.
+  See `docs/MOTION_LAYER.md` and `docs/BODY_LEARNING.md`.
 
 ## Voice (`tonypi-voice.service`, enabled at boot): Tony's ears + mouth
 `src/tonypi/voice/` owns the USB mic + speaker (conflicts with tonypi-agent: starting one stops the other).

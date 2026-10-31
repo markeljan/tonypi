@@ -8,6 +8,8 @@
 | LFM3 models | Downloaded via `provision/models.txt`; not committed | [Liquid model terms](https://huggingface.co/LiquidAI/LFM3-Omni-2B-GGUF); review each model card. |
 | Piper voice and sherpa-onnx models | Downloaded via `provision/models.txt` | Review each upstream model's terms; not committed. |
 | pab47/TonyPi simulation assets | External pinned checkout; literal calibration used by simulation integration, not a vendored checkout | [MIT](https://github.com/pab47/TonyPi/blob/97807f5e26049ce1c3d90b1c80d5d2a92606d40f/LICENSE); retain upstream notice, and independently verify provenance of its included action groups. |
-| bruhOS | No identified vendored files in the current tree | Historical provenance requires review; do not assume a license. |
+| bruhOS | Read-only inspection of Pi checkout `3fd3ca5`; no files imported | Apache-2.0 at inspected revision. README says TonyPi body is not robot validated; no motor skill promoted. |
 
 Dependencies installed by package managers retain their own licenses. This inventory is not a grant of rights to third-party material.
+
+Exact Hiwonder revision, official documentation links and per-asset audit evidence: [motion sources](docs/MOTION_SOURCES.md).

@@ -15,7 +15,7 @@ mic/speaker ── tonypi-voice (src/tonypi/voice/service.py) ── stop reflex
                  ├ L: persistent brain thread (terra, low, fast) ← AGENTS.md + codex_developer.md + memory snapshot
                  ├ tasks: tony_start_task workers (persistent threads, terra|sol, optional Codex goal)
                  └ autonomy: one session thread at a time (terra, medium, Codex goal) ← codex_autonomy.md
-               MCP: tonypi (robot + learning, :8765) · phone (iPhone bridge, :8767, optional)
+               MCP: tonypi (10 everyday library tools, :8765) · phone (iPhone bridge, :8767, optional)
 tonyd (body daemon, safety reflexes) ← every move; jobs.jsonl
 brain dir ~/.local/share/tonypi/brain (memory, goals, journal, learning) ← `tony` CLI, the learning runner
 ```
@@ -94,17 +94,25 @@ Other data: `~/.local/share/tonypi/live/` (conversation.jsonl, tasks.jsonl, stat
 `~/.local/share/tonypi/jobs.jsonl` (every tonyd job), `~/.local/share/tonypi-phone/episodes/` (phone recordings).
 Codex native memories stay off (opaque, noisy ASR input); the brain dir is the source of truth.
 
-## Learning
-`docs/BODY_LEARNING.md`: MCP `trial`, `compare`, `body_sweep`, `ledger`, `library`, `body_model`, `get_job`;
-`tools/learn.py` from the shell. Skills in `.agents/skills/` are procedural memory; a session that works out a
-procedure updates its skill.
+## Motion tools and learning
+The everyday HTTP profile exposes exactly `move`, `posture`, `get_up`, `gesture`, `look`, `perceive`, `say`,
+`stop`, `status`, `run_skill`. Use `status` for available catalog names. The brain selects library actions and
+validated composites; it never invents joint frames for an ordinary request. Missing capability is reported.
+`docs/MOTION_LAYER.md` defines the interface, evidence levels and later supervised acceptance.
+
+Fine control requires an explicit owner request to learn/practice/calibrate and a separate stdio server with
+`TONYPI_MCP_PROFILE=learning`. Do not configure that server into L or autonomy by default. A body goal alone does
+not enable it. `docs/BODY_LEARNING.md` and the learning skills then govern trials, comparison and promotion.
+Simulation/limits verification gates exact candidates before everyday use; hardware success stays separate.
+Fall recovery/resume belongs in tonyd and cannot override a stop latch. No shell/socket bypass of hidden tools.
 
 ## Ops runbook
 - Status: `systemctl status tonypi-voice tonypi-tonyd tonypi-mcp tonypi-phone`; `journalctl -u tonypi-voice -f`.
 - What Tony did: `tony history --today`, `tony goal list`, `tony autonomy status`, `tail
   ~/.local/share/tonypi/live/tasks.jsonl`.
 - Quiet please: `tony autonomy pause 120` (or say "pause your own work"). Body only: `tony autonomy body-pause 60`.
-- Restart the voice: `sudo systemctl restart tonypi-voice` (L is resumed; tasks are lost). From L itself only via
+- Keep deliberately muted voice stopped during motion-layer deployment; prompt changes load when the owner next
+  starts it. Restart the voice: `sudo systemctl restart tonypi-voice` (L is resumed; tasks are lost). From L itself only via
   `tony_restart_voice`.
 - Offline: say "switch to local" (or `sudo systemctl start tonypi-agent`; it stops the voice). Back: "switch to live"
   (or `sudo systemctl start tonypi-voice`).

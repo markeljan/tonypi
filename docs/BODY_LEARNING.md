@@ -4,6 +4,13 @@ How Tony learns and improves movement. Replaces the procedure in `docs/BODY_EXPE
 `src/tonypi/learn/` (runner, gait transforms, metrics, phone client). Skills: `body-learning`, `gait-tuning`,
 `motion-authoring`, `phone-observer`.
 
+## Mode gate
+This procedure runs only after the owner explicitly asks to learn/practice/calibrate, using the separate
+`TONYPI_MCP_PROFILE=learning` stdio server (see `MOTION_LAYER.md`). Ordinary demos and body goals use the ten
+everyday library tools. If no action fits, explain the missing action; do not enable fine control or invoke it
+through shell/socket as a workaround. The tool table below describes the learning profile, not everyday tools. Experimental/legacy execution uses
+`practice_skill`; `run_skill` remains curated-only in both profiles.
+
 ## Principles
 - **Measure, don't judge.** Every candidate is scored from numbers: tonyd's job record (max tilt, gyro yaw, end tilt,
   lying), fresh state, and the phone's tracked path. Never from photos or by asking someone.
@@ -18,7 +25,8 @@ How Tony learns and improves movement. Replaces the procedure in `docs/BODY_EXPE
   and batches of scored trials do.
 
 ## Existing motions first
-Before authoring or tuning, and when choosing an action for a task:
+Everyday: consult `status` and use the suitable available library action/composite.
+Within owner-requested learning, before authoring or tuning:
 1. Define the actual outcome: showing an action, turning a measured angle, crossing an edge, or holding balance.
    Do not silently turn a request to demonstrate a built-in action into a development project.
 2. Inventory `list_skills()` and `list_motions()` (local/factory), plus `simulation_catalog()` for supported
@@ -33,8 +41,8 @@ Before authoring or tuning, and when choosing an action for a task:
    observation suited to the outcome. No exhaustive action sweep for an unrelated task. For a demonstration,
    one guarded execution may answer the request; for reliability, use 3–5 measured trials. Simulation requested
    or needed for a candidate comes before its authorized hardware test and remains model-only evidence.
-5. Author or tune only after identifying the missing capability or measured shortfall, or when explicitly asked
-   for a new action. Reuse stable segments of the nearest action and state the hypothesis before the next batch.
+5. Author or tune only within the owner-requested learning session, after identifying the missing capability
+   or measured shortfall. Reuse stable segments of the nearest action and state the hypothesis before the next batch.
 
 Report evidence at its actual level: **available**, **simulation passed**, **hardware action completed**, or
 **measured task success** (criteria, conditions, successes/trials, falls and job/experiment IDs). A done job and
@@ -83,6 +91,12 @@ ends the batch without the closing settle / get_up, so it never overrides the mo
 | generic | −max tilt/10 − 1·[not done] − 2·fell | IMU |
 fell = lying or end tilt > 45 deg.
 
+## Candidate verification
+Every newly authored or changed candidate must pass calibrated servo-limit/kinematic checks and simulation
+before a physical trial or everyday promotion. Keep the exact content/calibration evidence. A saved motion stays
+a candidate until the library verification gate accepts it; a description claiming success is not verification.
+Approved composite skills may reference only permitted verified motions. Preserve hardware results separately.
+
 ## Candidates and search
 - A candidate is a base motion plus a few parameters (`learn/gait.py`): `time_scale` (>1 slower), `amplitude`
   (scale around the stand pose), `offset` {servo: delta}, `mirror` (left ↔ right), `repeat`. Own keyframes when
@@ -90,9 +104,9 @@ fell = lying or end tilt > 45 deg.
 - One hypothesis per round, 3-4 candidates, the best repeated. Noise: yaw +-3-7 deg/step, phone distance +-2 cm,
   tilt a few degrees. A difference inside the noise is no difference.
 - A turn must keep >= 90 % of the default's yaw; a steadier move that does less is not a fix.
-- **Promote** when `compare` says "promote": candidate mean better by > 1 pooled std over >= 5 trials with 0 falls.
-  Save with `save_motion` (evidence in the description) and `save_skill` under the skill's name; `delete_skill`
-  restores the factory default. Record the result in the goal notes, the journal, and a lesson if it transfers.
+- **Hardware comparison criterion** (in addition to limits, simulation and library verification): `compare` says "promote": candidate mean better by > 1 pooled std over >= 5 trials with 0 falls.
+  Save as a candidate with `save_motion` and a validated composite with `save_skill`; only the library gate
+  promotes exact verified content. Archive superseded user data instead of deleting it. Record the result in the goal notes, the journal, and a lesson if it transfers.
 
 ## Curriculum (`~/.local/share/tonypi/brain/curriculum.json`)
 0. Joint map (lying for legs, standing for arms): sign, range, speed, error for all 16 servos.

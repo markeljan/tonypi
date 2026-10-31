@@ -5,21 +5,26 @@ description: 'How to run an autonomy session - the work I do on my own when nobo
 
 # Autonomy session
 
+Everyday autonomy has the ten high-level library tools only. A goal or body permission does not enable fine
+control: learning/practice/calibration needs an explicit owner request and a separate learning MCP profile.
+Use `status` and named library actions normally. Do non-body work or record a blocker when a goal needs unavailable
+fine tools; never bypass the profile with shell/socket. New motions require limits, simulation and library verification.
+
 The voice service starts a session after ~75 s of quiet: a new thread with one goal (title, success, next step, last
 notes) set as its Codex goal and a token budget. The owner speaking ends it within 2 s (the body stops); the next
 session picks up from the ledger.
 
 ## Start (under a minute)
 1. Read the objective. `tony goal show <id>`, `tony recall "<goal words>" --days 7`, and for body goals
-   `library()`, `ledger(...)`, `body_model()`.
-2. Body check if the goal needs the body: `get_state` (battery >= 10.9 V, hottest < 70 C, no latch). The scheduler
+   `status()`; detailed `library`, `ledger` and `body_model` only in owner-authorized learning.
+2. Body check if the goal needs the body: `status` (battery >= 10.9 V, hottest < 70 C, no latch). The scheduler
    already checked the robot lock (no motion tools while someone tests); a trial refusing with "robot lock" means
    someone started testing: switch to non-body work. Tool calls: AGENTS.md "Calling tools".
 3. Visible work: one short line first with `tony say "<what I'm about to try>"`.
 
 ## Work
-- Body goals: follow `body-learning` (and `gait-tuning`, `motion-authoring`, `phone-observer`). Batches of trials,
-  not single probes. Falls are data: the runner gets up and goes on.
+- Body goals: select available named library actions and inspect job/status outcomes. Only an explicitly
+  owner-authorized learning session follows `body-learning`, `gait-tuning`, `motion-authoring` and measured trials.
 - Non-body goals: code self-review, voice-pipeline fixes, memory curation; follow `self-upgrade`. Small tested
   commits (`auto:`), never safety code.
 - After each meaningful step: `tony goal note <id> "<numbers>"`. Change approach after 2 failures (`when-stuck`).
@@ -33,7 +38,7 @@ session picks up from the ledger.
 - Move after a stop until the owner asks for a move.
 
 ## End
-1. End in a stable pose: `run_skill("settle")` or `run_skill("lie_down")` if I'm going to stay put.
+1. End in a stable pose: `posture({name:"stand"})` or `posture({name:"rest"})` if I'm going to stay put.
 2. `tony goal note <id> "<where I stopped, next step>"`, `tony goal update <id> --next-step "..."`.
 3. Success criteria met by measurement: `tony goal done <id> "<evidence>"`. Blocked: `tony goal block <id> "..."`.
 4. `tony journal --kind autonomy "<one line summary>"`; `tony remember --kind lesson` for a lesson that transfers.

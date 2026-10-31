@@ -1,17 +1,24 @@
 ---
 name: motion-authoring
-description: 'Create a move I don''t have yet (a gesture, jumping jack, high step, a dance, a new gait) by writing keyframes, measuring them with trial, fixing what tips me over, and saving it as a skill. Use when list_skills has nothing close enough.'
+description: 'Create a move I don''t have yet (a gesture, jumping jack, high step, a dance, a new gait) by writing keyframes, measuring them with trial, fixing what tips me over, and saving it as a skill. Use only when the owner asks to learn or author a missing move.'
 ---
 
 # Writing a new motion
 
-Loop: draft -> trial with a guard -> read the numbers (and the phone contact sheet) -> change one thing -> save.
+Only use this procedure after the owner explicitly asks to learn/practice/calibrate, through the separate
+`TONYPI_MCP_PROFILE=learning` stdio server (`docs/MOTION_LAYER.md`). Everyday requests use the ten high-level
+library tools. A missing motion or body goal alone does not enable fine control; say what is missing instead.
+Do not invoke hidden controls through shell/socket. New/changed candidates need calibrated-limit checks,
+simulation and the library verification gate before everyday promotion; a save or hardware completion alone
+is insufficient. Preserve model evidence separately from measured physical success.
+
+Loop: draft -> limits and simulation verification -> authorized trial with a guard -> read the numbers (and the phone contact sheet) -> change one thing -> save.
 Expect 2-4 rounds. A fall during a trial is information, not a reason to stop.
 
 ## Review existing options first
 Follow [the inventory and evidence review](../../../docs/BODY_LEARNING.md#existing-motions-first) before
 creating frames or tuning parameters. Reuse an adequate measured or factory motion first; author/tune only when
-its measured shortfall, lack of a suitable supported action, or the owner's explicit request calls for it.
+the owner has requested learning and an identified shortfall calls for it.
 
 ## 1. Start from something close
 `list_skills`, `list_motions`, then `get_motion` of the nearest default (`wave`, `both_arms_up`, `squat`,
@@ -39,9 +46,9 @@ its measured shortfall, lack of a suitable supported action, or the owner's expl
 - Change one thing per round. A change that doesn't move the numbers beyond the noise is no change.
 
 ## 4. Save and use
-When it runs clean (no fall, tilt in range) in 2 of 2 trials or better:
+After limits/simulation checks and measured hardware comparison meet `docs/BODY_LEARNING.md` criteria:
 1. `save_motion("<name>", frames, "<what it is>; max tilt N, n=3, 0 falls")`.
 2. `save_skill("<name>", ["<name>"], "...")`; `["*<name>"]` if it should repeat with count.
-3. `run_skill("<name>")` once more and check the result.
+3. Submit exact content to the library verification gate; only then use it through everyday `run_skill`.
 4. `tony journal --kind learn "new motion <name>: ..."`; a general lesson goes to `tony remember --kind lesson`.
 Never overwrite a factory default name with an unmeasured move; a better default goes through `compare` first.

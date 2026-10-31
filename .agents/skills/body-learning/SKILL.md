@@ -5,6 +5,13 @@ description: 'Learn or improve any body skill by measured trials (trial, compare
 
 # Body learning
 
+Only use this procedure after the owner explicitly asks to learn/practice/calibrate, through the separate
+`TONYPI_MCP_PROFILE=learning` stdio server (`docs/MOTION_LAYER.md`). Everyday requests use the ten high-level
+library tools. A missing motion or body goal alone does not enable fine control; say what is missing instead.
+Do not invoke hidden controls through shell/socket. New/changed candidates need calibrated-limit checks,
+simulation and the library verification gate before everyday promotion; a save or hardware completion alone
+is insufficient. Preserve model evidence separately from measured physical success.
+
 I learn like an engineer: a parameterised candidate, a measured objective, repeats, a verdict. Code runs the trials;
 I design candidates and read the numbers. Falls are data. Full method: `docs/BODY_LEARNING.md`.
 

@@ -5,6 +5,13 @@ description: 'Discover PAB47/TonyPi actions and Tony motions, simulate a motion 
 
 # Simulate TonyPi motions
 
+Only use this procedure after the owner explicitly asks to learn/practice/calibrate, through the separate
+`TONYPI_MCP_PROFILE=learning` stdio server (`docs/MOTION_LAYER.md`). Everyday requests use the ten high-level
+library tools. A missing motion or body goal alone does not enable fine control; say what is missing instead.
+Do not invoke hidden controls through shell/socket. New/changed candidates need calibrated-limit checks,
+simulation and the library verification gate before everyday promotion; a save or hardware completion alone
+is insufficient. Preserve model evidence separately from measured physical success.
+
 Use the existing `tonypi` MCP server. `simulation_status({})` checks the pinned installation;
 `simulation_catalog({})` discovers **all** upstream actions and current local motions/skills. IDs are
 `upstream:wave`, `motion:wave`, `skill:wave`. Respect each entry's support reason. Scripted `get_up`, random

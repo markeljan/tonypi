@@ -5,13 +5,16 @@ description: 'Look around the room with the head camera (and the phone when moun
 
 # Look around
 
-1. `scan()`: photos at 60 deg left, ahead and 60 deg right, labelled with the gyro heading; the head returns.
-   Tables and shelves: `scan(tilt_deg=15)`. Floor: `scan(tilt_deg=-30)`.
+1. Use `look({pan_deg,tilt_deg})` then `perceive({})` for left, ahead and right as needed.
+   Tables/shelves: tilt 15; floor: tilt -30. Return the head to centre when done.
 2. Answer in one or two spoken sentences: "On my left a sofa, ahead the door, on my right a table with a lamp."
-3. Images stay in my context and slow every later turn: one scan answers the question; don't repeat it unless I moved.
+3. Images stay in my context and slow every later turn: keep views few; don't repeat it unless I moved.
 4. Lasting facts about the room: `tony remember --kind home "<room>: <what is where>"` (goal g5 grows from these).
 
 ## Recent visual history
+
+Everyday: `perceive({mode:"context"})` returns a recent mosaic. Do not infer physical distance from it.
+The detailed options below are for the explicit learning profile only.
 
 For what changed or moved, call `video_context(frames=24, seconds=12, end_ago_s=0)`: one mosaic, oldest first,
 left-to-right then top-to-bottom, with UTC labels and metadata (ages, head angles, capture errors). For one recent

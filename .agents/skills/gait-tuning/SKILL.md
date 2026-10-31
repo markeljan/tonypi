@@ -5,10 +5,17 @@ description: 'Make an existing gait or move better (steadier, faster, straighter
 
 # Gait tuning
 
+Only use this procedure after the owner explicitly asks to learn/practice/calibrate, through the separate
+`TONYPI_MCP_PROFILE=learning` stdio server (`docs/MOTION_LAYER.md`). Everyday requests use the ten high-level
+library tools. A missing motion or body goal alone does not enable fine control; say what is missing instead.
+Do not invoke hidden controls through shell/socket. New/changed candidates need calibrated-limit checks,
+simulation and the library verification gate before everyday promotion; a save or hardware completion alone
+is insufficient. Preserve model evidence separately from measured physical success.
+
 ## Review existing options first
 Follow [the inventory and evidence review](../../../docs/BODY_LEARNING.md#existing-motions-first) before
 creating frames or tuning parameters. Reuse an adequate measured or factory motion first; author/tune only when
-its measured shortfall, lack of a suitable supported action, or the owner's explicit request calls for it.
+the owner has requested learning and an identified shortfall calls for it.
 
 ## Baseline
 1. `library()` and `ledger(skill=...)`: maybe it's already measured.
@@ -41,6 +48,6 @@ At most ~20-30 counts per servo per round.
 - `tony goal note`, `tony journal --kind learn`, and one lesson line if it generalises.
 
 ## Calibration
-Standing crooked (idle upright tilt > 5 deg): `calibration(trim={"<servo>": +-5..10})`, `run_skill("stand")`,
+Standing crooked (idle upright tilt > 5 deg): `calibration(trim={"<servo>": +-5..10})`, `practice_skill("stand")`,
 `get_state`, compare tilt. Soft `limits` keep a servo in range for every motion. `servo_calibrate` (EEPROM) only with
 a measured reason and the owner's yes.

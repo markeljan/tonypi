@@ -37,7 +37,8 @@ Status markers: [x] done · [~] in progress · [ ] todo
 - [ ] Barge-in while speaking; better far-field mic
 
 ## 4. Brain
-- [x] Robot MCP server `tonypi-mcp` (Streamable HTTP :8765): list_skills, run_skill, stop, get_state, look, snapshot, say (M1)
+- [x] Robot MCP server `tonypi-mcp` (Streamable HTTP :8765); current everyday and learning profiles are documented
+  in `docs/MOTION_LAYER.md` (original broad interface replaced).
 - [x] Local fast loop: JSON-schema plan (say + ≤6 enum actions), offline, ~2–4 s (`tonypi-agent`, 2026-10-28; LFM3-Omni since 2026-10-29)
 - [x] Harness bake-off own / Hermes / pi (2026-10-30, `docs/archive/HARNESS_BAKEOFF.md`): retired to branches
   `deprecated/harness-*`; live mode (GPT-Live-1 voice + Codex brain) is the one harness, LFM3 agent the offline fallback
@@ -50,6 +51,9 @@ Status markers: [x] done · [~] in progress · [ ] todo
 - [ ] Nightly memory curation session (merge Recent into sections, dedupe, keep MEMORY.md <= 4 KB)
 
 ## 5. Better motion
+- [~] Library-first motion layer (2026-10-31): ten everyday tools; explicit separate learning profile, provenance,
+  calibrated-limit/model verification and guarded composite promotion. See `docs/MOTION_LAYER.md`.
+- [ ] Owner-supervised physical acceptance of the imported/verified catalog; model success is not hardware success.
 - [~] Body learning (2026-10-30, `docs/BODY_LEARNING.md`): measured `trial` / `compare` / `body_sweep`, job log,
   ledger, body model, skill library, phone as observer; curriculum joint map → weight shift → step → turn → walk 1 m
 - [ ] Goals g1-g4: body model of 16 servos, get_up >= 9/10 both sides, walk 1 m straight 3/3, turn 90 deg +-10

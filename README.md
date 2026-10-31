@@ -14,6 +14,10 @@ flowchart LR
   Learning["Body learning and simulation"] --> Body
 ```
 
+Everyday motion uses [ten named tools](docs/MOTION_LAYER.md); joint control is available only in a separate,
+owner-requested learning profile. [Motion provenance and model results](docs/MOTION_SOURCES.md) distinguish
+available library candidates from actions still blocked pending validation. Hardware acceptance remains supervised.
+
 ## Hardware
 
 - Hiwonder TonyPi humanoid, servo controller, servos and IMU; Raspberry Pi 5 (the documented system uses 8 GB).

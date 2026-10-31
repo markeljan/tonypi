@@ -24,7 +24,8 @@ and refuses a different/modified existing checkout. It never executes upstream i
 robot calibration. Edited/untracked model/action/calibration assets are refused, rather than silently assigned
 the pinned version. Reinstallation does not overwrite an existing checkout. No new service or network port is used.
 
-Four new tools are served by the existing `tonypi` MCP server:
+The following detailed tools are served only by the explicit learning MCP profile
+(`TONYPI_MCP_PROFILE=learning`), never the ten-tool everyday HTTP profile:
 
 | Tool | Effect |
 | --- | --- |
@@ -35,7 +36,7 @@ Four new tools are served by the existing `tonypi` MCP server:
 
 `simulation_execute` is in the voice harness's BODY_TOOLS list so no-body sessions hide it. The running voice
 process must reload that classification at its next managed restart; background tasks never restart voice.
-The new skill is `.agents/skills/tonypi-simulation/SKILL.md` and loads in new brain threads.
+The skill is `.agents/skills/tonypi-simulation/SKILL.md` and loads in new brain threads.
 
 ## Shell and MCP examples
 
@@ -89,7 +90,8 @@ motion edits also invalidate the report. Head/gripper channels are omitted in bo
 Raw `.d6a` pulses map to model radians using upstream ZERO/SIGN and 240 degrees/1000 counts; those tables were
 measured on a different robot. Native motion-space frames add Tony's trim and soft limits in the simulation;
 imported raw frames subtract Tony's trim before tonyd adds it back. No EEPROM calibration or saved-motion overrides
-are performed. The Python servo mapping conflicts with some XML left/right comments; this adapter follows the
+are performed. Saving/importing a motion does not promote it: everyday use additionally requires the exact-content
+library verification gate and calibrated-limit checks; retain model and hardware evidence separately. The Python servo mapping conflicts with some XML left/right comments; this adapter follows the
 Python convention and reports the uncertainty. Model masses, friction, torque limits, gains and geometry are not
 fit to Tony, and real heat, battery, backlash, torque-off, floor and obstacles are absent. Results cannot establish
 physical safety, success or automatic promotion.
