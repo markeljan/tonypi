@@ -1,0 +1,3324 @@
+{
+  "schema_version": 1,
+  "calibration": {
+    "trim": {},
+    "limits": {}
+  },
+  "verification_scope": "Model and kinematic checks only; no physical execution or hardware success claimed.",
+  "simulator": {
+    "url": "https://github.com/pab47/TonyPi",
+    "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+    "license": "MIT"
+  },
+  "motions": {
+    "back": {
+      "frames_sha256": "539ffe25da68a32e50d186af19f449fccf7fccd87ba9827a2dcf997fe921ec66",
+      "duration_ms": 1600,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/back.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "b2c0e0f48adc468e9462be0511efb40f",
+        "simulation_success": true,
+        "max_tilt_deg": 5.78,
+        "end_tilt_deg": 5.14,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/b2c0e0f48adc468e9462be0511efb40f/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "back_end": {
+      "frames_sha256": "f89d8ae2a2ed87e0bf83d8534a054ad26936974a7bf86c280bf0c77c23101bf3",
+      "duration_ms": 400,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/back_end.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "9f2ca90ad293464e899808ecb08387b0",
+        "simulation_success": true,
+        "max_tilt_deg": 3.64,
+        "end_tilt_deg": 3.59,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/9f2ca90ad293464e899808ecb08387b0/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "back_fast": {
+      "frames_sha256": "a2de4c721daad7f96c19d090bbfb6c1466ea336578d9570d5fb19573cad5c7ac",
+      "duration_ms": 1000,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/back_fast.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "c62b9937daff4c76b65b904c5930ddca",
+        "simulation_success": true,
+        "max_tilt_deg": 7.4,
+        "end_tilt_deg": 6.38,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/c62b9937daff4c76b65b904c5930ddca/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "back_one_step": {
+      "frames_sha256": "77ecc85851901dbd17bf06181e2b2d0e8b5c29647fd8dad82ffc987cb9e1b1a6",
+      "duration_ms": 2800,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/back_one_step.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "2d5299cb34b442289bbfa68627d1ff08",
+        "simulation_success": true,
+        "max_tilt_deg": 7.85,
+        "end_tilt_deg": 3.02,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/2d5299cb34b442289bbfa68627d1ff08/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "back_power": {
+      "frames_sha256": "a6eb3b2714adb74ac7e06552223d7a70af10e1cff1c72be4122eb91772cc3384",
+      "duration_ms": 550,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "hiwonder .d6a",
+        "frames_match_official": null
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "5e72a3df485a4ccea5e361dcc22908a2",
+        "simulation_success": false,
+        "max_tilt_deg": 95.73,
+        "end_tilt_deg": 91.94,
+        "model_joint_clip_count": 1,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/5e72a3df485a4ccea5e361dcc22908a2/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "back_power_end": {
+      "frames_sha256": "ec1f5b52fb76e5fd41d4ec88e32d2efa9b05926bf1517a4780ae47f79eaa3318",
+      "duration_ms": 300,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "hiwonder .d6a",
+        "frames_match_official": null
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "06ca7207a9384066ab6558de50fc7172",
+        "simulation_success": true,
+        "max_tilt_deg": 7.05,
+        "end_tilt_deg": 2.04,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/06ca7207a9384066ab6558de50fc7172/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "back_power_start": {
+      "frames_sha256": "545347c33541b291e1b05d5a1ac897d0a3ac140b2f6846b6e7975af6e4ca3d3d",
+      "duration_ms": 730,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "hiwonder .d6a",
+        "frames_match_official": null
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "7e9dcf519214491ab21a35ff30a99529",
+        "simulation_success": true,
+        "max_tilt_deg": 11.16,
+        "end_tilt_deg": 9.85,
+        "model_joint_clip_count": 1,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/7e9dcf519214491ab21a35ff30a99529/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "back_start": {
+      "frames_sha256": "9e9a1b27fe4cd7e856517c45486a4dd2b3b478ddc3df738cd03871a3b1f391f7",
+      "duration_ms": 500,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/back_start.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "f851da0fae7c4b89ae29b37790d0f52f",
+        "simulation_success": true,
+        "max_tilt_deg": 7.2,
+        "end_tilt_deg": 6.36,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/f851da0fae7c4b89ae29b37790d0f52f/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "both_arms_up": {
+      "frames_sha256": "4a51e176510b56ef5b67d19d6bbb811c72f053a8fe817d62f504d766cfe2cd1c",
+      "duration_ms": 3600,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "hiwonder .d6a",
+        "frames_match_official": null
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "ed48cedaa86341fdb5708311a445a788",
+        "simulation_success": true,
+        "max_tilt_deg": 7.23,
+        "end_tilt_deg": 2.09,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/ed48cedaa86341fdb5708311a445a788/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "bow": {
+      "frames_sha256": "1afa5b87fee90ebbf319c2ad8275c4ba91edfbdfe3cae79ad043850490b3fb5b",
+      "duration_ms": 4000,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/bow.d6a",
+        "frames_match_official": false,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "62b53ffb33e040039768ec4aa511a652",
+        "simulation_success": true,
+        "max_tilt_deg": 5.17,
+        "end_tilt_deg": 2.12,
+        "model_joint_clip_count": 4,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/62b53ffb33e040039768ec4aa511a652/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "chest": {
+      "frames_sha256": "0aa80092d24fde84774ffa185932f4af17d1b7a196c0589d6c0ec0c5f04de9ed",
+      "duration_ms": 8400,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/chest.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "18a88c61ab4548d4923caad6ecaeb820",
+        "simulation_success": false,
+        "max_tilt_deg": 46.98,
+        "end_tilt_deg": 1.56,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/18a88c61ab4548d4923caad6ecaeb820/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "climb_stairs": {
+      "frames_sha256": "172c9885d5df343589af8887de14994ff57525fd01cefae03087dabdec012d5f",
+      "duration_ms": 8300,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/climb_stairs.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "623aeaa3c1e94ad28b9020dd157cf938",
+        "simulation_success": false,
+        "max_tilt_deg": 102.78,
+        "end_tilt_deg": 89.95,
+        "model_joint_clip_count": 11,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/623aeaa3c1e94ad28b9020dd157cf938/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "creep_forward": {
+      "frames_sha256": "bd63c62fd965cf9c0a216752bf42d50782a0bbab1360a6e2e7511763148a9f7f",
+      "duration_ms": 24800,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/creep_forward.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "bdc4964c0db54785bcbade1c07d932c1",
+        "simulation_success": false,
+        "max_tilt_deg": 100.19,
+        "end_tilt_deg": 89.95,
+        "model_joint_clip_count": 123,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/bdc4964c0db54785bcbade1c07d932c1/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "dance1": {
+      "frames_sha256": "9fa638d7dc3fc7433d0761d528312e3f5991c728d9de027390be29aebebcb30f",
+      "duration_ms": 50400,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "hiwonder .d6a",
+        "frames_match_official": null
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "0c7d5f008b854543a9c096065d618b21",
+        "simulation_success": false,
+        "max_tilt_deg": 179.83,
+        "end_tilt_deg": 2.15,
+        "model_joint_clip_count": 21,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/0c7d5f008b854543a9c096065d618b21/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "dance2": {
+      "frames_sha256": "c24c6bd2dbcd2cbebe5d167301f4e4fc62635b3b00b0eefe78e71e9ef841e5e7",
+      "duration_ms": 67140,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "hiwonder .d6a",
+        "frames_match_official": null
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "eb3ccd85f7ea4ee0838f1551251a2ae4",
+        "simulation_success": false,
+        "max_tilt_deg": 68.62,
+        "end_tilt_deg": 22.0,
+        "model_joint_clip_count": 153,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/eb3ccd85f7ea4ee0838f1551251a2ae4/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "dance3": {
+      "frames_sha256": "64bf20b2f634a58cbbec8051594d463de4f22ec7b2e46885fb8246a3b68ed11e",
+      "duration_ms": 81100,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "hiwonder .d6a",
+        "frames_match_official": null
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "d9c7dfd770af41a1aed47415d820d0c9",
+        "simulation_success": false,
+        "max_tilt_deg": 93.43,
+        "end_tilt_deg": 89.94,
+        "model_joint_clip_count": 106,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/d9c7dfd770af41a1aed47415d820d0c9/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "dance4": {
+      "frames_sha256": "8bebeeda82c4e8517c4d8adb0af61f91ba8aa1efb618855f9789f9226ca9c600",
+      "duration_ms": 55500,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "hiwonder .d6a",
+        "frames_match_official": null
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "3dbebd89481249d6b75ee1c3797597de",
+        "simulation_success": false,
+        "max_tilt_deg": 114.33,
+        "end_tilt_deg": 89.95,
+        "model_joint_clip_count": 15,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/3dbebd89481249d6b75ee1c3797597de/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "dance5": {
+      "frames_sha256": "fe73dbb130232d92e8041daa8ca82b2ba1041ce32f35f0def269c91088005d66",
+      "duration_ms": 63190,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "hiwonder .d6a",
+        "frames_match_official": null
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "93caf0cf84be4cedbac599de2b4fc4d0",
+        "simulation_success": false,
+        "max_tilt_deg": 127.57,
+        "end_tilt_deg": 89.87,
+        "model_joint_clip_count": 132,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/93caf0cf84be4cedbac599de2b4fc4d0/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "dance6": {
+      "frames_sha256": "078b47b0255cd894a62f4c54cc1db08f2fccd007c8025846f7543465dd682787",
+      "duration_ms": 64800,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "hiwonder .d6a",
+        "frames_match_official": null
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "3b47e2a11d374a64a116a68e2f78b2c9",
+        "simulation_success": false,
+        "max_tilt_deg": 92.82,
+        "end_tilt_deg": 89.94,
+        "model_joint_clip_count": 29,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/3b47e2a11d374a64a116a68e2f78b2c9/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "dance7": {
+      "frames_sha256": "e264a07c304960cbbf9f8bf8ba3816efd2a1d1e9f8a54a342561a51c35ead15f",
+      "duration_ms": 83250,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "hiwonder .d6a",
+        "frames_match_official": null
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "d8d8515c22b448819ca4eba396456ef1",
+        "simulation_success": true,
+        "max_tilt_deg": 18.96,
+        "end_tilt_deg": 1.49,
+        "model_joint_clip_count": 188,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/d8d8515c22b448819ca4eba396456ef1/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "dance8": {
+      "frames_sha256": "8d66fbad855c76ef789b9fbd7870653edffe28784038880ec048a88a6b9fb85d",
+      "duration_ms": 82030,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "hiwonder .d6a",
+        "frames_match_official": null
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "03ad4e07876044fcaacb4042bb528efa",
+        "simulation_success": false,
+        "max_tilt_deg": 96.3,
+        "end_tilt_deg": 89.94,
+        "model_joint_clip_count": 156,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/03ad4e07876044fcaacb4042bb528efa/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "dance9": {
+      "frames_sha256": "a5358568989f1042b0796e9e67b5de4669af02732e990fef1b1536ce2c855153",
+      "duration_ms": 82800,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "hiwonder .d6a",
+        "frames_match_official": null
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "1fc5153f120945a5bf976a60b510dbc6",
+        "simulation_success": false,
+        "max_tilt_deg": 93.92,
+        "end_tilt_deg": 89.94,
+        "model_joint_clip_count": 190,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/1fc5153f120945a5bf976a60b510dbc6/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "field_goal": {
+      "frames_sha256": "8c5e3035d5df05f922718e4a47dcef6ff2acd3b30e238357667540ecd5df1b02",
+      "duration_ms": 4500,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "hiwonder .d6a",
+        "frames_match_official": null
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "fbead54081c54ec9a2f6081428e37bb9",
+        "simulation_success": true,
+        "max_tilt_deg": 7.28,
+        "end_tilt_deg": 2.09,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/fbead54081c54ec9a2f6081428e37bb9/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "go": {
+      "frames_sha256": "4b814833bb2ea35bb0d82db0740090c3b733d4965141ef62c141f3b30be39f7d",
+      "duration_ms": 800,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/go.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "51e86bbec77946ec9b689769e6b0dcd2",
+        "simulation_success": true,
+        "max_tilt_deg": 14.1,
+        "end_tilt_deg": 2.42,
+        "model_joint_clip_count": 1,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/51e86bbec77946ec9b689769e6b0dcd2/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "go_forward": {
+      "frames_sha256": "a225e887c60ed2fa1d009eea8ad9c920a47a5251d2dba6176c0d5d87401451e1",
+      "duration_ms": 500,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/go_forward.d6a",
+        "frames_match_official": false,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "dccffd15faa6481ebfb66f2a457b0ac8",
+        "simulation_success": false,
+        "max_tilt_deg": 97.3,
+        "end_tilt_deg": 90.77,
+        "model_joint_clip_count": 2,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/dccffd15faa6481ebfb66f2a457b0ac8/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "go_forward_end": {
+      "frames_sha256": "4579c7b08deebabdca6a4f154233d2db99816803791fe5af563255bd7086e9e7",
+      "duration_ms": 175,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/go_forward_end.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "c62af13d609941c6b2cb8f0fb634dbac",
+        "simulation_success": true,
+        "max_tilt_deg": 10.12,
+        "end_tilt_deg": 1.98,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/c62af13d609941c6b2cb8f0fb634dbac/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "go_forward_fast": {
+      "frames_sha256": "3fbac539292494d3a250540cc9d6cc845c3473eef7defe62c4ed0cd156cd416e",
+      "duration_ms": 450,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/go_forward_fast.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "fb0a8fd3727a4860b8b16ce3385437d2",
+        "simulation_success": true,
+        "max_tilt_deg": 11.23,
+        "end_tilt_deg": 2.0,
+        "model_joint_clip_count": 1,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/fb0a8fd3727a4860b8b16ce3385437d2/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "go_forward_one_small_step": {
+      "frames_sha256": "a2000f8fd55ece20d7fcf668613af5e37f708d08bd4eeaad0ff51e74330c0502",
+      "duration_ms": 1250,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/go_forward_one_small_step.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "e4b75674a7d541279b66d850e01fc752",
+        "simulation_success": true,
+        "max_tilt_deg": 6.54,
+        "end_tilt_deg": 1.6,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/e4b75674a7d541279b66d850e01fc752/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "go_forward_one_step": {
+      "frames_sha256": "4ace2731f8f2a10899269308a0a50fe99549659d49cde1d779487dad5b119c02",
+      "duration_ms": 1200,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/go_forward_one_step.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "34145e0bd1314d6e9649057f812befab",
+        "simulation_success": true,
+        "max_tilt_deg": 8.15,
+        "end_tilt_deg": 1.6,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/34145e0bd1314d6e9649057f812befab/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "go_forward_power": {
+      "frames_sha256": "3fe1f4a1e085edc3f563f3648468de9f9a38afba15a91413bda6828afb2f58a2",
+      "duration_ms": 500,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "hiwonder .d6a",
+        "frames_match_official": null
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "d18d29c3b23244d99c8d2ea500c18663",
+        "simulation_success": false,
+        "max_tilt_deg": 94.06,
+        "end_tilt_deg": 88.9,
+        "model_joint_clip_count": 2,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/d18d29c3b23244d99c8d2ea500c18663/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "go_forward_power_end": {
+      "frames_sha256": "4579c7b08deebabdca6a4f154233d2db99816803791fe5af563255bd7086e9e7",
+      "duration_ms": 175,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "hiwonder .d6a",
+        "frames_match_official": null
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "bcc0e954777245eabe43942c3a7b083b",
+        "simulation_success": true,
+        "max_tilt_deg": 10.12,
+        "end_tilt_deg": 1.98,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/bcc0e954777245eabe43942c3a7b083b/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "go_forward_power_start": {
+      "frames_sha256": "adc816c6197f3252c155b32eaf6696c8d017f2fdd5eea9c359cb54c896d7111d",
+      "duration_ms": 785,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "hiwonder .d6a",
+        "frames_match_official": null
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "82b5acb51d1241d6aa9e3feacd87ad9a",
+        "simulation_success": true,
+        "max_tilt_deg": 17.39,
+        "end_tilt_deg": 3.03,
+        "model_joint_clip_count": 3,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/82b5acb51d1241d6aa9e3feacd87ad9a/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "go_forward_start": {
+      "frames_sha256": "bd55def3f127b4594860879f0bc4bc06f834d3a70058536ebb650b6f6deb647f",
+      "duration_ms": 1075,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/go_forward_start.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "874d18623f3743a48ec27616a31a3d85",
+        "simulation_success": true,
+        "max_tilt_deg": 9.89,
+        "end_tilt_deg": 1.98,
+        "model_joint_clip_count": 1,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/874d18623f3743a48ec27616a31a3d85/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "go_forward_start_fast": {
+      "frames_sha256": "2ce45eaa84a8c9ab0798d3a4c0b711e86fca78548ec9c2bdba0a01367528ab97",
+      "duration_ms": 815,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/go_forward_start_fast.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "b189b3f7d27c4762a44d0333668f19d2",
+        "simulation_success": true,
+        "max_tilt_deg": 13.6,
+        "end_tilt_deg": 2.02,
+        "model_joint_clip_count": 1,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/b189b3f7d27c4762a44d0333668f19d2/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "huibi": {
+      "frames_sha256": "189b6808d244d3be574ab0611a105a81dbb77ac128b8b10d5b77e42f7990ea9e",
+      "duration_ms": 3500,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/huibi.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "1933244b65914bc78abbe664d8cbb8f7",
+        "simulation_success": true,
+        "max_tilt_deg": 2.94,
+        "end_tilt_deg": 1.45,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/1933244b65914bc78abbe664d8cbb8f7/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "left_hand": {
+      "frames_sha256": "d089572c64a623a4cd94c109e3c9862dcdd6cc2ec1b5387baa70e5e4452d23b0",
+      "duration_ms": 2500,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/left_hand.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "70a02e2cc3904b9a9cff01edf3d3eae7",
+        "simulation_success": true,
+        "max_tilt_deg": 2.4,
+        "end_tilt_deg": 2.05,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/70a02e2cc3904b9a9cff01edf3d3eae7/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "left_kick": {
+      "frames_sha256": "5eabef7e4a0598cf623221f9e8352a7c7c278724a02cdf449edf597350074ec1",
+      "duration_ms": 1100,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/left_kick.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "64ced134411e4c99a36cd533621e91f2",
+        "simulation_success": false,
+        "max_tilt_deg": 92.61,
+        "end_tilt_deg": 89.94,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/64ced134411e4c99a36cd533621e91f2/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "left_move": {
+      "frames_sha256": "c26e605ab67f6529e02da6c6ed993ae614169f48214ec5852df003c5af83971b",
+      "duration_ms": 1300,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/left_move.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "4bdd97e4fdbd41efb3adc4f3edff62f5",
+        "simulation_success": true,
+        "max_tilt_deg": 5.34,
+        "end_tilt_deg": 2.25,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/4bdd97e4fdbd41efb3adc4f3edff62f5/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "left_move_10": {
+      "frames_sha256": "36f04889ab0cf2c4b9c0190379adb384ad8dc2de044b0a63bf3ee286ecb87991",
+      "duration_ms": 1000,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/left_move_10.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "71c27033324b4d7d8f8cf5d00ef6c86a",
+        "simulation_success": true,
+        "max_tilt_deg": 3.94,
+        "end_tilt_deg": 2.17,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/71c27033324b4d7d8f8cf5d00ef6c86a/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "left_move_20": {
+      "frames_sha256": "f27987440302d0f2ae4bab5b541c30dfe0ea8f13086cd849bf42a5e2534539ca",
+      "duration_ms": 1100,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/left_move_20.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "6c71e00a7934422ba7897c3cff13437b",
+        "simulation_success": true,
+        "max_tilt_deg": 4.55,
+        "end_tilt_deg": 2.13,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/6c71e00a7934422ba7897c3cff13437b/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "left_move_30": {
+      "frames_sha256": "5f966533985993e4811478c21ae12bc17e139da1afc7b399501ea980d76813da",
+      "duration_ms": 1600,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/left_move_30.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "26c42929028d43ab92aa08a661f59d8e",
+        "simulation_success": true,
+        "max_tilt_deg": 4.6,
+        "end_tilt_deg": 2.07,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/26c42929028d43ab92aa08a661f59d8e/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "left_move_40": {
+      "frames_sha256": "a3878ee3c3c710614c1f92ea6d9e9ba814236fc555bd257ddf7a5118dbe5d487",
+      "duration_ms": 1200,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/left_move_40.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "056f936e65d54dca98fa8f56fde3cca8",
+        "simulation_success": true,
+        "max_tilt_deg": 5.41,
+        "end_tilt_deg": 2.03,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/056f936e65d54dca98fa8f56fde3cca8/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "left_move_fast": {
+      "frames_sha256": "1cf98822d4a33cf51787f9a945689db369dbedfd35c21b1db9a645774703ca31",
+      "duration_ms": 650,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/left_move_fast.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "ae64a4b96b77432f9ed9804a21936bf0",
+        "simulation_success": true,
+        "max_tilt_deg": 10.54,
+        "end_tilt_deg": 1.37,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/ae64a4b96b77432f9ed9804a21936bf0/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "left_shot": {
+      "frames_sha256": "a714948cf881479aa87d786f5e2ced06f1cce371dacd13d43eae292ced4a338e",
+      "duration_ms": 6400,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/left_shot.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "eb49d219a9df4c28bd08baa29a884bf3",
+        "simulation_success": false,
+        "max_tilt_deg": 93.54,
+        "end_tilt_deg": 89.94,
+        "model_joint_clip_count": 4,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/eb49d219a9df4c28bd08baa29a884bf3/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "left_shot_fast": {
+      "frames_sha256": "c721db5fcf25f07b0a3a8dfbaf4c580bba77daa6d99b5c6fcfeed12163163ef0",
+      "duration_ms": 3900,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/left_shot_fast.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "c5173e0b17824e6e8df3445a87175590",
+        "simulation_success": false,
+        "max_tilt_deg": 92.75,
+        "end_tilt_deg": 89.94,
+        "model_joint_clip_count": 2,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/c5173e0b17824e6e8df3445a87175590/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "left_uppercut": {
+      "frames_sha256": "6146d51c3db0ab746b041628c7e6a1f60582d871089d7a7522db5566b96fda91",
+      "duration_ms": 1100,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/left_uppercut.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "4df338d620cb49498439eb2ed8af02fd",
+        "simulation_success": true,
+        "max_tilt_deg": 12.96,
+        "end_tilt_deg": 2.4,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/4df338d620cb49498439eb2ed8af02fd/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "lie_down": {
+      "frames_sha256": "327df10c91e8b2bbf7024e34132d570c7bd273d22f5b0ce2932e5dcc5d45b86d",
+      "duration_ms": 4000,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/lie_down.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "94b39ca4708e43db8b62ee3d390a7443",
+        "simulation_success": false,
+        "max_tilt_deg": 105.07,
+        "end_tilt_deg": 100.26,
+        "model_joint_clip_count": 16,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/94b39ca4708e43db8b62ee3d390a7443/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "lift_left_hand": {
+      "frames_sha256": "8cf7dcc7692ce145d356d5de78adc2ccb0f46c6e8970e8b79a3a66ea7fd0946b",
+      "duration_ms": 2000,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/lift_left_hand.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "d5ea60b7421c45798e3ee18223cd962c",
+        "simulation_success": true,
+        "max_tilt_deg": 3.11,
+        "end_tilt_deg": 1.61,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/d5ea60b7421c45798e3ee18223cd962c/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "move_up": {
+      "frames_sha256": "d43200ac9380e3512aa238b51c224a1420132284bf5f9c5e5f2eacdafc01c839",
+      "duration_ms": 8100,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/move_up.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "fb6ff1755397473eb2b799a8a3404b49",
+        "simulation_success": true,
+        "max_tilt_deg": 20.65,
+        "end_tilt_deg": 2.6,
+        "model_joint_clip_count": 32,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/fb6ff1755397473eb2b799a8a3404b49/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "put_down": {
+      "frames_sha256": "7b1b789fb6ebd7217af0ad5521a77c6a14815d61cd571a69e15b2dcb301497bf",
+      "duration_ms": 7100,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/put_down.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "25cbb1db2aed414483eb41386d463635",
+        "simulation_success": false,
+        "max_tilt_deg": 112.73,
+        "end_tilt_deg": 98.32,
+        "model_joint_clip_count": 42,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/25cbb1db2aed414483eb41386d463635/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "right": {
+      "frames_sha256": "b0e742050a43a04366de34b4bdbfcb8be3e0dcef80e563b252df360681767aeb",
+      "duration_ms": 1000,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/right.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "e2e1079423854ec58cea0f25f30f335d",
+        "simulation_success": true,
+        "max_tilt_deg": 10.7,
+        "end_tilt_deg": 2.1,
+        "model_joint_clip_count": 1,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/e2e1079423854ec58cea0f25f30f335d/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "right_hand": {
+      "frames_sha256": "f64f3ddbe82484954606508aef063ef536b12ab515e6b24a545004d4b1b6144a",
+      "duration_ms": 2500,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/right_hand.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "001dc02dfb51463b8f08767f1b4eb69b",
+        "simulation_success": true,
+        "max_tilt_deg": 2.39,
+        "end_tilt_deg": 2.05,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/001dc02dfb51463b8f08767f1b4eb69b/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "right_kick": {
+      "frames_sha256": "45298d67c1ba00d1e40d2eef33d8cace3b23328624c8852396d845d511768f26",
+      "duration_ms": 1100,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/right_kick.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "422d27f548644e558a523809828a5750",
+        "simulation_success": false,
+        "max_tilt_deg": 93.66,
+        "end_tilt_deg": 89.95,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/422d27f548644e558a523809828a5750/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "right_move": {
+      "frames_sha256": "b40e91b1b4250859a5fdb6cbe8953f26332c36d9b8512bf47dd651fb04dd1bd4",
+      "duration_ms": 1300,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/right_move.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "a0f87281090a42f1a29a3ba7d6076961",
+        "simulation_success": true,
+        "max_tilt_deg": 9.94,
+        "end_tilt_deg": 2.6,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/a0f87281090a42f1a29a3ba7d6076961/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "right_move_10": {
+      "frames_sha256": "475a5f04e17048d2fb3ccac3c12998cb37c86e9dcb0660d7aa2b1160197646b6",
+      "duration_ms": 1100,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/right_move_10.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "e94a70d8442a44c1b04c3ba74a8301f3",
+        "simulation_success": true,
+        "max_tilt_deg": 9.28,
+        "end_tilt_deg": 1.95,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/e94a70d8442a44c1b04c3ba74a8301f3/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "right_move_20": {
+      "frames_sha256": "5d791ae2731fc7764c51f71be3c166e3fb941b854704bd793d95a8a0d2b1fdc4",
+      "duration_ms": 1100,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/right_move_20.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "67fb222f6bf54a67a1ca64d2252824d3",
+        "simulation_success": true,
+        "max_tilt_deg": 7.81,
+        "end_tilt_deg": 1.97,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/67fb222f6bf54a67a1ca64d2252824d3/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "right_move_30": {
+      "frames_sha256": "6539e84c16c1b4dc6560ce6f42b67e4c4b6848be25b41bcf904192e95577316f",
+      "duration_ms": 1600,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/right_move_30.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "8a5cd581d51c43fe9b0726a71ac66bb0",
+        "simulation_success": true,
+        "max_tilt_deg": 11.04,
+        "end_tilt_deg": 1.86,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/8a5cd581d51c43fe9b0726a71ac66bb0/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "right_move_40": {
+      "frames_sha256": "6ef3d70a16df06a77a71f74edb9dc916624adbd2550051424619d40416a7aa0f",
+      "duration_ms": 1200,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/right_move_40.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "d29b2a1b0f24459b887ef2364f0e0cac",
+        "simulation_success": true,
+        "max_tilt_deg": 9.41,
+        "end_tilt_deg": 1.92,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/d29b2a1b0f24459b887ef2364f0e0cac/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "right_move_fast": {
+      "frames_sha256": "2f9b153d2812bc0e70b32a923ab12e5f9e625015282da5d9235bc82a0bcf171c",
+      "duration_ms": 650,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/right_move_fast.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "cd68d33bdf5549ceb8eb4bb9066d0da3",
+        "simulation_success": true,
+        "max_tilt_deg": 7.72,
+        "end_tilt_deg": 2.12,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/cd68d33bdf5549ceb8eb4bb9066d0da3/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "right_shot": {
+      "frames_sha256": "b10fca46b8d1551ec6b0232f6df0934b7ae6eacb5ebea27e0f301ed410142ee4",
+      "duration_ms": 6400,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/right_shot.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "07555144d66e4d4182ad7af65b4fa535",
+        "simulation_success": false,
+        "max_tilt_deg": 93.91,
+        "end_tilt_deg": 89.94,
+        "model_joint_clip_count": 4,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/07555144d66e4d4182ad7af65b4fa535/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "right_shot_fast": {
+      "frames_sha256": "387fe74fbe56e134094b5337cb53286b69862ee891b33af3e30c8fdb02499034",
+      "duration_ms": 3900,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/right_shot_fast.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "72c6de4ce263493d837d800005d4b3c9",
+        "simulation_success": false,
+        "max_tilt_deg": 92.25,
+        "end_tilt_deg": 89.94,
+        "model_joint_clip_count": 2,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/72c6de4ce263493d837d800005d4b3c9/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "right_uppercut": {
+      "frames_sha256": "728e983a1cf43ed997c08759d10bd23e1307dc44d90f33434339da8073a50e5a",
+      "duration_ms": 1100,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/right_uppercut.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "10f45165d4df456ca8f5e253da28d708",
+        "simulation_success": true,
+        "max_tilt_deg": 12.09,
+        "end_tilt_deg": 2.41,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/10f45165d4df456ca8f5e253da28d708/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "sit_ups": {
+      "frames_sha256": "12a59f6f81628920bba6764f8b82275a1d07b3e6cbefe264daed983ef95efa6c",
+      "duration_ms": 11300,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/sit_ups.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "dad6a4e27c4445c1ab83f51a3a5987c5",
+        "simulation_success": false,
+        "max_tilt_deg": 127.19,
+        "end_tilt_deg": 2.24,
+        "model_joint_clip_count": 28,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/dad6a4e27c4445c1ab83f51a3a5987c5/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "squat": {
+      "frames_sha256": "bf1efc643d2154a42186c951466a99148ef706702c46a48583cb542f28e6f6a8",
+      "duration_ms": 1000,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/squat.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "5b51490f76224a6cb30a7a3f2b9a5347",
+        "simulation_success": true,
+        "max_tilt_deg": 19.81,
+        "end_tilt_deg": 19.05,
+        "model_joint_clip_count": 4,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/5b51490f76224a6cb30a7a3f2b9a5347/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "squat_down": {
+      "frames_sha256": "6a3e09a78dabcd1e825c150757344d2a4da48b441a3fa7ca7bab171a64359d6d",
+      "duration_ms": 4000,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/squat_down.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "df10ba81aefc417fad5c2965f7184ee6",
+        "simulation_success": true,
+        "max_tilt_deg": 19.15,
+        "end_tilt_deg": 19.03,
+        "model_joint_clip_count": 4,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/df10ba81aefc417fad5c2965f7184ee6/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "squat_up": {
+      "frames_sha256": "366457b615bd6a6b61f3850a6e2047bcfcaf2b2e04247c9af02cc3f92872198c",
+      "duration_ms": 4000,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/squat_up.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "58ef941bd0f3430b863acf26205e2b17",
+        "simulation_success": true,
+        "max_tilt_deg": 21.51,
+        "end_tilt_deg": 1.45,
+        "model_joint_clip_count": 12,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/58ef941bd0f3430b863acf26205e2b17/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "stand": {
+      "frames_sha256": "80f4b9a137d97d3e28205f4ac3895ce1290fb40c2c7c3c5df487c60e00853532",
+      "duration_ms": 500,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/stand.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "98f396dfb4e04b3390f08ff768e42eb5",
+        "simulation_success": true,
+        "max_tilt_deg": 2.07,
+        "end_tilt_deg": 2.07,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/98f396dfb4e04b3390f08ff768e42eb5/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "stand_slow": {
+      "frames_sha256": "df5054091ce73c783ebf81894727a799ac2986b93da0391f657eefb733ba2c62",
+      "duration_ms": 1000,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/stand_slow.d6a",
+        "frames_match_official": false,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "e5fea9b221c24a65bf1cb592c59d8971",
+        "simulation_success": true,
+        "max_tilt_deg": 2.08,
+        "end_tilt_deg": 2.08,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/e5fea9b221c24a65bf1cb592c59d8971/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "stand_up_back": {
+      "frames_sha256": "d8ed5d5968db456720a3edc4d3cd4d6b3bf1b7ee9cee90e91f4374a555433f21",
+      "duration_ms": 5200,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/stand_up_back.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "c03a923c0c2e4caa9d5c0047e9e9da4d",
+        "simulation_success": false,
+        "max_tilt_deg": 137.85,
+        "end_tilt_deg": 89.94,
+        "model_joint_clip_count": 8,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/c03a923c0c2e4caa9d5c0047e9e9da4d/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "stand_up_front": {
+      "frames_sha256": "753c5deace8c148fc5c0d279882c67a95b6c62826f0f3911457301cbb8704bda",
+      "duration_ms": 5500,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/stand_up_front.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "9d33db10f96c49d5907cb3a3d5832b8f",
+        "simulation_success": false,
+        "max_tilt_deg": 119.34,
+        "end_tilt_deg": 98.06,
+        "model_joint_clip_count": 6,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/9d33db10f96c49d5907cb3a3d5832b8f/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "stepping": {
+      "frames_sha256": "7be8bec28ffc031e63fc7aa526ac195099d211ebac03d45811889f129188f2b9",
+      "duration_ms": 1900,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/stepping.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "5169ae43e8314cd3bf34f1718c71cdb9",
+        "simulation_success": true,
+        "max_tilt_deg": 9.42,
+        "end_tilt_deg": 1.52,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/5169ae43e8314cd3bf34f1718c71cdb9/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "turn_left": {
+      "frames_sha256": "0165984f1c1c5537abf8aa5cca59cf63ccf58ef259d922964f4b90c13ff0ca1f",
+      "duration_ms": 1000,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/turn_left.d6a",
+        "frames_match_official": false,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "b0ee42a79dab4e43866ad67b7233a37c",
+        "simulation_success": true,
+        "max_tilt_deg": 8.04,
+        "end_tilt_deg": 1.57,
+        "model_joint_clip_count": 1,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/b0ee42a79dab4e43866ad67b7233a37c/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "turn_left_fast": {
+      "frames_sha256": "37f014c2b2e46812b262ba3213219f3fec753fa4bd34b0e588217675cad32cfa",
+      "duration_ms": 900,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/turn_left_fast.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "067c272cea8a4dc5b0e9fdbf4f4ee639",
+        "simulation_success": true,
+        "max_tilt_deg": 11.63,
+        "end_tilt_deg": 1.58,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/067c272cea8a4dc5b0e9fdbf4f4ee639/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "turn_left_small_step": {
+      "frames_sha256": "16996b7f944b7a03446b4406eb0ae359853c2fa828f4766a48951426bc4f29f7",
+      "duration_ms": 1350,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/turn_left_small_step.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "25b23fdb35804284b17708388793d748",
+        "simulation_success": false,
+        "max_tilt_deg": 91.83,
+        "end_tilt_deg": 89.94,
+        "model_joint_clip_count": 2,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/25b23fdb35804284b17708388793d748/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "turn_left_small_step_a": {
+      "frames_sha256": "10d4b22f66e6ff5ad5b339089c72933290fb36dbc155b1d3fd918ca58fe7dee0",
+      "duration_ms": 850,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/turn_left_small_step_a.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "a13bc0f712ef480e8aa189f7ec649957",
+        "simulation_success": true,
+        "max_tilt_deg": 7.95,
+        "end_tilt_deg": 1.62,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/a13bc0f712ef480e8aa189f7ec649957/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "turn_right": {
+      "frames_sha256": "dac3e68913ff17dc089654ae50a02acbb1778fbf368700ec39ae7415950d216b",
+      "duration_ms": 1000,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/turn_right.d6a",
+        "frames_match_official": false,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "455817a57f2b4693a910b2980fe1a246",
+        "simulation_success": false,
+        "max_tilt_deg": 92.06,
+        "end_tilt_deg": 89.94,
+        "model_joint_clip_count": 1,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/455817a57f2b4693a910b2980fe1a246/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "turn_right_fast": {
+      "frames_sha256": "27c77923e0bc252e14a04a2c2c8162144086a6c0a0a80e874cd3ed35a9c8fc29",
+      "duration_ms": 900,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/turn_right_fast.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "1c71c62789ea481cbd0bf8cc21697a6c",
+        "simulation_success": false,
+        "max_tilt_deg": 83.46,
+        "end_tilt_deg": 83.46,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/1c71c62789ea481cbd0bf8cc21697a6c/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "turn_right_small_step": {
+      "frames_sha256": "28a51c5c4c4a50b4fc335f91c9786239f6031c1eccebfcc07bd7d0825829f2ab",
+      "duration_ms": 1450,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/turn_right_small_step.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "412851cd48f4454cb053266753bc2369",
+        "simulation_success": false,
+        "max_tilt_deg": 92.21,
+        "end_tilt_deg": 89.94,
+        "model_joint_clip_count": 2,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/412851cd48f4454cb053266753bc2369/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    },
+    "turn_right_small_step_a": {
+      "frames_sha256": "cdd46c7e2e4c2ceab7efe28d6cbfa581c1a19f5c60d31c80b2f9b2151eab174f",
+      "duration_ms": 850,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/turn_right_small_step_a.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "ca7f8e396fd84e9499192b8a85996f93",
+        "simulation_success": true,
+        "max_tilt_deg": 9.26,
+        "end_tilt_deg": 1.88,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/ca7f8e396fd84e9499192b8a85996f93/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "twist": {
+      "frames_sha256": "b26a7aaa7679bac0c8dd30d338a6cdaebc0a64284696084575b01853abae1ccb",
+      "duration_ms": 3400,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/twist.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "03b6afca51a441a8a10c32367af131f0",
+        "simulation_success": true,
+        "max_tilt_deg": 13.24,
+        "end_tilt_deg": 1.44,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/03b6afca51a441a8a10c32367af131f0/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "wave": {
+      "frames_sha256": "4375ae55a344af22ce9f9d7b9175f4b3223b7cdbe1ed000ed0102d78fcc5f028",
+      "duration_ms": 3100,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/wave.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "408a8a3bee32446db7f9cf105e28aff6",
+        "simulation_success": true,
+        "max_tilt_deg": 2.76,
+        "end_tilt_deg": 1.44,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/408a8a3bee32446db7f9cf105e28aff6/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "wing_chun": {
+      "frames_sha256": "0a7773cda02fea5fccf52927ae3527196ab4b2bba35fcd7232a053ecd7577b38",
+      "duration_ms": 1700,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "ActionGroups/wing_chun.d6a",
+        "frames_match_official": true,
+        "ignored_channels": [
+          17,
+          18
+        ]
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "7bb8fcfe261146a69be248ba7f4e1829",
+        "simulation_success": true,
+        "max_tilt_deg": 5.3,
+        "end_tilt_deg": 2.16,
+        "model_joint_clip_count": 0,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/7bb8fcfe261146a69be248ba7f4e1829/report.json"
+      },
+      "model_verified": true,
+      "hardware_verified": false
+    },
+    "wings_up": {
+      "frames_sha256": "d27259387473b303114cc13c0a0fc70064b4e7da21daaaa76075a84964d9c323",
+      "duration_ms": 10700,
+      "source": {
+        "url": "https://github.com/Hiwonder/TonyPi",
+        "revision": "dc452eaac9991516600860f706f4b889f3305d1d",
+        "license": "NOASSERTION",
+        "license_note": "No LICENSE or COPYING in official repository tree; manufacturer image assets retained, no new redistribution grant inferred.",
+        "path": "hiwonder .d6a",
+        "frames_match_official": null
+      },
+      "kinematic_verified": true,
+      "simulation": {
+        "id": "51834f07108a4122bdfd4d1ab62f8f61",
+        "simulation_success": false,
+        "max_tilt_deg": 105.02,
+        "end_tilt_deg": 89.94,
+        "model_joint_clip_count": 2,
+        "soft_limit_clip_count": 0,
+        "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+        "calibration_source": "tonyd",
+        "report_path": "/home/pi/.local/share/tonypi/simulation/reports/51834f07108a4122bdfd4d1ab62f8f61/report.json"
+      },
+      "model_verified": false,
+      "hardware_verified": false
+    }
+  },
+  "skills": {
+    "wave": {
+      "description": "wave",
+      "motions": [
+        "wave"
+      ],
+      "precondition": "standing",
+      "duration_ms": 3100,
+      "safety": "Tonyd reflexes and servo limits apply; stable floor; physical acceptance pending.",
+      "model_verified": true,
+      "hardware_verified": false,
+      "simulation_counts": {
+        "1": {
+          "id": "34e8800ddc7949fa80c184adf9ec9d38",
+          "simulation_success": true,
+          "max_tilt_deg": 2.76,
+          "end_tilt_deg": 1.44,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/34e8800ddc7949fa80c184adf9ec9d38/report.json"
+        }
+      },
+      "availability_reason": "model checked; owner hardware acceptance pending"
+    },
+    "bow": {
+      "description": "bow",
+      "motions": [
+        "bow"
+      ],
+      "precondition": "standing",
+      "duration_ms": 4000,
+      "safety": "Tonyd reflexes and servo limits apply; stable floor; physical acceptance pending.",
+      "model_verified": false,
+      "hardware_verified": false,
+      "simulation_counts": {
+        "1": {
+          "id": "de29d0adb11542028ff32480f27ad0d5",
+          "simulation_success": true,
+          "max_tilt_deg": 5.17,
+          "end_tilt_deg": 2.12,
+          "model_joint_clip_count": 4,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/de29d0adb11542028ff32480f27ad0d5/report.json"
+        }
+      },
+      "availability_reason": "model stability or joint clipping check failed; learning mode only"
+    },
+    "kick_left": {
+      "description": "kick left",
+      "motions": [
+        "left_shot_fast"
+      ],
+      "precondition": "standing",
+      "duration_ms": 3900,
+      "safety": "Tonyd reflexes and servo limits apply; stable floor; physical acceptance pending.",
+      "model_verified": false,
+      "hardware_verified": false,
+      "simulation_counts": {
+        "1": {
+          "id": "069ecd4f82784317b81aabcd39363830",
+          "simulation_success": false,
+          "max_tilt_deg": 92.75,
+          "end_tilt_deg": 89.94,
+          "model_joint_clip_count": 2,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/069ecd4f82784317b81aabcd39363830/report.json"
+        }
+      },
+      "availability_reason": "model stability or joint clipping check failed; learning mode only"
+    },
+    "kick_right": {
+      "description": "kick right",
+      "motions": [
+        "right_shot_fast"
+      ],
+      "precondition": "standing",
+      "duration_ms": 3900,
+      "safety": "Tonyd reflexes and servo limits apply; stable floor; physical acceptance pending.",
+      "model_verified": false,
+      "hardware_verified": false,
+      "simulation_counts": {
+        "1": {
+          "id": "54463ff086f64241a044861267610010",
+          "simulation_success": false,
+          "max_tilt_deg": 92.25,
+          "end_tilt_deg": 89.94,
+          "model_joint_clip_count": 2,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/54463ff086f64241a044861267610010/report.json"
+        }
+      },
+      "availability_reason": "model stability or joint clipping check failed; learning mode only"
+    },
+    "squat": {
+      "description": "squat",
+      "motions": [
+        "squat_down",
+        "squat_up"
+      ],
+      "precondition": "standing",
+      "duration_ms": 8000,
+      "safety": "Tonyd reflexes and servo limits apply; stable floor; physical acceptance pending.",
+      "model_verified": false,
+      "hardware_verified": false,
+      "simulation_counts": {
+        "1": {
+          "id": "b1af0c9105534893948a8203d962ca20",
+          "simulation_success": true,
+          "max_tilt_deg": 20.16,
+          "end_tilt_deg": 1.46,
+          "model_joint_clip_count": 16,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/b1af0c9105534893948a8203d962ca20/report.json"
+        }
+      },
+      "availability_reason": "model stability or joint clipping check failed; learning mode only"
+    },
+    "arms_up": {
+      "description": "arms up",
+      "motions": [
+        "both_arms_up"
+      ],
+      "precondition": "standing",
+      "duration_ms": 3600,
+      "safety": "Tonyd reflexes and servo limits apply; stable floor; physical acceptance pending.",
+      "model_verified": true,
+      "hardware_verified": false,
+      "simulation_counts": {
+        "1": {
+          "id": "d261f7c583fb4f278722b56a162072df",
+          "simulation_success": true,
+          "max_tilt_deg": 7.23,
+          "end_tilt_deg": 2.09,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/d261f7c583fb4f278722b56a162072df/report.json"
+        }
+      },
+      "availability_reason": "model checked; owner hardware acceptance pending"
+    },
+    "flap_wings": {
+      "description": "flap wings",
+      "motions": [
+        "wings_up"
+      ],
+      "precondition": "standing",
+      "duration_ms": 10700,
+      "safety": "Tonyd reflexes and servo limits apply; stable floor; physical acceptance pending.",
+      "model_verified": false,
+      "hardware_verified": false,
+      "simulation_counts": {
+        "1": {
+          "id": "b0b200dffd4d43cbbae1e6b8770bc3f0",
+          "simulation_success": false,
+          "max_tilt_deg": 105.02,
+          "end_tilt_deg": 89.94,
+          "model_joint_clip_count": 2,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/b0b200dffd4d43cbbae1e6b8770bc3f0/report.json"
+        }
+      },
+      "availability_reason": "model stability or joint clipping check failed; learning mode only"
+    },
+    "step_in_place": {
+      "description": "step in place",
+      "motions": [
+        "*stepping"
+      ],
+      "precondition": "standing",
+      "duration_ms": 1900,
+      "safety": "Tonyd reflexes and servo limits apply; stable floor; physical acceptance pending.",
+      "model_verified": true,
+      "hardware_verified": false,
+      "simulation_counts": {
+        "1": {
+          "id": "d0096cae38bf407c840f50a6425f9430",
+          "simulation_success": true,
+          "max_tilt_deg": 9.42,
+          "end_tilt_deg": 1.52,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/d0096cae38bf407c840f50a6425f9430/report.json"
+        },
+        "2": {
+          "id": "bc18e573d8844220b8f6372ec7667528",
+          "simulation_success": true,
+          "max_tilt_deg": 9.42,
+          "end_tilt_deg": 1.52,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/bc18e573d8844220b8f6372ec7667528/report.json"
+        },
+        "3": {
+          "id": "a53c64f5bb6947339f6880e95bff168e",
+          "simulation_success": true,
+          "max_tilt_deg": 9.42,
+          "end_tilt_deg": 1.52,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/a53c64f5bb6947339f6880e95bff168e/report.json"
+        },
+        "4": {
+          "id": "c6b6b4cebe9842a7b6b54c81a8ac6b4c",
+          "simulation_success": true,
+          "max_tilt_deg": 9.42,
+          "end_tilt_deg": 1.52,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/c6b6b4cebe9842a7b6b54c81a8ac6b4c/report.json"
+        },
+        "5": {
+          "id": "7aa09a10eb4a4d978e3558e0b3f9baec",
+          "simulation_success": true,
+          "max_tilt_deg": 9.42,
+          "end_tilt_deg": 1.52,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/7aa09a10eb4a4d978e3558e0b3f9baec/report.json"
+        }
+      },
+      "availability_reason": "model checked; owner hardware acceptance pending"
+    },
+    "walk_forward": {
+      "description": "walk forward",
+      "motions": [
+        "*go_forward_one_step"
+      ],
+      "precondition": "standing",
+      "duration_ms": 1200,
+      "safety": "Tonyd reflexes and servo limits apply; stable floor; physical acceptance pending.",
+      "model_verified": true,
+      "hardware_verified": false,
+      "simulation_counts": {
+        "1": {
+          "id": "34d76c4846fd4850a4cd0d74f415cb58",
+          "simulation_success": true,
+          "max_tilt_deg": 8.15,
+          "end_tilt_deg": 1.6,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/34d76c4846fd4850a4cd0d74f415cb58/report.json"
+        },
+        "2": {
+          "id": "6df0b80653df434abe71517da3b9bbf4",
+          "simulation_success": true,
+          "max_tilt_deg": 9.18,
+          "end_tilt_deg": 1.59,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/6df0b80653df434abe71517da3b9bbf4/report.json"
+        },
+        "3": {
+          "id": "46d2ae3944444839b6072f54103a7255",
+          "simulation_success": true,
+          "max_tilt_deg": 9.23,
+          "end_tilt_deg": 1.59,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/46d2ae3944444839b6072f54103a7255/report.json"
+        },
+        "4": {
+          "id": "5db8f16901c44feeaf179377a5393433",
+          "simulation_success": true,
+          "max_tilt_deg": 9.23,
+          "end_tilt_deg": 1.59,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/5db8f16901c44feeaf179377a5393433/report.json"
+        },
+        "5": {
+          "id": "a6b420b50ea54034a3a31cba547278c2",
+          "simulation_success": true,
+          "max_tilt_deg": 9.23,
+          "end_tilt_deg": 1.59,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/a6b420b50ea54034a3a31cba547278c2/report.json"
+        }
+      },
+      "availability_reason": "model checked counts 1..5; owner hardware acceptance pending",
+      "superseded_motions": [
+        "go_forward_start",
+        "*go_forward",
+        "go_forward_end"
+      ]
+    },
+    "walk_backward": {
+      "description": "walk backward",
+      "motions": [
+        "back_start",
+        "*back",
+        "back_end"
+      ],
+      "precondition": "standing",
+      "duration_ms": 2500,
+      "safety": "Tonyd reflexes and servo limits apply; stable floor; physical acceptance pending.",
+      "model_verified": true,
+      "hardware_verified": false,
+      "simulation_counts": {
+        "1": {
+          "id": "4d829659f57f4679a5d80f129906fe04",
+          "simulation_success": true,
+          "max_tilt_deg": 8.36,
+          "end_tilt_deg": 2.98,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/4d829659f57f4679a5d80f129906fe04/report.json"
+        },
+        "2": {
+          "id": "41197db035204c1a99d35f06b4397228",
+          "simulation_success": true,
+          "max_tilt_deg": 8.36,
+          "end_tilt_deg": 2.99,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/41197db035204c1a99d35f06b4397228/report.json"
+        },
+        "3": {
+          "id": "e54c2807bdba4626b2dc7873b6de6b5c",
+          "simulation_success": true,
+          "max_tilt_deg": 8.36,
+          "end_tilt_deg": 2.99,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/e54c2807bdba4626b2dc7873b6de6b5c/report.json"
+        },
+        "4": {
+          "id": "e377457370844e9ea5ecd7185d8520f0",
+          "simulation_success": true,
+          "max_tilt_deg": 8.36,
+          "end_tilt_deg": 2.98,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/e377457370844e9ea5ecd7185d8520f0/report.json"
+        },
+        "5": {
+          "id": "7a78b6ce21124ae8a870af1619651946",
+          "simulation_success": true,
+          "max_tilt_deg": 8.36,
+          "end_tilt_deg": 2.98,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/7a78b6ce21124ae8a870af1619651946/report.json"
+        }
+      },
+      "availability_reason": "model checked; owner hardware acceptance pending"
+    },
+    "turn_left": {
+      "description": "turn left",
+      "motions": [
+        "*turn_left_small_step_a"
+      ],
+      "precondition": "standing",
+      "duration_ms": 850,
+      "safety": "Tonyd reflexes and servo limits apply; stable floor; physical acceptance pending.",
+      "model_verified": true,
+      "hardware_verified": false,
+      "simulation_counts": {
+        "1": {
+          "id": "e885b1440f7a4ccf99c1191d3876b85a",
+          "simulation_success": true,
+          "max_tilt_deg": 7.95,
+          "end_tilt_deg": 1.62,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/e885b1440f7a4ccf99c1191d3876b85a/report.json"
+        },
+        "2": {
+          "id": "d9727b208ce44d9889658ed847ad4faa",
+          "simulation_success": true,
+          "max_tilt_deg": 7.95,
+          "end_tilt_deg": 1.61,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/d9727b208ce44d9889658ed847ad4faa/report.json"
+        },
+        "3": {
+          "id": "d5c663a4199c4102b26adeed49ed4c22",
+          "simulation_success": true,
+          "max_tilt_deg": 7.95,
+          "end_tilt_deg": 1.61,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/d5c663a4199c4102b26adeed49ed4c22/report.json"
+        },
+        "4": {
+          "id": "3a4d5805c03d44658254059c9fdde3e1",
+          "simulation_success": true,
+          "max_tilt_deg": 7.95,
+          "end_tilt_deg": 1.61,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/3a4d5805c03d44658254059c9fdde3e1/report.json"
+        },
+        "5": {
+          "id": "b1071fd52c1549178c4df2f7ad3b054e",
+          "simulation_success": true,
+          "max_tilt_deg": 7.95,
+          "end_tilt_deg": 1.61,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/b1071fd52c1549178c4df2f7ad3b054e/report.json"
+        }
+      },
+      "availability_reason": "model checked counts 1..5; owner hardware acceptance pending",
+      "superseded_motions": [
+        "*turn_left"
+      ]
+    },
+    "turn_right": {
+      "description": "turn right",
+      "motions": [
+        "*turn_right_small_step_a"
+      ],
+      "precondition": "standing",
+      "duration_ms": 850,
+      "safety": "Tonyd reflexes and servo limits apply; stable floor; physical acceptance pending.",
+      "model_verified": true,
+      "hardware_verified": false,
+      "simulation_counts": {
+        "1": {
+          "id": "d4cefd23330a4750955733ec8a2430a1",
+          "simulation_success": true,
+          "max_tilt_deg": 9.26,
+          "end_tilt_deg": 1.88,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/d4cefd23330a4750955733ec8a2430a1/report.json"
+        },
+        "2": {
+          "id": "bd3266a933a14709970c1c66d1620f93",
+          "simulation_success": true,
+          "max_tilt_deg": 10.48,
+          "end_tilt_deg": 1.72,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/bd3266a933a14709970c1c66d1620f93/report.json"
+        },
+        "3": {
+          "id": "3e09ceb3ef61464d8a2cad179c069fc0",
+          "simulation_success": true,
+          "max_tilt_deg": 11.15,
+          "end_tilt_deg": 1.62,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/3e09ceb3ef61464d8a2cad179c069fc0/report.json"
+        },
+        "4": {
+          "id": "4ffdb20a5baf4411943541d3af8f89d5",
+          "simulation_success": true,
+          "max_tilt_deg": 11.39,
+          "end_tilt_deg": 1.6,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/4ffdb20a5baf4411943541d3af8f89d5/report.json"
+        },
+        "5": {
+          "id": "a5b1d81c4a5147a9bd188688d300e92e",
+          "simulation_success": true,
+          "max_tilt_deg": 11.44,
+          "end_tilt_deg": 1.6,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/a5b1d81c4a5147a9bd188688d300e92e/report.json"
+        }
+      },
+      "availability_reason": "model checked counts 1..5; owner hardware acceptance pending",
+      "superseded_motions": [
+        "*turn_right"
+      ]
+    },
+    "step_left": {
+      "description": "step left",
+      "motions": [
+        "*left_move"
+      ],
+      "precondition": "standing",
+      "duration_ms": 1300,
+      "safety": "Tonyd reflexes and servo limits apply; stable floor; physical acceptance pending.",
+      "model_verified": true,
+      "hardware_verified": false,
+      "simulation_counts": {
+        "1": {
+          "id": "c8471dd777f440afa4523e9c5823e867",
+          "simulation_success": true,
+          "max_tilt_deg": 5.34,
+          "end_tilt_deg": 2.25,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/c8471dd777f440afa4523e9c5823e867/report.json"
+        },
+        "2": {
+          "id": "d6f7e208e16f428dba6a802cd4a2757d",
+          "simulation_success": true,
+          "max_tilt_deg": 7.5,
+          "end_tilt_deg": 2.25,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/d6f7e208e16f428dba6a802cd4a2757d/report.json"
+        },
+        "3": {
+          "id": "7d7d66804d194a4fb11f54af6143daf0",
+          "simulation_success": true,
+          "max_tilt_deg": 7.51,
+          "end_tilt_deg": 2.25,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/7d7d66804d194a4fb11f54af6143daf0/report.json"
+        },
+        "4": {
+          "id": "8783d27970a647468db4731ed4f78bb2",
+          "simulation_success": true,
+          "max_tilt_deg": 7.54,
+          "end_tilt_deg": 2.25,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/8783d27970a647468db4731ed4f78bb2/report.json"
+        },
+        "5": {
+          "id": "3b7b3b04380748ee970fb3534ef79374",
+          "simulation_success": true,
+          "max_tilt_deg": 7.54,
+          "end_tilt_deg": 2.25,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/3b7b3b04380748ee970fb3534ef79374/report.json"
+        }
+      },
+      "availability_reason": "model checked; owner hardware acceptance pending"
+    },
+    "step_right": {
+      "description": "step right",
+      "motions": [
+        "*right_move"
+      ],
+      "precondition": "standing",
+      "duration_ms": 1300,
+      "safety": "Tonyd reflexes and servo limits apply; stable floor; physical acceptance pending.",
+      "model_verified": true,
+      "hardware_verified": false,
+      "simulation_counts": {
+        "1": {
+          "id": "ab8fb11592514fddb801f70fde7cca67",
+          "simulation_success": true,
+          "max_tilt_deg": 9.94,
+          "end_tilt_deg": 2.6,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/ab8fb11592514fddb801f70fde7cca67/report.json"
+        },
+        "2": {
+          "id": "963db5d51b8943c58ee4f650655c3494",
+          "simulation_success": true,
+          "max_tilt_deg": 10.87,
+          "end_tilt_deg": 2.54,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/963db5d51b8943c58ee4f650655c3494/report.json"
+        },
+        "3": {
+          "id": "231ca9bedbc4492787dfebab4c1f8502",
+          "simulation_success": true,
+          "max_tilt_deg": 10.9,
+          "end_tilt_deg": 2.64,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/231ca9bedbc4492787dfebab4c1f8502/report.json"
+        },
+        "4": {
+          "id": "b17a8862d4754e4b86e39f6de8edb234",
+          "simulation_success": true,
+          "max_tilt_deg": 10.9,
+          "end_tilt_deg": 2.53,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/b17a8862d4754e4b86e39f6de8edb234/report.json"
+        },
+        "5": {
+          "id": "23cb5e90a6254f29bd79d3b6c7564945",
+          "simulation_success": true,
+          "max_tilt_deg": 10.9,
+          "end_tilt_deg": 2.64,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/23cb5e90a6254f29bd79d3b6c7564945/report.json"
+        }
+      },
+      "availability_reason": "model checked; owner hardware acceptance pending"
+    },
+    "stand": {
+      "description": "stand",
+      "motions": [
+        "stand_slow"
+      ],
+      "precondition": "standing",
+      "duration_ms": 1000,
+      "safety": "Tonyd reflexes and servo limits apply; stable floor; physical acceptance pending.",
+      "model_verified": true,
+      "hardware_verified": false,
+      "simulation_counts": {
+        "1": {
+          "id": "6ad781e463e04ef3bf5cfbb1c02d87d5",
+          "simulation_success": true,
+          "max_tilt_deg": 2.08,
+          "end_tilt_deg": 2.08,
+          "model_joint_clip_count": 0,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/6ad781e463e04ef3bf5cfbb1c02d87d5/report.json"
+        }
+      },
+      "availability_reason": "model checked; owner hardware acceptance pending"
+    },
+    "lie_down": {
+      "description": "lie down",
+      "motions": [
+        "lie_down"
+      ],
+      "precondition": "standing",
+      "duration_ms": 4000,
+      "safety": "Tonyd reflexes and servo limits apply; stable floor; physical acceptance pending.",
+      "model_verified": false,
+      "hardware_verified": false,
+      "simulation_counts": {
+        "1": {
+          "id": "50131e3f0652477fb4bb6fca442e5ee5",
+          "simulation_success": false,
+          "max_tilt_deg": 105.07,
+          "end_tilt_deg": 100.26,
+          "model_joint_clip_count": 16,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/50131e3f0652477fb4bb6fca442e5ee5/report.json"
+        }
+      },
+      "availability_reason": "model stability or joint clipping check failed; learning mode only"
+    },
+    "get_up_front": {
+      "description": "get up front",
+      "motions": [
+        "stand_up_front",
+        "stand_slow"
+      ],
+      "precondition": "lying_front",
+      "duration_ms": 6500,
+      "safety": "Tonyd reflexes and servo limits apply; stable floor; physical acceptance pending.",
+      "model_verified": false,
+      "hardware_verified": false,
+      "simulation_counts": {
+        "1": {
+          "id": "f0b6cb0f268444d7a3b3590865ee026c",
+          "simulation_success": false,
+          "max_tilt_deg": 119.34,
+          "end_tilt_deg": 98.38,
+          "model_joint_clip_count": 6,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/f0b6cb0f268444d7a3b3590865ee026c/report.json"
+        }
+      },
+      "availability_reason": "model stability or joint clipping check failed; learning mode only"
+    },
+    "get_up_back": {
+      "description": "get up back",
+      "motions": [
+        "stand_up_back",
+        "stand_slow"
+      ],
+      "precondition": "lying_back",
+      "duration_ms": 6200,
+      "safety": "Tonyd reflexes and servo limits apply; stable floor; physical acceptance pending.",
+      "model_verified": false,
+      "hardware_verified": false,
+      "simulation_counts": {
+        "1": {
+          "id": "e13b7d7c59ca448c88bd33f2754017cb",
+          "simulation_success": false,
+          "max_tilt_deg": 137.85,
+          "end_tilt_deg": 89.94,
+          "model_joint_clip_count": 8,
+          "soft_limit_clip_count": 0,
+          "revision": "97807f5e26049ce1c3d90b1c80d5d2a92606d40f",
+          "calibration_source": "tonyd",
+          "report_path": "/home/pi/.local/share/tonypi/simulation/reports/e13b7d7c59ca448c88bd33f2754017cb/report.json"
+        }
+      },
+      "availability_reason": "model stability or joint clipping check failed; learning mode only"
+    }
+  },
+  "hardware_calibration_snapshot": {
+    "1": {
+      "offset": -16,
+      "limits": [
+        0,
+        1000
+      ]
+    },
+    "2": {
+      "offset": 0,
+      "limits": [
+        0,
+        1000
+      ]
+    },
+    "3": {
+      "offset": 6,
+      "limits": [
+        0,
+        1000
+      ]
+    },
+    "4": {
+      "offset": -13,
+      "limits": [
+        0,
+        1000
+      ]
+    },
+    "5": {
+      "offset": -9,
+      "limits": [
+        0,
+        1000
+      ]
+    },
+    "6": {
+      "offset": -10,
+      "limits": [
+        0,
+        1000
+      ]
+    },
+    "7": {
+      "offset": -14,
+      "limits": [
+        0,
+        1000
+      ]
+    },
+    "8": {
+      "offset": -41,
+      "limits": [
+        0,
+        1000
+      ]
+    },
+    "9": {
+      "offset": 6,
+      "limits": [
+        0,
+        1000
+      ]
+    },
+    "10": {
+      "offset": -8,
+      "limits": [
+        0,
+        1000
+      ]
+    },
+    "11": {
+      "offset": -11,
+      "limits": [
+        0,
+        1000
+      ]
+    },
+    "12": {
+      "offset": -1,
+      "limits": [
+        0,
+        1000
+      ]
+    },
+    "13": {
+      "offset": -7,
+      "limits": [
+        0,
+        1000
+      ]
+    },
+    "14": {
+      "offset": 0,
+      "limits": [
+        0,
+        1000
+      ]
+    },
+    "15": {
+      "offset": 0,
+      "limits": [
+        0,
+        1000
+      ]
+    },
+    "16": {
+      "offset": 0,
+      "limits": [
+        0,
+        1000
+      ]
+    }
+  },
+  "hardware_calibration_note": "Read-only tonyd servo_calibration, 2026-10-31; EEPROM offsets already applied by servos, never add them as trim. All calibrated raw frame targets checked against EEPROM limits; snapshot is not continuous EEPROM attestation."
+}
