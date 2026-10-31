@@ -85,6 +85,9 @@ def _body(lying, asleep=False):
     from tonypi.tonyd.body import DEFAULT_SKILLS
     from tonypi.tonyd.studio import Studio
     b.studio = Studio(Path(tempfile.mkdtemp()), default_skills=DEFAULT_SKILLS)
+    # Routing tests need named synthetic data, never the owner's factory recordings.
+    from tonypi.motion.library import Motion, Frame
+    b.studio.load_motion = lambda name: Motion(name, [Frame(20, {1: 510})])
     return b
 
 

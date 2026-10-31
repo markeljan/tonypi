@@ -93,7 +93,8 @@ class FakePhone:
 
 
 @pytest.fixture
-def lab(tmp_path):
+def lab(tmp_path, monkeypatch):
+    monkeypatch.setattr(gait, "stand_pose", lambda: {4: 600, 12: 400})
     return Lab(tonyd=FakeTonyd(), phone=FakePhone(), root=tmp_path / "learning", lock_path=str(tmp_path / "lock"),
                sleep=lambda s: None)
 
