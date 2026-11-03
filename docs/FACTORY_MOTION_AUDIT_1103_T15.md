@@ -1,5 +1,7 @@
 # Factory motion audit 1103-t15 (partial)
 
+Continued in [1103-t16](FACTORY_MOTION_AUDIT_1103_T16.md): all 160 distinct source sequences have now been simulated; 77 pass the complete model gate. Physical floor support remains unresolved, so no new hardware result or promotion is claimed.
+
 The task budget ended before the expanded inventory could be simulated or tested on hardware. No new motion was promoted. The everyday profile remains active and no safety code or approval gates were changed.
 
 ## Measured results
