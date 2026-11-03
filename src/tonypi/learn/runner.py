@@ -262,12 +262,28 @@ class Lab:
 
     # ---- trials ------------------------------------------------------------------------------------------------
 
+    def _content(self, skill: str, count: int = 1) -> str | None:
+        """Optional provenance enrichment; unavailable content must not prevent recording a trial."""
+        try:
+            motions = self.tonyd.call("skills")["details"][skill].get("motions")
+            if not motions:
+                return None  # dynamic/builtin skills need separate content evidence
+            frames = []
+            for name in motions:
+                motion = self.tonyd.call("motion_get", name=name.lstrip("*"))
+                frames.extend(gait.repeat(motion, count if name.startswith("*") else 1)["frames"])
+            return hashlib.sha256(json.dumps(frames, sort_keys=True).encode()).hexdigest()
+        except (TonydError, KeyError, TypeError, ValueError, OSError):
+            return None
+
     def prepare(self, spec: dict | str) -> dict:
         """Resolve a spec: skill name | frames | base motion + gait params -> what to run and its candidate hash.
         spec keys: skill, frames, base, gait {time_scale, amplitude, offset, mirror, repeat}, count, objective,
         guard_tilt_deg, label, hold_s, trace, settle (default true), surface, start ("stand" (default): get_up if lying,
         then settle | "as_is": neither), setup (a skill run unmeasured before each trial, e.g. lie_down; implies
-        start "as_is"; the measured move then starts from where the setup left Tony)."""
+        start "as_is"; the measured move then starts from where the setup left Tony).
+        turn_direction is left/right (inferred for named turns); turn_metric is angle (legacy default,
+        directed degrees per count) or rate (directed degrees per second). Unknown direction is ranking only."""
         spec = {"skill": spec} if isinstance(spec, str) else dict(spec)
         objective = spec.get("objective") or "generic"
         if objective not in metrics.OBJECTIVES:
@@ -313,6 +329,16 @@ class Lab:
             p["what"] += f" (after {setup})"
         base_key = p["skill"] or spec.get("base") or "frames"
         p["key"] = spec.get("key") or spec.get("label") or (f"{base_key}@{setup}" if setup else base_key)
+        source_name = str(spec.get("skill") or spec.get("base") or "")
+        direction = spec.get("turn_direction")
+        if direction is None:
+            direction = next((d for d in ("left", "right") if source_name.startswith(f"turn_{d}")), None)
+        turn_metric = spec.get("turn_metric", "angle")
+        if direction not in (None, "left", "right") or turn_metric not in ("angle", "rate"):
+            raise LabError('turn_direction is left/right and turn_metric is angle/rate')
+        p.update(turn_direction=direction, turn_metric=turn_metric,
+                 content=self._content(p["skill"], count) if p["skill"] else gait.digest(p["frames"]),
+                 setup_content=self._content(setup) if setup else None)
         return p
 
     def _phone_ready(self) -> bool:
@@ -347,6 +373,7 @@ class Lab:
             self.sleep(TAIL_S)
         self._check()
         before = self._state()
+        content_before = self._content(p["skill"], p["count"]) if p["skill"] else p["content"]
         note, rec = None, False
         if phone_on:
             try:
@@ -374,13 +401,27 @@ class Lab:
                         episode = {k: meta.get(k) for k in ("id", "frames", "frames_tracked", "target_moved_m")}
                 except PhoneError as e:
                     note = str(e)
-        m = metrics.score(p["objective"], job, before, after, episode, p["count"])
+        m = metrics.score(p["objective"], job, before, after, episode, p["count"],
+                          turn_direction=p["turn_direction"], turn_metric=p["turn_metric"])
+        content_after = self._content(p["skill"], p["count"]) if p["skill"] else (job.get("params") or {}).get("hash")
+        calibration = (job.get("params") or {}).get("calibration_digest")
+        reasons = m["comparison_reasons"]
+        if not p["content"] or content_before != p["content"] or content_after != p["content"]:
+            reasons.append("motion content unavailable or changed")
+        if not calibration:
+            reasons.append("calibration_digest unavailable")
+        if p["setup"] and (not p["setup_content"] or self._content(p["setup"]) != p["setup_content"]):
+            reasons.append("setup content unavailable or changed")
+        m["comparison_eligible"] = not reasons
+        conditions = {k: p[k] for k in ("objective", "count", "start", "setup", "settle", "surface", "guard",
+                                        "hold_s", "turn_direction", "turn_metric", "setup_content")}
+        conditions.update(basis=m["basis"], calibration_digest=calibration, start_lying=before.get("lying"))
         verdict = "fell" if m["fell"] else {"done": "ok"}.get(job["state"], job["state"])
         row = {"exp": exp, "t": round(time.time(), 2), "kind": "trial", "key": p["key"], "label": p["label"],
                "skill": p["skill"], "what": p["what"], "cand": p["cand"], "params": p["params"], "count": p["count"],
                "objective": p["objective"], "guard_tilt_deg": p["guard"], "metrics": m, "score": m["score"],
                "episode": (episode or {}).get("id"), "job": job.get("id"), "trace": job.get("trace"),
-               "trace_summary": trace_summary,
+               "trace_summary": trace_summary, "conditions": conditions, "content_digest": p["content"],
                "before": {k: before.get(k) for k in ("lying", "tilt_deg")}, "setup": setup,
                "verdict": verdict, "said": job.get("said") or None, "phone": note,
                "battery_mv": after.get("battery_mv"), "hottest": after.get("hottest")}
@@ -448,11 +489,25 @@ class Lab:
     @staticmethod
     def _summary(rows: list[dict]) -> dict:
         s = metrics.stats([r["score"] for r in rows])
-        tilts = [r["metrics"]["max_tilt_deg"] for r in rows if r["metrics"]["max_tilt_deg"] is not None]
-        yaws = [r["metrics"]["yaw_deg"] for r in rows if r["metrics"]["yaw_deg"] is not None]
+        tilts = [r["metrics"]["max_tilt_deg"] for r in rows if metrics.measured(r["metrics"]["max_tilt_deg"])]
+        yaws = [r["metrics"]["yaw_deg"] for r in rows if metrics.measured(r["metrics"]["yaw_deg"])]
+        rates = [r["metrics"]["yaw_rate_dps"] for r in rows if metrics.measured(r["metrics"].get("yaw_rate_dps"))]
+        reasons = sorted({reason for r in rows for reason in r["metrics"].get("comparison_reasons", [])})
+        conditions = rows[0].get("conditions") if rows else None
+        if not conditions or any(r.get("conditions") != conditions for r in rows):
+            reasons.append("conditions or calibration changed within a side")
+        if any(not r["metrics"].get("comparison_eligible") for r in rows):
+            reasons.append("one or more trials are ineligible")
+        if len({r.get("content_digest") for r in rows}) > 1:
+            reasons.append("motion content changed within a side")
         return {**s, "falls": sum(r["metrics"]["fell"] for r in rows),
                 "mean_max_tilt_deg": round(sum(tilts) / len(tilts), 1) if tilts else None,
-                "mean_yaw_deg": round(sum(yaws) / len(yaws), 1) if yaws else None}
+                "mean_yaw_deg": round(sum(yaws) / len(yaws), 1) if yaws else None,
+                "mean_abs_yaw_deg": metrics.stats([abs(yaw) for yaw in yaws])["mean"],
+                "mean_yaw_rate_dps": round(sum(rates) / len(rates), 4) if rates else None,
+                "conditions": conditions, "comparison_eligible": bool(rows) and not reasons,
+                "comparison_reasons": reasons,
+                "comparison_noise": max((r["metrics"].get("comparison_noise", 0) for r in rows), default=0)}
 
     def batch(self, spec: dict | str, trials: int = 3, budget_s: float | None = None) -> dict:
         """`trials` measured runs of one candidate (1..30). Returns per-trial metrics and a summary."""
@@ -469,7 +524,9 @@ class Lab:
     def compare(self, base: dict | str, candidate: dict | str, trials: int = 5, objective: str | None = None,
                 budget_s: float | None = None) -> dict:
         """Interleaved A/B trials (base, candidate, base, ...) so heat and battery drift hit both alike. Verdict
-        "promote" = candidate mean beats base by more than 1 pooled std over >= 5 trials each with 0 falls."""
+        "promote" is a recommendation only: complete, matching measured evidence, >=5 each, zero falls,
+        and a gain above both pooled std and the sensor noise floor. It does not verify a library skill.
+        Angle remains the default turn ranking; select turn_metric="rate" explicitly to compare speed."""
         sb, sc = [{"skill": s} if isinstance(s, str) else dict(s) for s in (base, candidate)]
         for s in (sb, sc):
             if objective:
@@ -483,7 +540,8 @@ class Lab:
         rows, stopped = self._run([q for _ in range(n) for q in (pb, pc)], budget_s)
         rb, rc = rows[0::2], rows[1::2]  # the plan alternates base, candidate
         b, c = self._summary(rb), self._summary(rc)
-        verdict = self.verdict(b, c)
+        comparison = self._comparison(b, c, stopped=stopped, expected_n=n)
+        verdict = comparison["verdict"]
         if verdict == "promote":
             lib = self._load("library.json")
             if key in lib:
@@ -491,24 +549,66 @@ class Lab:
                 self._save("library.json", lib)
         return {"key": key, "objective": pb["objective"], "base": {"what": pb["what"], "cand": pb["cand"], **b},
                 "candidate": {"what": pc["what"], "cand": pc["cand"], **c}, "verdict": verdict,
+                "comparison": comparison,
                 "trials": [self._compact(r) | {"side": ("base", "candidate")[i % 2]} for i, r in enumerate(rows)],
                 "stopped": stopped}
 
     @staticmethod
     def verdict(b: dict, c: dict) -> str:
-        if c["falls"] > b["falls"] and c["falls"] > 0:
-            return "reject: the candidate fell more"
-        if not b["n"] or not c["n"]:
-            return "no data"
-        pooled = (((b["std"] or 0) ** 2 + (c["std"] or 0) ** 2) / 2) ** 0.5
-        diff = c["mean"] - b["mean"]
-        if min(b["n"], c["n"]) < PROMOTE_MIN_N:
-            return f"more trials needed (>= {PROMOTE_MIN_N} each; difference so far {diff:+.3f}, std {pooled:.3f})"
-        if diff > pooled and c["falls"] == 0:
-            return "promote"
-        if -diff > pooled:
-            return "worse"
-        return "no clear difference"
+        """Compatibility string API; aggregates without eligibility metadata fail closed."""
+        return Lab._comparison(b, c)["verdict"]
+
+    @staticmethod
+    def _comparison(b: dict, c: dict, *, stopped=None, expected_n=None) -> dict:
+        reasons = [f"{side}: {reason}" for side, s in (("base", b), ("candidate", c))
+                   for reason in s.get("comparison_reasons", [])]
+        for side, s in (("base", b), ("candidate", c)):
+            if not s.get("comparison_eligible"):
+                reasons.append(f"{side}: measured comparison evidence is incomplete")
+        bc, cc = b.get("conditions") or {}, c.get("conditions") or {}
+        for key in sorted(set(bc) | set(cc)):
+            if bc.get(key) != cc.get(key):
+                reasons.append(f"mismatched {key}")
+        if not bc.get("surface") or not cc.get("surface"):
+            reasons.append("surface is unspecified: ranking only")
+        if bc.get("objective") == "turn" and all(metrics.measured(s.get("mean_abs_yaw_deg")) for s in (b, c)):
+            if c["mean_abs_yaw_deg"] < 0.9 * b["mean_abs_yaw_deg"]:
+                reasons.append("turn retains less than 90% of baseline yaw")
+        if stopped:
+            reasons.append(f"batch stopped: {stopped}")
+        if b["n"] != c["n"] or (expected_n is not None and (b["n"] != expected_n or c["n"] != expected_n)):
+            reasons.append("incomplete or unequal trial counts")
+        if b["falls"] or c["falls"]:
+            reasons.append("comparison requires zero falls on both sides")
+        valid_stats = all(metrics.measured(s.get(k)) for s in (b, c) for k in ("mean", "std"))
+        diff = c["mean"] - b["mean"] if valid_stats else None
+        pooled = ((b["std"] ** 2 + c["std"] ** 2) / 2) ** 0.5 if valid_stats else None
+        noise = max(b.get("comparison_noise", 0), c.get("comparison_noise", 0))
+        threshold = max(pooled, noise) if pooled is not None else None
+        if not valid_stats:
+            reasons.append("missing or invalid summary statistics")
+        eligible = not reasons
+        if c["falls"] > b["falls"]:
+            verdict = "reject: the candidate fell more"
+        elif not b["n"] or not c["n"]:
+            verdict = "no data"
+        elif not eligible:
+            verdict = "insufficient evidence: " + "; ".join(reasons)
+        elif min(b["n"], c["n"]) < PROMOTE_MIN_N:
+            verdict = f"more trials needed (>= {PROMOTE_MIN_N} each)"
+            eligible = False
+            reasons.append(f"requires >= {PROMOTE_MIN_N} trials each")
+        elif diff > threshold:
+            verdict = "promote"
+        elif -diff > threshold:
+            verdict = "worse"
+        else:
+            verdict = "no clear difference"
+            reasons.append("difference does not exceed pooled standard deviation and sensor noise floor")
+        return {"verdict": verdict, "eligible": eligible, "recommendation_only": True,
+                "difference": round(diff, 4) if diff is not None else None,
+                "pooled_std": round(pooled, 4) if pooled is not None else None,
+                "noise_floor": noise, "threshold": threshold, "reasons": reasons}
 
     # ---- joint map ---------------------------------------------------------------------------------------------
 

@@ -42,7 +42,7 @@ class FakeTonyd:
             raise TonydError("stopped by the user (stop latch)")
         self.jid += 1
         self.ran.append((skill, count, kw))
-        state, fell = "done", False
+        state, fell, start_lying = "done", False, self.lying
         if skill == "get_up":
             self.lying = not self.get_up_works
         elif skill == "lie_down":
@@ -55,7 +55,10 @@ class FakeTonyd:
         yaw = self.yaws.get(skill, [0.0])
         y = yaw.pop(0) if len(yaw) > 1 else yaw[0]
         return {"id": self.jid, "skill": skill, "count": count, "state": state, "seconds": 2.0, "said": [],
-                "max_tilt_deg": 55.0 if fell else 12.0, "yaw_deg": y * count, "label": kw.get("label")}
+                "max_tilt_deg": 55.0 if fell else 12.0, "yaw_deg": y * count, "label": kw.get("label"),
+                "end_tilt_deg": 88.0 if self.lying else 3.0, "lying_after": self.lying,
+                "params": {"calibration_digest": "calibration-v1", "start_lying": start_lying,
+                           **({"hash": gait.digest(frames)} if frames is not None else {})}}
 
     def run(self, skill, count=1, wait=True, timeout=180, **kw):
         return self._job(skill, count, kw)
@@ -445,11 +448,13 @@ def test_frames_and_base_gait_candidates(lab):
 
 
 def test_compare_interleaves_and_promotes_a_better_candidate(lab):
-    lab.tonyd.yaws = {"turn_left": [8.0, 8.5, 7.5, 8.2, 7.8], "_play": [12.0, 12.5, 11.5, 12.2, 11.8]}
-    r = lab.compare("turn_left", {"base": "turn_left", "gait": {"amplitude": 1.2}}, 5, "turn")
+    lab.tonyd.yaws = {"turn_left": [8.0, 8.5, 7.5, 8.2, 7.8], "_play": [18.0, 18.5, 17.5, 18.2, 17.8]}
+    r = lab.compare({"skill": "turn_left", "surface": "wood"},
+                    {"base": "turn_left", "gait": {"amplitude": 1.2}, "surface": "wood"}, 5, "turn")
     assert [t["side"] for t in r["trials"][:4]] == ["base", "candidate", "base", "candidate"]
     assert [s for s, _, _ in lab.tonyd.ran if s in ("turn_left", "_play")][:4] == ["turn_left", "_play"] * 2
     assert r["verdict"] == "promote" and r["candidate"]["mean"] > r["base"]["mean"]
+    assert r["comparison"]["eligible"] and r["comparison"]["recommendation_only"]
     lib = lab.library()["turn_left"]
     assert lib["promote_suggested"]["over"] == r["base"]["cand"] and lib["best"] == r["candidate"]["cand"]
     assert len(lib["candidates"]) == 2
@@ -457,11 +462,118 @@ def test_compare_interleaves_and_promotes_a_better_candidate(lab):
 
 def test_compare_verdicts():
     s = lambda n, mean, std, falls=0: {"n": n, "mean": mean, "std": std, "falls": falls}  # noqa: E731
-    assert Lab.verdict(s(5, 1.0, 0.1), s(5, 1.5, 0.1)) == "promote"
-    assert Lab.verdict(s(5, 1.0, 0.1), s(5, 1.05, 0.1)) == "no clear difference"
-    assert Lab.verdict(s(5, 1.0, 0.1), s(5, 0.5, 0.1)) == "worse"
+    # Aggregate means without the telemetry, content and conditions cannot authorize a recommendation.
+    assert Lab.verdict(s(5, 1.0, 0.1), s(5, 1.5, 0.1)).startswith("insufficient evidence")
     assert Lab.verdict(s(5, 1.0, 0.1), s(5, 2.0, 0.1, falls=1)).startswith("reject")
-    assert Lab.verdict(s(3, 1.0, 0.1), s(3, 2.0, 0.1)).startswith("more trials")
+
+
+def _compare_turn(lab, base=None, candidate=None, **kwargs):
+    return lab.compare({"skill": "turn_left", "surface": "wood", **(base or {})},
+                       {"base": "turn_left", "gait": {"amplitude": 1.2}, "surface": "wood", **(candidate or {})},
+                       objective="turn", **kwargs)
+
+
+def test_compare_rejects_t19_gain_inside_documented_gyro_noise(lab):
+    # Task 1103-t19: right turn means 3.06 vs 5.34, sample std .611 vs 1.365, n=5.
+    lab.tonyd.yaws = {"turn_left": [-2.449, -2.449, -3.06, -3.671, -3.671],
+                       "_play": [-3.975, -3.975, -5.34, -6.705, -6.705]}
+    r = _compare_turn(lab, {"turn_direction": "right"}, {"turn_direction": "right"})
+    assert r["base"]["std"] == pytest.approx(.611)
+    assert r["candidate"]["std"] == pytest.approx(1.365)
+    assert r["comparison"]["difference"] == pytest.approx(2.28)
+    assert r["comparison"]["noise_floor"] >= 7
+    assert r["verdict"] == "no clear difference"
+    assert any("noise" in reason for reason in r["comparison"]["reasons"])
+
+
+@pytest.mark.parametrize("field,value", [("yaw_deg", None), ("yaw_deg", float("nan")),
+                                         ("yaw_deg", True), ("seconds", 0), ("seconds", -1),
+                                         ("max_tilt_deg", None), ("end_tilt_deg", float("inf"))])
+def test_compare_refuses_invalid_measured_telemetry(lab, field, value):
+    lab.tonyd.yaws = {"turn_left": [8.0], "_play": [30.0]}
+    original = lab.tonyd._job
+    lab.tonyd._job = lambda *a, **kw: {**original(*a, **kw), field: value}
+    r = _compare_turn(lab)
+    assert r["verdict"].startswith("insufficient evidence") and not r["comparison"]["eligible"]
+
+
+def test_compare_refuses_wrong_direction_and_reports_signed_rate(lab):
+    lab.tonyd.yaws = {"turn_left": [8.0], "_play": [-30.0]}
+    r = _compare_turn(lab)
+    assert r["verdict"].startswith("insufficient evidence")
+    assert any("direction" in reason for reason in r["comparison"]["reasons"])
+    assert r["candidate"]["mean_yaw_rate_dps"] == -15
+
+
+@pytest.mark.parametrize("changes", [{"count": 2}, {"surface": "rug"}, {"start": "as_is"},
+                                     {"objective": "pose"}, {"turn_metric": "rate"}])
+def test_compare_refuses_mismatched_conditions(lab, changes):
+    lab.tonyd.yaws = {"turn_left": [8.0], "_play": [30.0]}
+    # No objective override: mismatched objectives must remain visible.
+    r = lab.compare({"skill": "turn_left", "objective": "turn", "surface": "wood"},
+                    {"base": "turn_left", "gait": {"amplitude": 1.2}, "objective": "turn",
+                     "surface": "wood", **changes})
+    assert r["verdict"].startswith("insufficient evidence")
+    assert any(next(iter(changes)) in reason for reason in r["comparison"]["reasons"])
+
+
+def test_compare_rate_does_not_reward_a_slower_large_turn(lab):
+    lab.tonyd.yaws = {"turn_left": [20.0], "_play": [40.0]}
+    original = lab.tonyd._job
+
+    def job(skill, count, kw, frames=None):
+        return {**original(skill, count, kw, frames), "seconds": 8.0 if skill == "_play" else 2.0}
+
+    lab.tonyd._job = job
+    r = _compare_turn(lab, {"turn_metric": "rate"}, {"turn_metric": "rate"})
+    assert r["base"]["mean_yaw_rate_dps"] == 10 and r["candidate"]["mean_yaw_rate_dps"] == 5
+    assert r["verdict"] == "worse"
+
+
+def test_compare_fast_rate_must_retain_baseline_yaw(lab):
+    lab.tonyd.yaws = {"turn_left": [20.0], "_play": [10.0]}
+    original = lab.tonyd._job
+    lab.tonyd._job = lambda skill, *a, **kw: {**original(skill, *a, **kw),
+                                            "seconds": 1.0 if skill == "_play" else 10.0}
+    r = _compare_turn(lab, {"turn_metric": "rate"}, {"turn_metric": "rate"})
+    assert r["comparison"]["difference"] > r["comparison"]["noise_floor"]
+    assert r["verdict"].startswith("insufficient evidence")
+    assert any("90%" in reason for reason in r["comparison"]["reasons"])
+
+
+def test_compare_refuses_mixed_phone_and_gyro_only_bases(lab):
+    lab.tonyd.yaws = {"turn_left": [8.0], "_play": [30.0]}
+    original = lab.phone.episode
+    lab.phone.episode = lambda episode_id: original(episode_id) if len(lab.phone.labels) % 2 else {}
+    r = _compare_turn(lab)
+    assert r["verdict"].startswith("insufficient evidence")
+    assert any("basis" in reason for reason in r["comparison"]["reasons"])
+
+
+@pytest.mark.parametrize("key,value", [("calibration_digest", None), ("hash", "changed")])
+def test_compare_refuses_missing_calibration_or_wrong_frame_content(lab, key, value):
+    lab.tonyd.yaws = {"turn_left": [8.0], "_play": [30.0]}
+    original = lab.tonyd._job
+
+    def job(skill, count, kw, frames=None):
+        result = original(skill, count, kw, frames)
+        if skill == "_play":
+            result["params"][key] = value
+        return result
+
+    lab.tonyd._job = job
+    r = _compare_turn(lab)
+    assert r["verdict"].startswith("insufficient evidence")
+
+
+def test_compare_incomplete_plan_cannot_promote(lab):
+    lab.tonyd.yaws = {"turn_left": [8.0], "_play": [30.0]}
+    original = lab._run
+    lab._run = lambda plan, budget: (lambda result: (result[0], "time budget"))(original(plan[:-2], budget))
+    r = _compare_turn(lab, trials=6)
+    assert r["base"]["n"] == r["candidate"]["n"] == 5
+    assert r["verdict"].startswith("insufficient evidence")
+    assert any("stopped" in reason for reason in r["comparison"]["reasons"])
 
 
 def test_sweep_lies_down_maps_joints_and_gets_up(lab):
