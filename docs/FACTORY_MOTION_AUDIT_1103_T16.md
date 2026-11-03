@@ -2,6 +2,9 @@
 
 Continuation of [1103-t15](FACTORY_MOTION_AUDIT_1103_T15.md). The source simulation audit is complete. Physical testing remains blocked by unresolved floor support; no motion was physically validated or promoted. No safety code, calibration, motion payloads or approval gates were changed.
 
+The subsequent owner-confirmed floor trials and hardware promotions are recorded in
+[1103-t17](FACTORY_MOTION_AUDIT_1103_T17.md). The readiness statements below describe the earlier t16 session.
+
 ## Completed source audit
 
 The existing audit tool inventoried 317 assets and evaluated all **160 distinct body sequences** with the current software calibration and a read-only EEPROM-limit snapshot. Channels 17/18 were explicitly omitted. All assets passed the hardware frame-format and EEPROM-limit checks; there were no import or simulation errors.
