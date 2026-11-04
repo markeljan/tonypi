@@ -63,6 +63,10 @@ terra or sol, `goal` = measurable success criteria set as the thread's Codex goa
 done|partial|failed|blocked, spoken_sentence (spoken once), details, lesson, commits, needs_voice_restart, question
 (owner-only decisions). Each task is a line in `live/tasks.jsonl` and the journal; a lesson goes to MEMORY.md.
 Task ids persist across restarts (`1030-t7`).
+Worker goals have no per-task token budget: `thread/goal/set` omits `tokenBudget`, which creates a goal with
+`tokenBudget: null` on both new and forked threads. Usage is still recorded. This applies to workers created after
+the voice reloads; existing goals keep their stored budgets. From L, use `tony_restart_voice` once all tasks finish;
+background workers report `needs_voice_restart: true` instead of restarting the service themselves.
 
 ## Autonomy (`src/tonypi/voice/autonomy.py`)
 - Off by default (owner's direction, 2026-10-30: no tokens while Tony only waits for the wake word). It runs only

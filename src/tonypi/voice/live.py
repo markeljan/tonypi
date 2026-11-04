@@ -42,7 +42,6 @@ AUTONOMY_EFFORT = "medium"
 # Codex calls Fast mode "fast" in config and sends it as the priority service tier.
 SERVICE_TIER = os.environ.get("TONYPI_LIVE_SERVICE_TIER", "fast")
 MAX_WORKERS = 3
-WORKER_GOAL_TOKENS = 300_000  # token budget of a worker's native goal
 L_MAX_AGE_S = 20 * 3600  # rotate L to a new thread when older than this ...
 L_MAX_INPUT_TOKENS = 90_000  # ... or when its last request sent more input tokens than this
 IDLE_END_S = 60  # an autonomy session or goal worker with no turn for this long has finished
@@ -157,8 +156,8 @@ DYNAMIC_TOOLS = [
     _fn("tony_start_task", "Start a background Codex worker for independent work longer than ~20 s (code changes, "
         "tests, research, trial batches, gait tuning). Returns a task id at once; the result is spoken to the user "
         "once and put into this thread when it finishes (don't repeat it). The brief must be self-contained. With "
-        "`goal` the worker keeps going (several turns) until the goal's criteria are met, it is blocked, or its budget "
-        "runs out.",
+        "`goal` the worker keeps working toward its measurable success criteria across turns, with no per-task "
+        "token budget.",
         {"title": {"type": "string", "description": "3-6 words, spoken to the user"},
          "brief": {"type": "string", "description": "Self-contained: goal, the user's exact words, constraints, "
                    "decisions made, files, how to verify, what to report"},
@@ -936,7 +935,8 @@ class LiveBrain(Live):
                                  "goal_id": a.get("goal_id"), "source": source, "tier": tier, "effort": effort}
         self.by_thread[thread] = task_id
         if goal:
-            await self._rpc("thread/goal/set", {"threadId": thread, "tokenBudget": WORKER_GOAL_TOKENS,
+            # New and forked threads have no goal; omitting tokenBudget creates an uncapped goal.
+            await self._rpc("thread/goal/set", {"threadId": thread,
                                                 "objective": f"Task {task_id} {a.get('title', '')}: {goal}"[:3900]})
         convo = "\n".join(f"{t['role']}: {t['text'][:300]}" for t in self.convo.tail(30))[-3000:]
         ctx = {"task": {"kind": "application",  # only untrusted entries may carry a name

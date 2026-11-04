@@ -268,19 +268,26 @@ def test_worker_result_is_spoken_once_logged_and_remembered(mk):
     assert "do not repeat" in inject["items"][0]["content"][0]["text"]
 
 
-def test_goal_worker_keeps_going_then_reports(mk):
+@pytest.mark.parametrize("fork", [False, True])
+def test_goal_worker_keeps_going_then_reports_without_token_cap(mk, fork):
     brain = mk()
 
     async def go():
         r = await brain._start_task({"title": "Walk 1 m", "brief": "walk", "uses_body": True, "tier": "sol",
-                                     "goal": "1 m straight, 3/3 without falling", "goal_id": "g3"})
+                                     "goal": "1 m straight, 3/3 without falling", "goal_id": "g3",
+                                     "full_context": fork})
         task_id = r.split()[1].rstrip(";")
         start, goal, turn = brain.calls[0][1], brain.calls[1], brain.calls[2][1]
-        assert start["ephemeral"] is False and start["serviceName"] == "tonypi-task"
+        assert brain.calls[0][0] == ("thread/fork" if fork else "thread/start")
+        assert start["ephemeral"] is False
+        if not fork:
+            assert start["serviceName"] == "tonypi-task"
         assert start["model"] == live.MODELS["sol"]
-        assert goal[0] == "thread/goal/set" and "3/3" in goal[1]["objective"] and goal[1]["tokenBudget"]
+        assert goal[0] == "thread/goal/set" and "3/3" in goal[1]["objective"]
+        assert "tokenBudget" not in goal[1]
         assert "outputSchema" not in turn and "MEMORY-SNAPSHOT" in turn["additionalContext"]["memory"]["value"]
         thread = brain.workers[task_id]["thread"]
+        brain.thread_tokens[thread] = 500_000  # usage accounting must not stop the worker
         brain.on_notification("turn/completed", {"threadId": thread, "turn": {"id": "turn3", "status": "completed"}})
         await asyncio.sleep(0.05)
         assert brain.workers[task_id]["status"] == "running" and not brain.spoken  # Codex continues the goal
