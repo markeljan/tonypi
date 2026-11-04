@@ -24,7 +24,8 @@ def test_everyday_has_only_ten_tools_and_learning_is_separate():
     learning = profile_tools('learning')
     assert everyday < learning
     assert {'set_pose', 'play_frames', 'set_torque', 'get_joints', 'calibration', 'servo_calibrate',
-            'body_sweep', 'trial', 'compare', 'simulate_motion', 'simulation_execute'} <= learning
+            'body_sweep', 'trial', 'compare', 'simulate_motion', 'simulation_execute',
+            'promote_provisional_skill', 'provisional_library'} <= learning
 
 
 def test_hidden_tool_cannot_be_called_through_everyday_mcp():

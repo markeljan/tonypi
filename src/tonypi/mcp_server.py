@@ -121,6 +121,17 @@ def status() -> dict:
         catalog = {name: {k: entry[k] for k in
                           ("description", "precondition", "available", "model_verified", "hardware_verified", "count_limit", "availability_reason")
                           if k in entry} for name, entry in tonyd.call("catalog")["skills"].items()}
+        from tonypi.motion.provisional import library, registry
+        from tonypi.simulation.catalog import calibration as current_calibration
+        from tonypi.tonyd.studio import USER_DIR
+
+        with _learning():
+            if registry(USER_DIR):
+                provisional = library(USER_DIR / "brain/learning/ledger.jsonl", USER_DIR / "jobs.jsonl",
+                                      USER_DIR, current_calibration(tonyd))
+                for name, entry in provisional.items():
+                    if name not in catalog:  # Corrupt/colliding entries never shadow curated actions.
+                        catalog[name] = entry
         try:
             last = tonyd.job()
         except TonydError:
@@ -160,8 +171,20 @@ def list_skills() -> dict:
 
 @_tool()
 def run_skill(skill: str, count: StepCount = 1, wait: StrictBool = True) -> dict:
-    """Run a curated skill or promoted composite; status lists available names. count: 1..5.
-    Returns done/failed/cancelled; wait=False returns immediately. tonyd owns all everyday guards."""
+    """Run a library skill; status lists available names and evidence. count: 1..5 for curated actions.
+    Provisional skills require count=1 and wait=True, and use the guarded simulation bridge without positioning."""
+    if type(count) is not int or not 1 <= count <= 5 or type(wait) is not bool:
+        raise ToolError("count must be an integer from 1 to 5 and wait must be boolean")
+    from tonypi.motion.provisional import execute, registry
+    from tonypi.simulation.catalog import calibration as current_calibration
+    from tonypi.tonyd.studio import USER_DIR
+
+    with _learning():
+        if skill in registry(USER_DIR):
+            if count != 1 or not wait:
+                raise ToolError("provisional skills require count=1 and wait=True")
+            return execute(tonyd, skill, USER_DIR / "brain/learning/ledger.jsonl", USER_DIR / "jobs.jsonl",
+                           USER_DIR, current_calibration(tonyd))
     return _execute(skill, count, wait)
 
 
@@ -549,6 +572,34 @@ def promote_skill(name: str, report_id: str, description: str = "") -> dict:
         result = promote(name, root() / "reports" / report_id, USER_DIR / "brain/learning/ledger.jsonl",
                          USER_DIR / "jobs.jsonl", USER_DIR, current_calibration(tonyd), description)
     return {k: v for k, v in result.items() if k != "frames"}
+
+
+@_tool()
+def promote_provisional_skill(name: str, report_id: str, description: str = "") -> dict:
+    """LEARNING ONLY: save provisional access after exact model checks and one guarded matched no-fall trial.
+    Reads evidence, never moves. Everyday run_skill retains the bridge guards; repeated-trial reliability remains unverified."""
+    from tonypi.motion.provisional import promote
+    from tonypi.simulation.catalog import calibration as current_calibration, root
+    from tonypi.tonyd.studio import USER_DIR
+
+    if len(report_id) != 32 or any(c not in "0123456789abcdef" for c in report_id):
+        raise ToolError("report_id must be 32 lowercase hexadecimal characters")
+    with _learning():
+        return promote(name, root() / "reports" / report_id, USER_DIR / "brain/learning/ledger.jsonl",
+                       USER_DIR / "jobs.jsonl", USER_DIR, current_calibration(tonyd), description)
+
+
+@_tool()
+def provisional_library() -> dict:
+    """LEARNING ONLY: discover provisional access and stale/refused evidence; no frames and no body movement."""
+    from tonypi.motion.provisional import library
+    from tonypi.simulation.catalog import calibration as current_calibration
+    from tonypi.tonyd.studio import USER_DIR
+
+    with _learning():
+        return library(USER_DIR / "brain/learning/ledger.jsonl", USER_DIR / "jobs.jsonl",
+                       USER_DIR, current_calibration(tonyd))
+
 
 
 @_tool()
