@@ -137,7 +137,15 @@ def _default_execute_actions(actions: list[tuple[str, int]], request: str) -> di
                     executed.append({"action": action, "state": c.state()})
                     continue
                 if action == "describe_view":
-                    executed.append({"action": action, "note": "camera_requested"})
+                    shot = c.snapshot()
+                    jpeg_path = shot.get("path") if isinstance(shot, dict) else None
+                    desc = None
+                    if jpeg_path:
+                        from pathlib import Path
+                        from tonypi.agent.gemini_brain import describe_image_gemini
+
+                        desc = describe_image_gemini(Path(jpeg_path).read_bytes())
+                    executed.append({"action": action, "description": desc or "camera captured"})
                     continue
                 res = c.run(action, count)
                 executed.append({"action": action, "count": count, "result": res})
@@ -300,8 +308,13 @@ class GeminiLiveVoice:
 
     async def _receive_loop(self) -> None:
         try:
-            async for msg in self._session.receive():
-                await self.handle_server_message(msg)
+            while self.voice_on and self._session is not None:
+                received_any = False
+                async for msg in self._session.receive():
+                    received_any = True
+                    await self.handle_server_message(msg)
+                if not received_any:
+                    break
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -396,10 +409,12 @@ class GeminiLiveVoice:
         if self._session is not None:
             from google.genai import types
 
+            fr_kwargs: dict[str, Any] = {"id": call_id, "name": name, "response": result}
+            sched = getattr(types, "FunctionResponseScheduling", None)
+            if sched is not None and hasattr(sched, "WHEN_IDLE"):
+                fr_kwargs["scheduling"] = sched.WHEN_IDLE
             await self._session.send_tool_response(
-                function_responses=[
-                    types.FunctionResponse(id=call_id, name=name, response=result)
-                ]
+                function_responses=[types.FunctionResponse(**fr_kwargs)]
             )
 
     async def delegate_request(self, request: str) -> dict[str, Any]:
