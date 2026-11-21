@@ -141,8 +141,15 @@ for t in "$MODELS"/*.tar.bz2; do
 done
 
 # ---------------------------------------------------------------------------
-log "python env"
-as_user bash -c "cd '$REPO' && uv sync --all-extras" || log "  uv sync failed (fix and re-run)"
+log "python env (agent, voice, vision, gemini>=3.2.0, mujoco>=4.0.1 + mink>=1.4.0)"
+as_user bash -c "cd '$REPO' && uv sync --extra agent --extra voice --extra vision --extra gemini --extra simulation" || \
+  log "  uv sync failed (fix and re-run)"
+
+# Optional Gemini credentials directory (never store API keys in Git)
+install -d -m 0750 -o root -g "$USER_NAME" /etc/tonypi
+if [[ ! -f /etc/tonypi/gemini.env ]]; then
+  log "Gemini stack: create /etc/tonypi/gemini.env with GEMINI_API_KEY=... and TONYPI_VOICE_MODE=gemini-live (chmod 640, chgrp $USER_NAME) to enable Gemini 3.8 Live + Gemini 4 + ER 2"
+fi
 
 # ---------------------------------------------------------------------------
 # Explicit owner source only: never download/redistribute factory recordings for the user.

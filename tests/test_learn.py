@@ -533,8 +533,9 @@ def test_cli_reads_without_the_robot(monkeypatch, tmp_path, capsys):
     assert cli.main(["ledger"]) == 0 and json.loads(capsys.readouterr().out) == []
 
 
-def test_mcp_say_prefers_the_voice_socket_then_the_agent(monkeypatch, tmp_path):
+def test_mcp_say_prefers_the_voice_socket_then_the_agent(monkeypatch):
     import socket
+    import tempfile
     import threading
 
     from tonypi import mcp_server
@@ -555,13 +556,54 @@ def test_mcp_say_prefers_the_voice_socket_then_the_agent(monkeypatch, tmp_path):
 
         threading.Thread(target=run, daemon=True).start()
 
-    voice, agent = tmp_path / "voice.sock", tmp_path / "agent.sock"
-    monkeypatch.setattr(mcp_server, "VOICE_SOCK", str(voice))
-    monkeypatch.setattr(mcp_server, "AGENT_SOCK", str(agent))
-    serve(agent)  # live mode is down: the local agent speaks
-    assert mcp_server.say("hi") == {"said": "hi"}
-    serve(voice)
-    assert mcp_server.say("yo") == {"said": "yo"}
-    assert got == [("agent.sock", {"op": "say", "text": "hi"}), ("voice.sock", {"op": "say", "text": "yo"})]
-    with pytest.raises(Exception, match="no speech service"):
-        mcp_server.say("nobody")
+    # Keep AF_UNIX socket paths short (<104 bytes on macOS)
+    with tempfile.TemporaryDirectory(prefix="tp_") as sock_dir:
+        base = Path(sock_dir)
+        voice, agent = base / "voice.sock", base / "agent.sock"
+        monkeypatch.setattr(mcp_server, "VOICE_SOCK", str(voice))
+        monkeypatch.setattr(mcp_server, "AGENT_SOCK", str(agent))
+        serve(agent)  # live mode is down: the local agent speaks
+        assert mcp_server.say("hi") == {"said": "hi"}
+        serve(voice)
+        assert mcp_server.say("yo") == {"said": "yo"}
+        assert got == [("agent.sock", {"op": "say", "text": "hi"}), ("voice.sock", {"op": "say", "text": "yo"})]
+        with pytest.raises(Exception, match="no speech service"):
+            mcp_server.say("nobody")
+
+
+def test_mcp_learning_http_guard_enforces_loopback_and_opt_in(monkeypatch):
+    from tonypi import mcp_server
+
+    # Default: learning profile over HTTP is refused
+    with pytest.raises(ValueError, match="local stdio transport"):
+        mcp_server._validate_learning_transport(
+            profile="learning", transport="streamable-http", host="127.0.0.1", allow_local_http=False
+        )
+
+    # Loopback + explicit opt-in: allowed
+    for host in ("127.0.0.1", "localhost", "::1"):
+        mcp_server._validate_learning_transport(
+            profile="learning", transport="streamable-http", host=host, allow_local_http=True
+        )
+
+    # Non-loopback host: ALWAYS refused even with opt-in
+    for host in ("0.0.0.0", "192.168.1.42", "tonypi.local"):
+        with pytest.raises(ValueError, match="loopback"):
+            mcp_server._validate_learning_transport(
+                profile="learning", transport="streamable-http", host=host, allow_local_http=True
+            )
+
+    # CLI wiring respects TONYPI_MCP_ALLOW_LOCAL_HTTP=1 on loopback and calls mcp.run
+    ran = []
+    monkeypatch.setattr(mcp_server, "PROFILE", "learning")
+    monkeypatch.setattr(mcp_server.mcp, "run", lambda *a, **kw: ran.append((a, kw)))
+    monkeypatch.setenv("TONYPI_MCP_HOST", "127.0.0.1")
+    monkeypatch.setenv("TONYPI_MCP_PORT", "8765")
+    monkeypatch.setenv("TONYPI_MCP_ALLOW_LOCAL_HTTP", "1")
+    mcp_server.main(["--transport", "streamable-http"])
+    assert ran == [(("streamable-http",), {"host": "127.0.0.1", "port": 8765})]
+
+    # Non-loopback via main() fails with SystemExit(2)
+    monkeypatch.setenv("TONYPI_MCP_HOST", "0.0.0.0")
+    with pytest.raises(SystemExit):
+        mcp_server.main(["--transport", "streamable-http", "--allow-local-http"])

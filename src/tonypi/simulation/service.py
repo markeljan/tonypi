@@ -28,7 +28,7 @@ LIMITATIONS = [
 def status(repo: Path | None = None) -> dict:
     repo = repo or assets.repository()
     versions = {}
-    for name in ("mujoco", "mink"):
+    for name in ("mujoco", "mujoco-studio", "mink"):
         try:
             versions[name] = metadata.version(name)
         except metadata.PackageNotFoundError:
@@ -78,7 +78,8 @@ def simulate(client=None, motion: str = "", frames: list[dict] | None = None, co
         directory = reports / report_id
         directory.mkdir()
         (directory / "request.json").write_text(json.dumps(request))
-        env = dict(os.environ, MUJOCO_GL="osmesa", OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1")
+        mujoco_gl = os.environ.get("MUJOCO_GL") or ("cgl" if sys.platform == "darwin" else "osmesa")
+        env = dict(os.environ, MUJOCO_GL=mujoco_gl, OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1")
         try:
             p = subprocess.run([sys.executable, "-m", "tonypi.simulation.engine", str(directory)],
                                env=env, capture_output=True, text=True, timeout=90)

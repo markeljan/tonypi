@@ -51,9 +51,19 @@ CODEX = os.environ.get("TONYPI_CODEX", "/home/pi/.local/bin/codex")
 CODEX_HOME = os.environ.get("TONYPI_VOICE_CODEX_HOME", "/home/pi/.config/tonypi/codex-voice")
 VOICE = os.environ.get("TONYPI_VOICE_NAME", "cove")
 RETRY_LIVE_S = 120
-# live: GPT-Live's own Codex agent is the brain, with full access (live.py). Anything else runs GPT-Live as a voice
-# only, without a brain (tests, debugging).
+# live: GPT-Live's own Codex agent is the brain, with full access (live.py).
+# gemini-live: Gemini 3.8 Live (gemini-3.8-live) WebSocket session with non-blocking delegation (gemini_live.py).
+# Anything else runs GPT-Live as a voice only, without a brain (tests, debugging).
 VOICE_MODE = os.environ.get("TONYPI_VOICE_MODE", "live")
+_LIVE_MODES = ("gpt-live", "gemini-live")
+
+
+def _is_live_brain_mode(mode: str | None = None) -> bool:
+    return (VOICE_MODE if mode is None else mode) in ("live", "gemini-live")
+
+
+def _live_session_mode(mode: str | None = None) -> str:
+    return "gemini-live" if (VOICE_MODE if mode is None else mode) == "gemini-live" else "gpt-live"
 # No echo cancellation on the USB speaker/mic: by default the mic sends silence while Tony talks (half duplex), so
 # GPT-Live doesn't hear (and transcribe, or act on) Tony's own voice. 1 = full duplex (barge-in while Tony talks).
 DUPLEX = os.environ.get("TONYPI_VOICE_DUPLEX", "0") == "1"
@@ -805,20 +815,20 @@ class Hub:
 
                 c = TonydClient()
                 try:
-                    c.stop(latch=VOICE_MODE == "live")  # live: no brain may carry on moving
+                    c.stop(latch=_is_live_brain_mode())  # live: no brain may carry on moving
                 finally:
                     c.close()
             except Exception as e:
                 log.error("tonyd stop failed: %s", e)
         threading.Thread(target=stop, daemon=True).start()
-        if VOICE_MODE == "live" and self.live is not None and hasattr(self.live, "interrupt_all"):
+        if _is_live_brain_mode() and self.live is not None and hasattr(self.live, "interrupt_all"):
             asyncio.create_task(self.live.interrupt_all(body_only=True))
 
     def _utterance_done(self) -> None:
         text, self.utt_parts = "".join(self.utt_parts), []
         if (target := parse_switch(text)) is not None:
             self._switch(target, None)
-        elif VOICE_MODE == "live" and text.strip() and not STOP_WORDS.match(text):
+        elif _is_live_brain_mode() and text.strip() and not STOP_WORDS.match(text):
             if hasattr(self.live, "utterance_done"):
                 self.live.utterance_done(" ".join(text.split()))
             self._unlatch(text)
@@ -874,9 +884,9 @@ class Hub:
             self._switch(target, item_id)
         elif STOP_WORDS.match(text):
             self._stop_body(text)
-        elif (VOICE_MODE == "live" and self.live is not None and hasattr(self.live, "send_text")
+        elif (_is_live_brain_mode() and self.live is not None and hasattr(self.live, "send_text")
               and not self.live.closed.is_set() and text.strip()):
-            asyncio.create_task(self._local_request(text))  # GPT-Live is down but the brain is up
+            asyncio.create_task(self._local_request(text))  # live voice is down but the brain is up
         else:
             self._speak_or_append(item_id, "My live brain is offline right now. Say: switch to local, for my "
                                            "local brain.")
@@ -894,7 +904,7 @@ class Hub:
     def _speak_or_append(self, item_id: str | None, text: str) -> None:
         if item_id and self.live and self.live.append(item_id, text):
             return
-        if self.mode == "gpt-live" and self.live and self.live.speak(text):
+        if self.mode in _LIVE_MODES and self.live and self.live.speak(text):
             return
         asyncio.create_task(self.say_local(text))
 
@@ -907,17 +917,17 @@ class Hub:
     # ---- the voice session: wake word on, idle off ------------------------------------------------------------
 
     async def wake(self, why: str, hold: bool = True) -> bool:
-        """Start the GPT-Live session (no-op if it is up). hold: replay the mic from just before the wake word into
+        """Start the live voice session (no-op if it is up). hold: replay the mic from just before the wake word into
         it, so "hey Tony, wave" arrives whole. True once the session hears the mic."""
         live = self.live
-        if live is None or self.mode != "gpt-live":
+        if live is None or self.mode not in _LIVE_MODES:
             return False
         if self.voice == "on" and live.voice_on:
             return True
         if hold:
             self.audio.start_hold()
         async with self._voice_lock:
-            if self.live is not live or self.mode != "gpt-live":  # the brain went away while we waited
+            if self.live is not live or self.mode not in _LIVE_MODES:  # the brain went away while we waited
                 self.audio.drop_hold()
                 return False
             if self.voice == "on" and live.voice_on:
@@ -930,7 +940,7 @@ class Hub:
             try:
                 await asyncio.wait_for(live.start_voice(), VOICE_START_TIMEOUT_S)
             except Exception as e:
-                log.warning("GPT-Live session failed to start (%s): %s", why, e or type(e).__name__)
+                log.warning("Live voice session failed to start (%s): %s", why, e or type(e).__name__)
                 self.voice = "off"
                 await live.stop_voice()  # drops the hold too
                 self.wake_failures += 1
@@ -938,7 +948,7 @@ class Hub:
                 speech, self.pending_speech = self.pending_speech, []
                 for text in speech:
                     await self.say_local(text)
-                can_local = VOICE_MODE == "live" and hasattr(live, "send_text")
+                can_local = _is_live_brain_mode() and hasattr(live, "send_text")
                 if self.wake_failures >= WAKE_FAILS_LOCAL and can_local:
                     await self._go_local()
                 elif why.startswith("wake") or self.last_wake_t >= t0:  # someone called Tony: say why nothing comes
@@ -1010,9 +1020,9 @@ class Hub:
                 if self.mode == "local":
                     if now >= self.next_retry_t and not live.closed.is_set():
                         self.next_retry_t = now + RETRY_LIVE_S
-                        self.mode = "gpt-live"
+                        self.mode = _live_session_mode()
                         if await self.wake("retry after the local fallback", hold=False):
-                            log.info("GPT-Live is back")
+                            log.info("%s is back", self.mode)
                         else:
                             self.mode = "local"
                     continue
@@ -1093,7 +1103,7 @@ class Hub:
             return self.voice == "on" and not self.audio.replaying
 
         def feed(chunk: bytes) -> None:  # event loop: batch 0.1 s, spot in a thread
-            if deaf() or self.mode != "gpt-live" or self.audio.speaking_local:
+            if deaf() or self.mode not in _LIVE_MODES or self.audio.speaking_local:
                 buf.clear()
                 return
             buf.extend(chunk)
@@ -1156,26 +1166,37 @@ class Hub:
         self.audio.mic_listeners.append(feed)
         log.info("local voice ready (say 'hey Tony')")
 
-    async def run_live(self) -> None:
+    def _create_live_session(self):
+        if VOICE_MODE == "gemini-live":
+            from tonypi.voice.gemini_live import GeminiLiveVoice
+
+            return GeminiLiveVoice(self)
         if VOICE_MODE == "live":
             from tonypi.voice.live import LiveBrain
+
+            return LiveBrain(self)
+        return Live(self)
+
+    async def run_live(self) -> None:
         while self.live_enabled:
-            self.live = LiveBrain(self) if VOICE_MODE == "live" else Live(self)
+            self.live = self._create_live_session()
             helpers: list[asyncio.Task] = []
             try:
                 await self.live.start_brain()
-                self.mode = "gpt-live"
+                self.mode = _live_session_mode()
                 if hasattr(self.live, "watchdog"):
                     helpers.append(asyncio.create_task(self.live.watchdog()))
                 if hasattr(self.live, "start_autonomy") and (t := self.live.start_autonomy()) is not None:
                     helpers.append(t)
                 helpers.append(asyncio.create_task(self.keep_voice()))
                 if not await self.wake("service start", hold=False):  # awake at start (greets after a restart)
-                    log.warning("the first GPT-Live session failed: the brain stays up; a wake word or retry brings it")
+                    log.warning("the first %s session failed: the brain stays up; a wake word or retry brings it",
+                                self.mode)
                 await self.live.closed.wait()
-                log.warning("the Codex app-server exited; restarting")
+                log.warning("the %s backend exited; restarting", self.mode)
             except Exception as e:
-                log.warning("GPT-Live unavailable (%s): local voice for now, retry in %d s", e, RETRY_LIVE_S)
+                log.warning("%s unavailable (%s): local voice for now, retry in %d s",
+                            _live_session_mode(), e, RETRY_LIVE_S)
             self.voice = "off"
             for t in helpers:
                 t.cancel()
@@ -1220,8 +1241,8 @@ class Hub:
                 pcm = resample(pcm, w.getframerate(), MIC_RATE)
             self.audio.inject.extend(pcm.tobytes() + bytes(MIC_RATE))  # + 0.5 s of silence after it
             return {"seconds": round(len(pcm) / MIC_RATE, 2)}
-        if op == "text":  # live mode: a typed request for the brain (turn, or steer of the running turn)
-            if VOICE_MODE != "live" or self.live is None or not hasattr(self.live, "send_text"):
+        if op == "text":  # live / gemini-live mode: a typed request for the brain
+            if not _is_live_brain_mode() or self.live is None or not hasattr(self.live, "send_text"):
                 raise ValueError("typed requests need live mode with the brain running")
             return await self.live.send_text(str(msg.get("text", "")), str(msg.get("source", "typed")))
         if op == "tasks":
@@ -1231,8 +1252,13 @@ class Hub:
         if op == "status":
             auto = getattr(self.live, "autonomy", None)
             idle = self.voice_idle_s() if self.live is not None and self.voice == "on" else None
+            active_voice = (
+                getattr(self.live, "model", VOICE)
+                if self.mode == "gemini-live"
+                else (VOICE if self.mode in _LIVE_MODES else "piper")
+            )
             return {"mode": self.mode, "voice_mode": VOICE_MODE,
-                    "voice": VOICE if self.mode == "gpt-live" else "piper",
+                    "voice": active_voice,
                     "session": self.voice, "idle_s": None if idle is None else round(idle, 1),
                     "busy": bool(self.live is not None and self.live.busy()), "wakes": self.wakes,
                     "held_s": round(len(self.audio.hold or ()) * MIC_CHUNK / MIC_RATE, 1),

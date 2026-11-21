@@ -572,18 +572,63 @@ def say(text: str) -> dict:
     raise ToolError("no speech service reachable (" + "; ".join(errors) + ")")
 
 
-def main() -> None:
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
+
+def _is_truthy_env(value: str | None) -> bool:
+    return (value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _validate_learning_transport(
+    *,
+    profile: str,
+    transport: str,
+    host: str,
+    allow_local_http: bool,
+) -> None:
+    """Allow learning profile over HTTP ONLY on loopback with explicit opt-in."""
+    if profile != "learning" or transport == "stdio":
+        return
+    normalized_host = host.strip().lower().strip("[]")
+    if normalized_host not in _LOOPBACK_HOSTS:
+        raise ValueError(
+            f"learning profile over HTTP is strictly limited to loopback hosts "
+            f"(127.0.0.1, localhost, ::1); refusing host '{host}'"
+        )
+    if not allow_local_http:
+        raise ValueError(
+            "learning profile requires explicit local stdio transport "
+            "(or loopback HTTP with --allow-local-http / TONYPI_MCP_ALLOW_LOCAL_HTTP=1)"
+        )
+
+
+def main(argv: list[str] | None = None) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     parser = argparse.ArgumentParser()
     parser.add_argument("--transport", choices=("streamable-http", "stdio"), default="streamable-http")
-    args = parser.parse_args()
-    if PROFILE == "learning" and args.transport != "stdio":
-        parser.error("learning profile requires explicit local stdio transport")
+    parser.add_argument(
+        "--allow-local-http",
+        action="store_true",
+        help="Allow TONYPI_MCP_PROFILE=learning over loopback-only Streamable HTTP.",
+    )
+    args = parser.parse_args(argv)
+    host = os.environ.get("TONYPI_MCP_HOST", "127.0.0.1")
+    port = int(os.environ.get("TONYPI_MCP_PORT", "8765"))
+    allow_local_http = bool(
+        args.allow_local_http or _is_truthy_env(os.environ.get("TONYPI_MCP_ALLOW_LOCAL_HTTP"))
+    )
+    try:
+        _validate_learning_transport(
+            profile=PROFILE,
+            transport=args.transport,
+            host=host,
+            allow_local_http=allow_local_http,
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
     if args.transport == "stdio":
         mcp.run("stdio")
         return
-    host = os.environ.get("TONYPI_MCP_HOST", "127.0.0.1")
-    port = int(os.environ.get("TONYPI_MCP_PORT", "8765"))
     mcp.run("streamable-http", host=host, port=port)
 
 

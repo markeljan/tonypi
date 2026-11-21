@@ -8,8 +8,12 @@ StartLimitBurst=5
 [Service]
 User=pi
 Environment=PYTHONUNBUFFERED=1
-# set TONYPI_MCP_HOST=0.0.0.0 (drop-in) to reach it from the LAN; it has no auth
+# Strictly loopback-only for learning profile (RoboHarness connects via localhost or SSH tunnel).
+# Never bind 0.0.0.0 when TONYPI_MCP_PROFILE=learning; Streamable HTTP MCP has no built-in auth.
 Environment=TONYPI_MCP_HOST=127.0.0.1 TONYPI_MCP_PORT=8765
+Environment=TONYPI_MCP_PROFILE=learning TONYPI_MCP_ALLOW_LOCAL_HTTP=1
+# Optional Gemini credentials & overrides (e.g. GEMINI_API_KEY, TONYPI_MCP_PROFILE=default)
+EnvironmentFile=-/etc/tonypi/gemini.env
 ExecStart=/home/pi/tonypi/.venv/bin/tonypi-mcp
 Restart=on-failure
 # robot MCP: keep it over dev jobs and the LLM
