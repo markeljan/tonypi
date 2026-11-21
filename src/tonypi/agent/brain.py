@@ -9,11 +9,15 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import os
 import re
 import urllib.request
 from dataclasses import dataclass, field
-from typing import Callable
+from typing import Any, Callable
+
+log = logging.getLogger("tonypi.agent.brain")
+_ORIG_URLOPEN = urllib.request.urlopen
 
 # name -> description shown to the LLM. Implementations live in body.py.
 ACTIONS: dict[str, str] = {
@@ -178,9 +182,37 @@ _ACTION_RE = re.compile(r'\{\s*"action"\s*:\s*"(\w+)"\s*,\s*"count"\s*:\s*(\d+)\
 
 
 class Brain:
-    def __init__(self, url: str = os.environ.get("TONYPI_BRAIN_URL", "http://127.0.0.1:8080/v1/chat/completions")) -> None:
-        self.url = url
+    def __init__(
+        self,
+        url: str | None = None,
+        *,
+        provider: str | None = None,
+        gemini_brain: Any | None = None,
+    ) -> None:
+        self._explicit_url = url is not None
+        self.url = (
+            url
+            if url is not None
+            else os.environ.get("TONYPI_BRAIN_URL", "http://127.0.0.1:8080/v1/chat/completions")
+        )
+        self._provider_override = provider
+        self._gemini_brain = gemini_brain
+        self._last_backend = "llm"
         self.last: list[dict] = []  # previous turn, compact
+
+    def _use_gemini(self) -> bool:
+        provider = (self._provider_override or os.environ.get("TONYPI_BRAIN_PROVIDER", "auto")).strip().lower()
+        if provider == "local":
+            return False
+        if provider == "gemini":
+            return True
+        if self._gemini_brain is not None:
+            return True
+        if self._explicit_url:
+            return False
+        if urllib.request.urlopen is not _ORIG_URLOPEN:
+            return False
+        return bool(os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"))
 
     def plan(self, request: str, audio_wav: bytes | None = None) -> Plan:
         return self.plan_stream(request, audio_wav)
@@ -206,10 +238,12 @@ class Brain:
                 on_action(name, count)
 
         try:
+            self._last_backend = "llm"
             raw = self._llm(request, audio_wav, early_action if on_action else None)
             data = json.loads(raw)
+            backend = self._last_backend
             plan = Plan([(a["action"], a.get("count", 1)) for a in data.get("actions", [])], data.get("say", ""),
-                        "llm+audio" if audio_wav else "llm")
+                        f"{backend}+audio" if audio_wav else backend)
             self.last = [{"role": "user", "content": request},
                          {"role": "assistant", "content": f"(did: {', '.join(a for a, _ in plan.actions) or 'nothing'};"
                                                           f" said: {plan.say!r})"}]
@@ -226,6 +260,37 @@ class Brain:
         return plan
 
     def _llm(self, request: str, audio_wav: bytes | None, on_action) -> str:
+        if self._use_gemini():
+            try:
+                return self._llm_gemini(request, audio_wav, on_action)
+            except Exception as exc:
+                log.warning("GeminiBrain unavailable (%s); falling back to local llama-server", exc)
+        return self._llm_local(request, audio_wav, on_action)
+
+    def _llm_gemini(self, request: str, audio_wav: bytes | None, on_action) -> str:
+        if self._gemini_brain is None:
+            from tonypi.agent.gemini_brain import GeminiBrain
+
+            self._gemini_brain = GeminiBrain()
+        history = self.last if FOLLOWUP_RE.search(request) else []
+        system = SYSTEM + AUDIO_NOTE if audio_wav else SYSTEM
+        out = self._gemini_brain.plan_raw(
+            request,
+            audio_wav=audio_wav,
+            history=history,
+            system_prompt=system,
+            actions_schema=SCHEMA,
+        )
+        self._last_backend = "gemini"
+        if on_action is not None:
+            data = json.loads(out)
+            for item in data.get("actions", []):
+                if isinstance(item, dict) and "action" in item:
+                    on_action(str(item["action"]), int(item.get("count", 1)))
+        return out
+
+    def _llm_local(self, request: str, audio_wav: bytes | None, on_action) -> str:
+        self._last_backend = "llm"
         if audio_wav:
             system, user = SYSTEM + AUDIO_NOTE, [{"type": "input_audio", "input_audio": {
                 "data": base64.b64encode(audio_wav).decode(), "format": "wav"}}]

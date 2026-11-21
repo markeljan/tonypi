@@ -1,5 +1,5 @@
 [Unit]
-Description=TonyPi voice + live brain (GPT-Live-1 + Codex brain, local wake word fallback; socket /run/tonypi/voice.sock)
+Description=TonyPi voice + live brain (Gemini 3.8 Live + Gemini 4 Hydrogen / legacy GPT-Live, local wake word fallback; socket /run/tonypi/voice.sock)
 After=network-online.target tonypi-tonyd.service tonypi-mcp.service
 Wants=network-online.target
 # owns the USB mic and speaker, like tonypi-agent: only one of them runs ("switch to local" starts the agent)
@@ -9,8 +9,11 @@ Conflicts=tonypi-agent.service
 User=pi
 RuntimeDirectory=tonypi
 RuntimeDirectoryPreserve=yes
-Environment=PYTHONUNBUFFERED=1 TONYPI_VOICE_MODE=live
-# optional overrides for debugging (values in this file win over Environment=)
+Environment=PYTHONUNBUFFERED=1 TONYPI_VOICE_MODE=live TONYPI_BRAIN_PROVIDER=auto TONYPI_VISION_PROVIDER=auto
+# Optional Gemini config: set GEMINI_API_KEY and TONYPI_VOICE_MODE=gemini-live in /etc/tonypi/gemini.env
+# to activate Gemini 3.8 Live voice + Gemini 4 Hydrogen brain + Gemini Robotics ER 2 vision (falls back offline)
+EnvironmentFile=-/etc/tonypi/gemini.env
+# optional overrides for debugging (values in this file win over Environment= and /etc/tonypi/gemini.env)
 EnvironmentFile=-/run/tonypi/voice.env
 ExecStart=/home/pi/tonypi/.venv/bin/tonypi-voice
 Restart=always

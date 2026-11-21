@@ -11,21 +11,35 @@ controllers or direct Board/MPU hardware backend. The external checkout retains 
 
 ```sh
 cd /home/pi/tonypi
-uv sync --extra agent --extra simulation --extra voice --extra vision
+uv sync --extra agent --extra gemini --extra simulation --extra voice --extra vision
 uv run tonypi-sim install
-# Optional software-rendering runtime; no display/GPU required:
+# Optional Linux Pi 5 software-rendering runtime (macOS uses native CGL automatically):
 sudo apt-get install -y --no-install-recommends libosmesa6
 sudo systemctl restart tonypi-mcp
 ```
 
-The optional simulation extra pins compatible MuJoCo 3.17.x and Mink 1.3.x. The installer clones only into
+The optional simulation extra installs **MuJoCo 4.0.1+** (`mujoco>=4.0.1`, including `mujoco-studio`) and **Mink 1.4+** (`mink>=1.4.0`). Headless rendering automatically selects `MUJOCO_GL=cgl` on macOS (`darwin`) and `MUJOCO_GL=osmesa` on Linux Pi 5 (overridable via `MUJOCO_GL`). The installer clones only into
 `~/.local/share/tonypi/simulation/PAB47-TonyPi` (override parent with `TONYPI_SIM_DIR`), checks out the fixed revision,
 and refuses a different/modified existing checkout. It never executes upstream installation scripts or changes
 robot calibration. Edited/untracked model/action/calibration assets are refused, rather than silently assigned
-the pinned version. Reinstallation does not overwrite an existing checkout. No new service or network port is used.
+the pinned version. Reinstallation does not overwrite an existing checkout. No new service or network port is used for headless simulation.
+
+## MuJoCo 4.0.1 Studio (interactive 3D web & native viewer)
+
+Launch **MuJoCo 4.0.1 Studio** directly on the pinned TonyPi model with Filament PBR rendering, Dear ImGui panels, WebAssembly browser streaming, and `SimHistory` timeline scrubbing:
+
+```sh
+# Interactive WebAssembly 3D viewer at http://localhost:8080/
+uv run --extra simulation tonypi-sim studio --gfx web --port 8080
+
+# Native OpenGL desktop window (pass --open-browser in web mode to open automatically)
+uv run --extra simulation tonypi-sim studio --gfx opengl
+```
+
+## MCP learning profile and RoboHarness integration
 
 The following detailed tools are served only by the explicit learning MCP profile
-(`TONYPI_MCP_PROFILE=learning`), never the ten-tool everyday HTTP profile:
+(`TONYPI_MCP_PROFILE=learning`), never the ten-tool everyday HTTP profile. Over Streamable HTTP (`http://127.0.0.1:8765/mcp`), the learning profile is permitted **strictly on loopback** (`127.0.0.1`, `localhost`, `::1`) when explicitly opted in via `TONYPI_MCP_ALLOW_LOCAL_HTTP=1` (or `--allow-local-http`) so external harnesses such as **RoboHarness** (Gemini 4 + Managed Agent + `gemini-decision-1` safety gate) can drive `status`, `perceive`, `say`, `play_frames`, and `simulate_motion` locally or over an SSH tunnel while non-loopback HTTP bindings continue to refuse the learning profile:
 
 | Tool | Effect |
 | --- | --- |
@@ -43,6 +57,7 @@ The skill is `.agents/skills/tonypi-simulation/SKILL.md` and loads in new brain 
 ```sh
 uv run --extra simulation tonypi-sim status
 uv run --extra simulation tonypi-sim catalog
+uv run --extra simulation tonypi-sim studio --gfx web --port 8080
 uv run --extra simulation tonypi-sim run upstream:wave
 uv run --extra simulation tonypi-sim run upstream:stand_up_back --start supine --objective recover
 uv run --extra simulation tonypi-sim run upstream:tonypi_walk_forward --offline --no-render

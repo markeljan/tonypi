@@ -2,8 +2,10 @@
 
 import copy
 import json
+import os
 from pathlib import Path
 import sqlite3
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -135,7 +137,8 @@ def simulated(setup, monkeypatch):
         directory = Path(cmd[-1])
         request = json.loads((directory / "request.json").read_text())
         assert request["plan"]["raw_frames"]
-        assert kwargs["env"]["MUJOCO_GL"] == "osmesa"
+        expected_gl = os.environ.get("MUJOCO_GL") or ("cgl" if sys.platform == "darwin" else "osmesa")
+        assert kwargs["env"]["MUJOCO_GL"] == expected_gl
         assert kwargs["timeout"] == 90
         (directory / "physics.json").write_text(json.dumps({
             "simulation_success": True, "model_joint_clips": [], "trace": [{"t_s": 1}],
@@ -246,3 +249,29 @@ def test_actual_headless_model(tmp_path, monkeypatch):
     assert r["model_joint_clip_count"] == 0
     assert r["model_only"] and not r["hardware_candidate"] and not r["hardware_validated"]
     assert r["physics_seconds"] == pytest.approx(2)
+
+
+def test_status_reports_mujoco_studio_dependency(setup):
+    repo, _ = setup
+    st = service.status(repo)
+    assert "mujoco-studio" in st["dependencies"]
+    assert "mujoco" in st["dependencies"]
+    assert "mink" in st["dependencies"]
+
+
+def test_simulate_respects_mujoco_gl_env_override(setup, monkeypatch):
+    repo, robot = setup
+    monkeypatch.setenv("MUJOCO_GL", "egl")
+    seen_env = {}
+
+    def worker(cmd, **kwargs):
+        seen_env.update(kwargs["env"])
+        directory = Path(cmd[-1])
+        (directory / "physics.json").write_text(json.dumps({
+            "simulation_success": True, "model_joint_clips": [], "trace": [],
+            "initial_raw": robot.raw, "hardware_validated": False, "model_only": True}))
+        return SimpleNamespace(returncode=0, stderr="")
+
+    monkeypatch.setattr(service.subprocess, "run", worker)
+    service.simulate(robot, frames=[{"ms": 100, "pos": {1: 500}}], repo=repo)
+    assert seen_env["MUJOCO_GL"] == "egl"
